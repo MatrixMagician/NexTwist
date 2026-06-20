@@ -1,0 +1,19 @@
+[package]
+name = "nextwist-testkit"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "NexTwist test helpers: fake game/staging tree builders + blake3 byte-for-byte pristine tree assertion (used as a dev-dependency by steam/extract/deploy test suites)"
+
+[lib]
+name = "testkit"
+path = "src/lib.rs"
+
+[dependencies]
+blake3.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
