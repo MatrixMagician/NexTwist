@@ -28,7 +28,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **DEPLOY-04**: NexTwist backs up any overwritten original game file before deployment so it can be restored
 - [x] **DEPLOY-05**: NexTwist selects a safe deployment method per target (reflink → hardlink → symlink → copy) accounting for filesystem boundaries
 - [x] **DEPLOY-06**: Deployment and purge are crash-safe (journaled) so an interrupted operation can be recovered
-- [ ] **DEPLOY-07**: User can run a verify/repair that detects manifest-vs-disk drift (files changed outside NexTwist)
+- [x] **DEPLOY-07**: User can run a verify/repair that detects manifest-vs-disk drift (files changed outside NexTwist)
 - [x] **DEPLOY-08**: NexTwist resolves case-sensitivity mismatches so mods load correctly under Proton
 
 ### Conflicts & Load Order
@@ -131,7 +131,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEPLOY-04 | Phase 1 | Complete |
 | DEPLOY-05 | Phase 1 | Complete |
 | DEPLOY-06 | Phase 1 | Complete |
-| DEPLOY-07 | Phase 1 | Pending |
+| DEPLOY-07 | Phase 1 | Complete |
 | DEPLOY-08 | Phase 1 | Complete |
 | CONF-01 | Phase 2 | Pending |
 | CONF-02 | Phase 2 | Pending |
