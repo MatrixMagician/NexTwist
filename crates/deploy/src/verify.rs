@@ -41,6 +41,12 @@ pub struct VerifyReport {
     /// On-disk files under the deploy root that provenance does not explain. Reported,
     /// never deleted.
     pub orphans: Vec<PathBuf>,
+    /// EMPTY directories under the deploy root that provenance does not explain — not on
+    /// the ancestor path of any managed target nor of a vanilla-backed original. A
+    /// non-empty directory is NEVER an orphan dir (its contents are classified as file
+    /// orphans/managed). `repair` removes exactly these (and only these). Distinct from
+    /// `orphans` (files) so the UI can tell the two apart.
+    pub orphan_dirs: Vec<PathBuf>,
     /// True when no drift of any kind was found.
     pub pristine: bool,
 }
@@ -52,7 +58,10 @@ pub struct RepairReport {
     pub restored_missing: usize,
     /// Number of `changed` files restored to the recorded state.
     pub restored_changed: usize,
-    /// Orphans surfaced for the UI — NEVER deleted by repair.
+    /// Number of orphan EMPTY directories removed (the ONLY thing repair deletes — file
+    /// orphans remain report-only, so no file is ever deleted; T-01-16 / T-01-20).
+    pub removed_orphan_dirs: usize,
+    /// Orphans (files) surfaced for the UI — NEVER deleted by repair.
     pub orphans: Vec<PathBuf>,
 }
 
@@ -93,8 +102,14 @@ pub fn verify(store: &Store, game: &Game) -> Result<VerifyReport, DeployError> {
     let data_dir = crate::deploy_root(&game.install_dir);
     report.orphans = walk_orphans(store, game, &data_dir, &managed)?;
 
-    report.pristine =
-        report.missing.is_empty() && report.changed.is_empty() && report.orphans.is_empty();
+    // Collect EMPTY directories under the deploy root that provenance does not explain —
+    // not on the ancestor path of any managed target nor of a vanilla-backed original.
+    report.orphan_dirs = walk_orphan_dirs(store, game, &data_dir, &managed)?;
+
+    report.pristine = report.missing.is_empty()
+        && report.changed.is_empty()
+        && report.orphans.is_empty()
+        && report.orphan_dirs.is_empty();
     Ok(report)
 }
 
@@ -113,6 +128,7 @@ pub fn repair(store: &Store, game: &Game) -> Result<RepairReport, DeployError> {
     let mut out = RepairReport {
         restored_missing: 0,
         restored_changed: 0,
+        removed_orphan_dirs: 0,
         orphans: report.orphans.clone(),
     };
 
@@ -130,6 +146,47 @@ pub fn repair(store: &Store, game: &Game) -> Result<RepairReport, DeployError> {
             } else {
                 out.restored_changed += 1;
             }
+        }
+    }
+
+    // Remove the orphan EMPTY dirs (the ONLY thing repair ever deletes — file orphans
+    // stay report-only, T-01-16 / T-01-20). Iterate to a fixed point so a chain of nested
+    // empty dirs (a leaf whose parent becomes empty once the leaf is gone) is fully
+    // cleaned in one repair call, leaving the tree pristine. Each pass removes deepest-
+    // first; `remove_dir` refuses non-empty dirs (so a dir that holds an unmanaged file is
+    // never removed); NotFound/DirectoryNotEmpty are benign skips, any other IO error
+    // propagates. Never the deploy root or an ancestor of it.
+    let root = crate::deploy_root(&game.install_dir);
+    let managed: HashSet<PathBuf> = entries
+        .iter()
+        .map(|e| crate::resolve_target(&game.install_dir, &e.target_rel))
+        .collect();
+    let data_dir = crate::deploy_root(&game.install_dir);
+    loop {
+        let mut dirs = walk_orphan_dirs(store, game, &data_dir, &managed)?;
+        if dirs.is_empty() {
+            break;
+        }
+        dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+        let mut removed_any = false;
+        for dir in &dirs {
+            if *dir == root || root.starts_with(dir) {
+                continue;
+            }
+            match std::fs::remove_dir(dir) {
+                Ok(()) => {
+                    out.removed_orphan_dirs += 1;
+                    removed_any = true;
+                }
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::DirectoryNotEmpty
+                        || e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(DeployError::io(dir, e)),
+            }
+        }
+        // No progress this pass (every candidate refused) — stop to avoid a busy loop.
+        if !removed_any {
+            break;
         }
     }
 
@@ -193,6 +250,89 @@ fn walk_orphans(
         orphans.push(path);
     }
     Ok(orphans)
+}
+
+/// Walk `data_dir` and return every EMPTY directory (absolute path) under the deploy root
+/// that provenance does not explain — i.e. not on the ancestor path of any managed target
+/// nor of any vanilla-backed original.
+///
+/// "Explained" directories are the ancestor chains (strictly below the deploy root) of
+/// every managed target and every vanilla-backed original: those are directories
+/// NexTwist (or the vanilla tree we backed up) legitimately relies on. Any other directory
+/// under the root that is currently EMPTY is an orphan dir — typically a directory deploy
+/// created that a later edit (or a partial cleanup) left behind. The deploy root itself is
+/// never reported. A non-empty directory is never an orphan dir (its file contents are
+/// classified by [`walk_orphans`]); `remove_dir` in repair is the second safety net.
+fn walk_orphan_dirs(
+    store: &Store,
+    game: &Game,
+    data_dir: &Path,
+    managed: &HashSet<PathBuf>,
+) -> Result<Vec<PathBuf>, DeployError> {
+    let mut orphan_dirs = Vec::new();
+    if !data_dir.exists() {
+        return Ok(orphan_dirs);
+    }
+
+    // Build the set of "explained" directories: every ancestor (under the root) of a
+    // managed target or a vanilla-backed original. An empty dir not in this set, and not
+    // the root, is unexplained.
+    let mut explained: HashSet<PathBuf> = HashSet::new();
+    let mut add_ancestors = |target: &Path| {
+        let mut p = target.parent();
+        while let Some(d) = p {
+            if d == data_dir || !d.starts_with(data_dir) {
+                break;
+            }
+            explained.insert(d.to_path_buf());
+            p = d.parent();
+        }
+    };
+    for target in managed {
+        add_ancestors(target);
+    }
+    // Note: a vanilla-backed original's directory is, by construction, also the ancestor
+    // of the managed target that overwrote it (same relpath), so `managed` already
+    // explains it; we still re-check the vanilla ledger per empty dir below as a belt-and-
+    // braces guard against ever removing a dir a vanilla file legitimately sits in.
+
+    for entry in WalkDir::new(data_dir)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(Result::ok)
+    {
+        if !entry.file_type().is_dir() {
+            continue;
+        }
+        let path = entry.path();
+        // Never report the deploy root itself.
+        if path == data_dir {
+            continue;
+        }
+        // Only EMPTY directories are orphan-dir candidates.
+        let is_empty = std::fs::read_dir(path)
+            .map(|mut it| it.next().is_none())
+            .unwrap_or(false);
+        if !is_empty {
+            continue;
+        }
+        // An empty dir that is NOT an explained ancestor of any managed/vanilla target is
+        // an orphan dir. (An explained dir cannot actually be empty while it still holds a
+        // managed target, but we keep the check so a vanilla-pre-existing dir whose only
+        // child a mod overwrote — then purged — is never misclassified.)
+        if explained.contains(path) {
+            continue;
+        }
+        // A directory that holds a known vanilla-backed original is explained — but such a
+        // dir is non-empty, so the is_empty guard already excluded it. Empty + unexplained:
+        if let Some(rel) = data_relative(&game.install_dir, path) {
+            if store.vanilla_for(game.appid, &rel)?.is_some() {
+                continue;
+            }
+        }
+        orphan_dirs.push(path.to_path_buf());
+    }
+    Ok(orphan_dirs)
 }
 
 /// Express an absolute on-disk path as a `Data/`-rooted relpath (matching the manifest's
