@@ -27,7 +27,7 @@
     "node_repair_budget": 2,
     "ui_phase": true,
     "ui_safety_gate": true,
-    "ai_integration_phase": true,
+    "ai_integration_phase": false,
     "human_verify_mode": "end-of-phase",
     "text_mode": false,
     "research_before_questions": true,
@@ -47,7 +47,8 @@
     "security_block_on": "high",
     "tdd_mode": false,
     "ui_review": true,
-    "use_worktrees": true
+    "use_worktrees": true,
+    "_auto_chain_active": false
   },
   "ship": {
     "pr_body_sections": []
