@@ -18,6 +18,10 @@ src-tauri/gen
 *.sqlite
 *.sqlite3
 
+# proptest failure seeds: regenerated on demand during RED runs; not committed so a
+# stale seed from a since-fixed generator never re-runs an impossible case.
+**/*.proptest-regressions
+
 # Editor / OS noise
 .DS_Store
 *.swp
