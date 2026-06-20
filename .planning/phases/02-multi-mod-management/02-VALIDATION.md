@@ -1,8 +1,8 @@
 ---
 phase: 2
 slug: multi-mod-management
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-06-20
 ---
@@ -37,11 +37,19 @@ created: 2026-06-20
 
 ## Per-Task Verification Map
 
-> Populated by the planner per PLAN.md task (Task ID, automated `cargo test` command, requirement, status). Conflict-resolution and profile-switch tasks MUST include a round-trip-pristine assertion via the `testkit` harness (the safety invariant).
+> Authoritative per-task automated commands live in each PLAN.md `<verify><automated>` block. The map below summarizes the verification command set per plan/wave (extracted from the 5 plans). `[PRISTINE]` rows assert byte-for-byte round-trip pristine via the `testkit` DIR_SENTINEL harness — the safety invariant. `[BLOCKING]` = phase cannot pass without it.
 
-| Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
-|---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 2-01-01 | 01 | 1 | CONF-01 | unit/integration | `cargo test -p <crate>` | ❌ W0 | ⬜ pending |
+| Plan | Wave | Requirements | Key automated commands | Pristine/Blocking | Status |
+|------|------|--------------|------------------------|-------------------|--------|
+| 02-01 | 1 | PROF-01, PROF-03, CONF-02 | `cargo test -p nextwist-core model::`; `cargo test -p nextwist-store` (incl. `migrations::v2_migrates_phase1_state`); `cargo deny check`; `cargo clippy -p nextwist-store -- -D warnings` | `[BLOCKING]` V2 migration applies-clean + Phase-1→Default migration | ⬜ pending |
+| 02-02 | 1 | PLUGIN-01/02/03 | `cargo build -p nextwist-loadorder`; `cargo test -p nextwist-testkit fake_proton_prefix`; `cargo test -p nextwist-loadorder --test libloot_spike` | libloot install gated by human-verify checkpoint (autonomous:no) | ⬜ pending |
+| 02-03 | 2 | CONF-01/02/03 | `cargo test -p nextwist-deploy conflict`; `cargo test -p nextwist-deploy --test conflict_redeploy`; `cargo build -p nextwist && (cd frontend && npm run check)` | `[PRISTINE]` conflict_redeploy | ⬜ pending |
+| 02-04 | 2 | PLUGIN-01/02/03 | `cargo test -p nextwist-loadorder scan`; `cargo test -p nextwist-loadorder --test plugins`; `cargo deny check`; build + `npm run check` | — | ⬜ pending |
+| 02-05 | 3 | PROF-01/02/03 | `cargo test -p nextwist-deploy --test profile_switch`; `cargo build -p nextwist && (cd frontend && npm run check)` | `[PRISTINE]` profile_switch (pristine across switches) | ⬜ pending |
+
+Wave gate after each wave: `cargo test --workspace` + `cargo clippy --workspace --all-targets -- -D warnings` + `cargo deny check`.
+
+*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -69,11 +77,11 @@ created: 2026-06-20
 
 ## Validation Sign-Off
 
-- [ ] All tasks have automated `cargo test` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers V2 migration + libloot spike
-- [ ] Conflict-resolution and profile-switch tasks assert round-trip-pristine (safety invariant)
-- [ ] `nyquist_compliant: true` set in frontmatter
-- [ ] No watch-mode flags
+- [x] All tasks have automated `cargo test` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers V2 migration + libloot spike
+- [x] Conflict-resolution and profile-switch tasks assert round-trip-pristine (safety invariant)
+- [x] `nyquist_compliant: true` set in frontmatter
+- [x] No watch-mode flags
 
-**Approval:** pending
+**Approval:** approved 2026-06-20

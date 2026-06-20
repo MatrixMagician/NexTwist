@@ -348,18 +348,23 @@ game.set_load_order(&proposed.iter().map(String::as_str).collect::<Vec<_>>())?;
 
 **Note for discuss/planner:** A1 and A3 are the two to de-risk first with a tiny libloot spike against a real Proton prefix (or a fixture mimicking it). Everything else is design over the proven Phase-1 engine.
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All three open questions were resolved at plan time; their recommendations are adopted by the Phase-2 plans (citations below). None remains blocking — A2 carries a clearly-scoped runtime fallback.
 
 1. **Does libloot's `Database` expose dirty-plugin / missing-master warnings directly, or must we read masterlist.yaml?** (A2)
    - What we know: libloot parses the masterlist for sorting; warnings are a core LOOT feature.
    - What's unclear: exact Rust API to enumerate warnings for the v1 "critical warnings" list (UI-SPEC §C.3).
    - Recommendation: check `libloot::Database` methods at plan time; fall back to `serde_yaml` only if absent.
+   - **RESOLVED:** adopted in Plan **02-04 Task 3** — surface critical warnings via the libloot `Database` API when present, with a `serde_yaml` masterlist read as the explicit fallback (D-11 scopes v1 to "sort + critical warnings").
 
 2. **Where should the conflict resolver live — `crates/deploy::conflict` module or a new `crates/conflict`?**
    - Recommendation: module in `crates/deploy` (its output `StagedFiles` already lives there); promote to a crate only if it grows.
+   - **RESOLVED:** adopted in Plan **02-03 Task 1** — resolver is a `crates/deploy::conflict` module (output `StagedFiles` already lives in `deploy`).
 
 3. **plugins.txt crash-safety:** the existing journal covers `deployed_file` ops, not the prefix plugins.txt write.
    - Recommendation: treat plugins.txt as **derived** from `plugin_state` (DB is source of truth); on launch/recovery, regenerate plugins.txt from DB rather than journaling the file write. Confirm this is acceptable (it is, since plugins.txt is regenerable and not part of the game-pristine invariant).
+   - **RESOLVED:** adopted in Plan **02-04 (T-02-13)** — plugins.txt is derived from DB `plugin_state` and regenerated on launch/recovery; it is explicitly NOT part of the game-pristine invariant, so it is not journaled.
 
 ## Environment Availability
 
