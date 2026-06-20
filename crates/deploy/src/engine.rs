@@ -14,6 +14,7 @@
 //! The ordering invariant (Pattern 1) is non-negotiable: a `pending` journal row is
 //! durable BEFORE any syscall; the manifest row + `done` flip happen together AFTER.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use nextwist_core::{DeployMethod, FileEntry, Game};
@@ -266,18 +267,105 @@ pub fn purge(store: &Store, game: &Game) -> Result<PurgeReport, DeployError> {
         journal::finish_purge(store, jid)?;
     }
 
+    // Once every recorded file is gone, remove the now-empty directories that deploy()
+    // created. The candidate set is derived ONLY from the manifest rows we just removed
+    // (never a blind scan of the vanilla tree), so a vanilla directory is never a
+    // candidate; bottom-up `remove_dir` additionally refuses any dir still holding files
+    // (a vanilla dir, or a dir an unmanaged orphan lives in), so the game Data/ tree's
+    // pre-existing shape is never disturbed (GAP-01 / T-01-19).
+    let removed_rels: Vec<PathBuf> = files.iter().map(|e| e.target_rel.clone()).collect();
+    remove_emptied_dirs(&game.install_dir, &removed_rels)?;
+
     Ok(report)
+}
+
+/// Remove the directories that `deploy()` created for `removed_rels` and that are now
+/// EMPTY, bottom-up, bounded strictly below the deploy root.
+///
+/// ## Why bottom-up `remove_dir` is safe (GAP-01 safety argument)
+///
+/// 1. **Manifest-derived candidates only.** The candidate directories are computed from
+///    OUR manifest `target_rel`s (the rows purge/recovery just removed) — never from a
+///    directory scan of the vanilla game tree. A directory that only ever held vanilla
+///    content is therefore never even a candidate.
+/// 2. **`remove_dir` refuses non-empty dirs.** We use `std::fs::remove_dir` (NOT
+///    `remove_dir_all`): it errors with `DirectoryNotEmpty` on any dir that still holds a
+///    file. That is the safety net — a vanilla dir that still holds vanilla files, or a
+///    dir containing an unmanaged orphan, is left intact. That error is treated as a
+///    benign "stop / leave it", not propagated. `NotFound` is likewise benign (idempotent
+///    re-purge). Any other IO error IS propagated.
+/// 3. **Strictly below the deploy root.** Candidates are constructed as the ancestor
+///    chain strictly BETWEEN the deploy root (exclusive) and each file (exclusive), so
+///    the game `Data/` boundary is never crossed. A defence-in-depth guard additionally
+///    drops any candidate that equals or is an ancestor of the deploy root.
+///
+/// Sorting deepest-first ensures a child empties before its parent is attempted.
+fn remove_emptied_dirs(install_dir: &Path, removed_rels: &[PathBuf]) -> Result<(), DeployError> {
+    let root = crate::deploy_root(install_dir);
+    let root_norm = lexical_normalize(&root);
+
+    // Collect the unique set of ancestor directories strictly below the deploy root.
+    let mut candidates: BTreeSet<PathBuf> = BTreeSet::new();
+    for rel in removed_rels {
+        let target = crate::resolve_target(install_dir, rel);
+        // Walk UP from the file's parent toward the root, collecting each dir strictly
+        // below the root (we stop the moment we reach the root itself).
+        let mut dir = target.parent();
+        while let Some(d) = dir {
+            let d_norm = lexical_normalize(d);
+            // Stop at (and never include) the deploy root or anything at/above it.
+            if d_norm == root_norm || !d_norm.starts_with(&root_norm) {
+                break;
+            }
+            candidates.insert(d_norm.clone());
+            dir = d.parent();
+        }
+    }
+
+    // Deepest-first: longest component count first, so children empty before parents.
+    let mut ordered: Vec<PathBuf> = candidates.into_iter().collect();
+    ordered.sort_by(|a, b| b.components().count().cmp(&a.components().count()));
+
+    for dir in &ordered {
+        // Defence-in-depth: never remove the deploy root or any ancestor of it.
+        if *dir == root_norm || root_norm.starts_with(dir) {
+            continue;
+        }
+        match std::fs::remove_dir(dir) {
+            Ok(()) => {}
+            Err(e)
+                if e.kind() == std::io::ErrorKind::DirectoryNotEmpty
+                    || e.kind() == std::io::ErrorKind::NotFound =>
+            {
+                // Benign: a vanilla dir still holding files / a dir with an unmanaged
+                // orphan (DirectoryNotEmpty), or an already-gone dir (NotFound, idempotent
+                // re-purge). Leave it — this is the safety net, not a failure.
+            }
+            Err(e) => return Err(DeployError::io(dir, e)),
+        }
+    }
+    Ok(())
 }
 
 /// Replay any non-`done` journal rows on launch to reach a consistent state, then
 /// auto-run a verify pass so an abnormal exit always yields a drift report (DEPLOY-07).
 pub fn recover_on_launch(store: &Store, game: &Game) -> Result<RecoveryReport, DeployError> {
-    let replayed = journal::replay(store, game)?;
+    let outcome = journal::replay(store, game)?;
+    // If recovery rolled any PURGE rows forward (a crash-mid-purge), the directories the
+    // original deploy created may now be empty — clean them up exactly as purge() does,
+    // from the journal-derived relpath set (never a disk scan), so a crash-then-recover
+    // converges to a directory-pristine tree (GAP-01 / T-01-21).
+    if !outcome.purged_rels.is_empty() {
+        remove_emptied_dirs(&game.install_dir, &outcome.purged_rels)?;
+    }
     // After journal replay reaches a consistent DB+disk state, hash-diff the manifest
     // against disk so any external drift (orphans / missing / changed) is surfaced
     // automatically — never blindly repaired or deleted here (the UI decides).
     let drift = crate::verify::verify(store, game)?;
-    Ok(RecoveryReport { replayed, drift })
+    Ok(RecoveryReport {
+        replayed: outcome.replayed,
+        drift,
+    })
 }
 
 /// Assert `target` is within `root` (V4 access control: never write outside the

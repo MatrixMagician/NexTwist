@@ -15,7 +15,7 @@
 //! * [`replay`] — on launch, roll every non-`done` row forward (finish a deploy) or
 //!   back (undo a purge + restore vanilla), idempotently, to a consistent state.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use nextwist_core::{DeployMethod, FileEntry, Game};
 use store::{JournalId, JournalRow, OpIntent, Store};
@@ -85,6 +85,20 @@ pub fn finish_purge(store: &Store, id: JournalId) -> Result<(), DeployError> {
     Ok(())
 }
 
+/// The outcome of a [`replay`] sweep: how many rows were rolled forward/back, and the
+/// `Data/`-rooted relpaths of every **purge** row that was replayed.
+///
+/// The purged relpaths are returned so `recover_on_launch` can run the SAME
+/// manifest/journal-derived empty-directory cleanup that `purge()` runs — keeping a
+/// crash-then-recover purge path directory-pristine (T-01-21) WITHOUT a blind disk scan.
+#[derive(Debug, Clone, Default)]
+pub struct ReplayOutcome {
+    /// Number of journal rows replayed (rolled forward or back).
+    pub replayed: usize,
+    /// `Data/`-rooted relpaths of replayed purge rows (the emptied-dir cleanup set).
+    pub purged_rels: Vec<PathBuf>,
+}
+
 /// Replay every non-`done` journal row to reach a consistent state (crash recovery).
 ///
 /// Policy (idempotent, so always safe to repeat):
@@ -95,10 +109,10 @@ pub fn finish_purge(store: &Store, id: JournalId) -> Result<(), DeployError> {
 /// * a `pending` **purge** row → roll FORWARD: remove the (idempotent) target,
 ///   restore any recorded vanilla original, drop the rows, mark done.
 ///
-/// Returns the number of rows replayed.
-pub fn replay(store: &Store, game: &Game) -> Result<usize, DeployError> {
+/// Returns the replay outcome (count + replayed purge relpaths).
+pub fn replay(store: &Store, game: &Game) -> Result<ReplayOutcome, DeployError> {
     let rows = store.pending_ops()?;
-    let mut replayed = 0usize;
+    let mut outcome = ReplayOutcome::default();
     for row in &rows {
         if row.appid != game.appid {
             // Not this game's op; leave it for that game's recovery pass.
@@ -106,15 +120,20 @@ pub fn replay(store: &Store, game: &Game) -> Result<usize, DeployError> {
         }
         match row.kind.as_str() {
             KIND_DEPLOY => replay_deploy(store, game, row)?,
-            KIND_PURGE => replay_purge(store, game, row)?,
+            KIND_PURGE => {
+                replay_purge(store, game, row)?;
+                // Record the relpath so the recovery purge path can clean up the dirs
+                // the original deploy created (the same set purge() would clean up).
+                outcome.purged_rels.push(row.target_rel.clone());
+            }
             other => {
                 tracing::warn!(kind = other, "unknown journal kind; marking done to avoid a stuck row");
                 store.mark_done(row.id)?;
             }
         }
-        replayed += 1;
+        outcome.replayed += 1;
     }
-    Ok(replayed)
+    Ok(outcome)
 }
 
 /// Roll a pending deploy row forward (finish it) or back (undo it) idempotently.
