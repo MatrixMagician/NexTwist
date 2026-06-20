@@ -1,0 +1,30 @@
+[package]
+name = "nextwist-deploy"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "NexTwist reversible deployment engine (CROWN JEWEL): per-target fs-capability probe, reflink->hardlink->symlink->copy method ladder with EXDEV fallback, intent-before-act operation journal with idempotent crash-recovery replay, backup-before-overwrite vanilla store, and deploy/purge/recover orchestration proven byte-for-byte pristine"
+
+[lib]
+name = "deploy"
+path = "src/lib.rs"
+
+# Aliased as `nextwist_core` (NOT `core`): a dependency literally named `core`
+# shadows the std `::core` crate, which breaks `thiserror`'s derive (it expands to
+# `::core::fmt`). `deploy` derives `thiserror` locally, so it must not shadow it.
+# `store` is safe to use under its workspace alias because we only call its methods.
+[dependencies]
+nextwist_core = { path = "../core", package = "nextwist-core" }
+store.workspace = true
+reflink-copy.workspace = true
+blake3.workspace = true
+walkdir.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+testkit.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
