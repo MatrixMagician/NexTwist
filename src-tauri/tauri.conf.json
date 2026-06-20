@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NexTwist",
+  "version": "0.1.0",
+  "identifier": "com.nextwist.app",
+  "build": {
+    "frontendDist": "../frontend/build",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm --prefix ../frontend run dev",
+    "beforeBuildCommand": "npm --prefix ../frontend run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "NexTwist",
+        "width": 960,
+        "height": 720,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["appimage"],
+    "icon": ["icons/icon.png"],
+    "category": "Utility",
+    "shortDescription": "Safe, reversible Linux mod manager",
+    "longDescription": "NexTwist installs and uninstalls mods safely on Linux: non-destructive, fully reversible, conflict-aware deployment for Proton/Wine games."
+  }
+}

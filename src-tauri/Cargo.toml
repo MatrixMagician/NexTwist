@@ -1,0 +1,41 @@
+[package]
+name = "nextwist"
+version = "0.1.0"
+description = "NexTwist — safe, reversible Linux mod manager (Tauri shell)"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# The binary the AppImage (Phase 5) ships. Lib target lets us unit-test the thin
+# command adapters and the StagedFiles mapping headlessly (no webview needed).
+[lib]
+name = "nextwist_lib"
+crate-type = ["lib"]
+
+[[bin]]
+name = "nextwist"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+# Headless safety core — the command adapters delegate to these and add ZERO logic.
+# Aliased `nextwist_core` (NOT `core`): a dep literally named `core` shadows the std
+# `::core` crate, which the `tauri::generate_handler!`/`generate_context!` macros
+# expand to (`::core::option::Option`). Mirrors the extract/deploy crates.
+nextwist_core = { path = "../crates/core", package = "nextwist-core" }
+store = { workspace = true }
+steam = { workspace = true }
+extract = { workspace = true }
+deploy = { workspace = true }
+
+# Shell runtime.
+tauri = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -40,14 +40,28 @@ allow = [
     "ISC",
     "MPL-2.0",
     "CC0-1.0",
+    # bzip2 decompression (libbz2-rs-sys, via zip/sevenz-rust2). The bzip2 license is a
+    # permissive BSD-style, GPL-compatible, free license — fine to ship in the AppImage.
+    "bzip2-1.0.6",
     # NexTwist itself is GPL-3.0-or-later; allow it so the workspace crates pass.
     "GPL-3.0-or-later",
 ]
 confidence-threshold = 0.9
 
 [advisories]
-# Advisory DB check is available now; wired into CI in Plan 06.
-yanked = "warn"
+# Advisory DB check wired into CI in Plan 06 (`cargo deny check advisories`).
+#
+# SECURITY VULNERABILITIES and YANKED crates still FAIL the build (the signal we care
+# about). But "unmaintained"/"notice" advisories are downgraded to warnings: Tauri 2.11
+# on Linux unavoidably pulls the gtk-rs GTK3 bindings and the unic-* crates (via
+# WebKitGTK / tauri-utils -> urlpattern), an entire family of INFORMATIONAL
+# "no-longer-maintained" advisories with no safe upgrade available — they are inside
+# Tauri's own transitive tree, outside our control. Failing CI on them would gate every
+# push on upstream Tauri's dependency hygiene rather than on a real vulnerability.
+yanked = "deny"
+# Scope unmaintained checks to OUR workspace crates only (not the transitive Tauri tree).
+# cargo-deny 0.19's `unmaintained` takes a scope, not a severity.
+unmaintained = "workspace"
 
 [sources]
 unknown-registry = "warn"

@@ -3,12 +3,12 @@
 # The safety-critical engine lives in `crates/*` as pure, headless Rust with ZERO
 # Tauri dependencies, so it is unit/property-testable in CI without a webview.
 #
-# NOTE FOR PLAN 06: the Tauri shell `src-tauri` is created in Plan 06. When it exists,
-# extend `members` below to include it (i.e. `members = ["crates/*", "src-tauri"]`).
-# It is intentionally omitted now so the workspace builds with only the headless crates.
+# The Tauri shell `src-tauri` (Plan 06) is a thin adapter layer over the headless
+# crates. It is a workspace member so `cargo test --workspace` covers it, but its
+# build needs the WebKitGTK 4.1 dev libs (the headless crates need none of them).
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/*", "src-tauri"]
 
 [workspace.package]
 edition = "2024"
@@ -60,6 +60,16 @@ tempfile = "3.27"
 core = { path = "crates/core", package = "nextwist-core" }
 store = { path = "crates/store", package = "nextwist-store" }
 testkit = { path = "crates/testkit", package = "nextwist-testkit" }
+steam = { path = "crates/steam", package = "nextwist-steam" }
+extract = { path = "crates/extract", package = "nextwist-extract" }
+deploy = { path = "crates/deploy", package = "nextwist-deploy" }
+
+# Tauri shell (Plan 06). Pinned to the 2.11 line per CLAUDE.md. The embedded SvelteKit
+# SPA is served via `frontendDist` (no extra features needed); we keep the default
+# feature set so the allowlist matches tauri.conf.json.
+tauri = { version = "2.11" }
+tauri-build = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }
 
 [profile.release]
 # Smaller, faster AppImage binary (Phase 5). Safe defaults for a desktop app.
