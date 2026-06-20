@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 1
-current_phase_name: Safe Local Round-Trip
+current_phase: 2
+current_phase_name: Multi-Mod Management
 status: executing
 stopped_at: Phase 2 UI-SPEC approved
-last_updated: "2026-06-20T22:19:40.983Z"
+last_updated: "2026-06-20T23:04:17.996Z"
 last_activity: 2026-06-20
-last_activity_desc: GAP-01 (orphan-empty-dir purge bug) closed via gap closure; phase re-verified green
+last_activity_desc: Phase 2 execution started
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 12
+  completed_plans: 8
   percent: 20
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-20)
 
 **Core value:** Mods install and uninstall safely — non-destructive, fully reversible, conflict-aware deployment into Proton/Wine games on Linux.
-**Current focus:** Phase 1 — Safe Local Round-Trip
+**Current focus:** Phase 2 — Multi-Mod Management
 
 ## Current Position
 
-Phase: 1 (Safe Local Round-Trip) — BUILT + GAP-01 CLOSED, awaiting remaining manual UAT
-Plan: 7 of 7 complete (01-07 = GAP-01 gap closure)
-Status: All 7 plans executed; cargo test --workspace 82 passed on tmpfs + btrfs, clippy 0, deny ok. Manual UAT found GAP-01 (purge left orphan empty dirs → not byte-for-byte pristine); FIXED + regression-locked by a directory-aware round_trip_pristine test (commits fa0152a/29cda71/ff94898). UAT-1 (detection) + UAT-2 (install→deploy→purge) effectively passed by the user; remaining manual items: UAT-3 (in-game Proton load) + UAT-4 (real Flatpak/Snap). Autonomous run PAUSED at user request.
-Last activity: 2026-06-20 — GAP-01 (orphan-empty-dir purge bug) closed via gap closure; phase re-verified green
+Phase: 2 (Multi-Mod Management) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-06-20 — Phase 2 execution started
 
 Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pending final manual UAT sign-off)
 
@@ -62,6 +62,7 @@ Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pen
 | Phase 01 P05 | 12 | 2 tasks | 8 files |
 | Phase 01 P06 | 35 | 2 tasks | 23 files |
 | Phase 01 P07 | 25 | 3 tasks | 5 files |
+| Phase 02 P01 | 7 | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,8 @@ Recent decisions affecting current work:
 - [Phase ?]: GAP-01 fix: empty-dir cleanup is manifest/journal-derived (never a disk scan); bottom-up remove_dir bounded strictly below the deploy root protects vanilla dirs.
 - [Phase ?]: testkit snapshots directory shape via a reserved non-hex DIR_SENTINEL so the pristine assertion catches orphan empty dirs, not just file content.
 - [Phase ?]: verify/repair (DEPLOY-07) classify+remove orphan EMPTY dirs to a fixed point; file orphans stay strictly report-only (T-01-16 preserved).
+- [Phase ?]: [Phase 2 P01]: V2 migration additive-only (CREATE + one Default-profile INSERT); Phase-1 deployed_file membership NOT folded into managed_mod — live deployment stays on disk + reversible, Default profile starts empty (D-16).
+- [Phase ?]: [Phase 2 P01]: migration test reaches a genuine V1-only state via refinery Target::Version(1); store upserts use ON CONFLICT DO UPDATE keyed by UNIQUE constraints; MSRV 1.85->1.89 for libloot, cargo-deny allows the libloot GPL-3.0 family (Phase-5 DIST-02).
 
 ### Pending Todos
 
@@ -111,7 +114,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T22:19:40.978Z
+Last session: 2026-06-20T23:03:56.047Z
 Stopped at: Phase 2 UI-SPEC approved
 Resume file: .planning/phases/02-multi-mod-management/02-UI-SPEC.md
 Resume command: `/gsd-autonomous --from 2` to continue the milestone (UAT-1/UAT-2 done + GAP-01 fixed). Optionally finish UAT-3/UAT-4 first.

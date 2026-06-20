@@ -34,7 +34,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Conflicts & Load Order
 
 - [ ] **CONF-01**: User can see which mods overwrite which files (file-level conflicts)
-- [ ] **CONF-02**: User can set mod priority/order to control which mod wins a conflict
+- [x] **CONF-02**: User can set mod priority/order to control which mod wins a conflict
 - [ ] **CONF-03**: Deployment applies the user's conflict-winner choices deterministically
 
 ### Plugin Management
@@ -45,9 +45,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Profiles
 
-- [ ] **PROF-01**: User can create multiple independent mod profiles per game
+- [x] **PROF-01**: User can create multiple independent mod profiles per game
 - [ ] **PROF-02**: User can switch the active profile, changing which mods/plugins/order are deployed
-- [ ] **PROF-03**: Each profile preserves its own enabled-mod set and load order
+- [x] **PROF-03**: Each profile preserves its own enabled-mod set and load order
 
 ### NexusMods Integration
 
@@ -134,14 +134,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEPLOY-07 | Phase 1 | Complete |
 | DEPLOY-08 | Phase 1 | Complete |
 | CONF-01 | Phase 2 | Pending |
-| CONF-02 | Phase 2 | Pending |
+| CONF-02 | Phase 2 | Complete |
 | CONF-03 | Phase 2 | Pending |
 | PLUGIN-01 | Phase 2 | Pending |
 | PLUGIN-02 | Phase 2 | Pending |
 | PLUGIN-03 | Phase 2 | Pending |
-| PROF-01 | Phase 2 | Pending |
+| PROF-01 | Phase 2 | Complete |
 | PROF-02 | Phase 2 | Pending |
-| PROF-03 | Phase 2 | Pending |
+| PROF-03 | Phase 2 | Complete |
 | NEXUS-01 | Phase 3 | Pending |
 | NEXUS-02 | Phase 3 | Pending |
 | NEXUS-03 | Phase 3 | Pending |
