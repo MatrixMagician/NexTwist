@@ -20,6 +20,8 @@ path = "src/lib.rs"
 nextwist_core = { path = "../core", package = "nextwist-core" }
 store.workspace = true
 libloot.workspace = true
+esplugin.workspace = true
+walkdir.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 

@@ -2338,6 +2338,7 @@ dependencies = [
 name = "nextwist-loadorder"
 version = "0.1.0"
 dependencies = [
+ "esplugin",
  "libloot",
  "nextwist-core",
  "nextwist-store",
@@ -2345,6 +2346,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
+ "walkdir",
 ]
 
 [[package]]

@@ -15,5 +15,7 @@
 
 pub mod error;
 pub mod loot;
+pub mod scan;
 
 pub use error::LoadOrderError;
+pub use scan::{esplugin_game_id, scan_plugins, scan_plugins_for};

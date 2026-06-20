@@ -44,6 +44,12 @@ walkdir = "2.5"
 # pure-Rust crate (GPL-3.0-or-later — deny.toml allows it; Plan 01 Task 1). Added behind
 # a blocking package-legitimacy checkpoint (verified crates.io + github.com/loot/libloot).
 libloot = "0.29"
+# esplugin (Phase 2, Plan 04) — the LOOT author's pure-Rust plugin-header parser. It is
+# ALREADY a transitive dependency of libloot 0.29.5 (esplugin 6.1.4, GPL-3.0, allowed by
+# deny.toml's libloot-family allowance), so taking it as a direct dep adds NO new crate to
+# the graph and needs NO new package-legitimacy checkpoint. Used by scan.rs to classify
+# ESM/ESL/ESP from header flags WITHOUT constructing a full libloot Game/prefix.
+esplugin = "6.1"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
