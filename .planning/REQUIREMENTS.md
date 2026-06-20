@@ -9,8 +9,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Game & Environment Detection
 
-- [ ] **ENV-01**: User can have NexTwist auto-detect installed Steam games on Linux
-- [ ] **ENV-02**: User can have NexTwist resolve a game's install directory and Proton/Wine prefix
+- [x] **ENV-01**: User can have NexTwist auto-detect installed Steam games on Linux
+- [x] **ENV-02**: User can have NexTwist resolve a game's install directory and Proton/Wine prefix
 - [x] **ENV-03**: User can add and manage supported Bethesda Creation Engine games (Skyrim SE, Fallout 4) as managed games
 - [ ] **ENV-04**: NexTwist detects the deployment filesystem's capabilities (same-device, case-folding) and warns about unsafe configurations
 
@@ -29,7 +29,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **DEPLOY-05**: NexTwist selects a safe deployment method per target (reflink → hardlink → symlink → copy) accounting for filesystem boundaries
 - [x] **DEPLOY-06**: Deployment and purge are crash-safe (journaled) so an interrupted operation can be recovered
 - [ ] **DEPLOY-07**: User can run a verify/repair that detects manifest-vs-disk drift (files changed outside NexTwist)
-- [ ] **DEPLOY-08**: NexTwist resolves case-sensitivity mismatches so mods load correctly under Proton
+- [x] **DEPLOY-08**: NexTwist resolves case-sensitivity mismatches so mods load correctly under Proton
 
 ### Conflicts & Load Order
 
@@ -118,8 +118,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENV-01 | Phase 1 | Pending |
-| ENV-02 | Phase 1 | Pending |
+| ENV-01 | Phase 1 | Complete |
+| ENV-02 | Phase 1 | Complete |
 | ENV-03 | Phase 1 | Complete |
 | ENV-04 | Phase 1 | Pending |
 | STAGE-01 | Phase 1 | Pending |
@@ -132,7 +132,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEPLOY-05 | Phase 1 | Pending |
 | DEPLOY-06 | Phase 1 | Complete |
 | DEPLOY-07 | Phase 1 | Pending |
-| DEPLOY-08 | Phase 1 | Pending |
+| DEPLOY-08 | Phase 1 | Complete |
 | CONF-01 | Phase 2 | Pending |
 | CONF-02 | Phase 2 | Pending |
 | CONF-03 | Phase 2 | Pending |

@@ -5,16 +5,16 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Safe Local Round-Trip
 status: executing
-stopped_at: Roadmap and STATE created; requirements traceability updated. Ready to plan Phase 1.
-last_updated: "2026-06-20T19:08:28.195Z"
+stopped_at: Completed 01-02-PLAN.md (steam discovery/resolution/casing). Wave 2 plan done.
+last_updated: "2026-06-20T19:20:00.000Z"
 last_activity: 2026-06-20
-last_activity_desc: Phase 1 execution started
+last_activity_desc: Completed Plan 01-02 (crates/steam)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 33
 ---
 
 # Project State
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 ## Current Position
 
 Phase: 1 (Safe Local Round-Trip) — EXECUTING
-Plan: 2 of 6
-Status: Ready to execute
-Last activity: 2026-06-20 — Phase 1 execution started
+Plan: 3 of 6
+Status: Plan 01-02 complete; ready to execute next plan
+Last activity: 2026-06-20 — Completed Plan 01-02 (crates/steam)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01 P01 | 20 | 3 tasks | 18 files |
+| Phase 01 P02 | 18 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ Recent decisions affecting current work:
 - [Roadmap]: Safety-first, networking-last — the reversible deployment engine (staging → manifest → deploy → purge-to-pristine) is built and proven on LOCAL archives before any NexusMods networking (Phase 1 before Phase 3).
 - [Roadmap]: Vortex model, not MO2 — real hardlink/symlink/reflink deployment + manifest; USVFS is Windows-only and rejected on Linux.
 - [Phase ?]: Pinned rusqlite 0.39 + refinery 0.9.2 to resolve libsqlite3-sys links conflict; rusqlite-bundled+refinery decision preserved
+- [Phase 1 P02]: steam crate aliases the shared-types dep as `nextwist_core` (not `core`) to avoid shadowing Rust's built-in `core` in the local thiserror derive.
+- [Phase 1 P02]: Proton prefix derived manually as `compatdata/<appid>/pfx` (steamlocate has no compatdata API); honor `$STEAM_COMPAT_DATA_PATH`; re-resolve each session.
+- [Phase 1 P02]: Snap Steam root not auto-detected (RESEARCH A2 low confidence); Snap users use the `add_game_by_folder` manual fallback.
 
 ### Pending Todos
 
@@ -93,6 +97,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T19:08:16.205Z
-Stopped at: Roadmap and STATE created; requirements traceability updated. Ready to plan Phase 1.
+Last session: 2026-06-20T19:20:00.000Z
+Stopped at: Completed 01-02-PLAN.md (crates/steam discovery/resolution/casing).
 Resume file: None
