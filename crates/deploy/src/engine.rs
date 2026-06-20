@@ -25,9 +25,11 @@ use steam::canonical_data_casing;
 
 use crate::backup;
 use crate::casefold::normalize_to_canonical;
+use crate::conflict::WinnerFile;
 use crate::error::DeployError;
 use crate::journal;
 use crate::method::{apply_idempotent, choose_method};
+use crate::path_guard::{guard_within_root, lexical_normalize};
 use crate::probe::{probe, Casefold, FsCaps};
 
 /// An unsafe-filesystem warning surfaced through [`DeployReport`] so the UI (Plan 06)
@@ -183,53 +185,164 @@ fn deploy_inner(
             // extract time). Skip anything else defensively.
             continue;
         }
-        // Normalize the mod's path casing to the game's canonical Data/ casing BEFORE
-        // resolving the on-disk target, so the deployed path matches what Wine opens
-        // (DEPLOY-08). The manifest then records the normalized relpath, preserving the
-        // round-trip-pristine guarantee (purge keys off the same normalized path).
-        let rel = normalize_to_canonical(rel, &casing);
-        let rel = &rel;
-        let target = crate::resolve_target(&game.install_dir, rel);
-        guard_within_root(&data_dir, &target)?;
-
-        let source_hash = backup::blake3_file(&src)?;
-
-        // 1. Durable intent BEFORE any syscall.
-        let jid = journal::begin_deploy(store, game.appid, rel, chosen, &source_hash)?;
-
-        // 2. Backup-before-overwrite (idempotent, content-addressed).
-        let backed = backup::backup_vanilla_if_absent(store, game, &target, rel)?;
-        if backed {
-            report.backed_up += 1;
-        }
-
-        // 3. Idempotent file op (downgrades on EXDEV).
-        let used = apply_idempotent(chosen, &src, &target)?;
-
-        // --- injected abort point (crash simulation): the pending row is committed
-        //     and the file is on disk, but we return BEFORE writing the manifest row
-        //     / flipping the intent to done — exactly the kill-mid-deploy window. ---
-        if let Some(n) = abort_after
-            && report.deployed >= n
-        {
-            return Err(DeployError::Aborted(report.deployed));
-        }
-
-        // 4. Manifest row + done flip together, AFTER the syscall succeeded.
-        let entry = FileEntry {
-            target_rel: rel.clone(),
-            source_mod: 0,
-            method: used,
-            hash: source_hash,
-            pre_existing: backed,
-        };
-        journal::finish_deploy(store, jid, game.appid, &entry)?;
-
-        report.deployed += 1;
-        report.methods.push((rel.clone(), used));
+        // Single-root Phase-1 deploys do not track per-file ownership (one mod per
+        // deploy), so source_mod stays 0 — UNCHANGED behavior. The injected abort point
+        // (crash simulation) lives INSIDE deploy_one_file: it fires after the pending
+        // journal row is committed + the file is placed but BEFORE the manifest row /
+        // `done` flip — exactly the kill-mid-deploy window.
+        deploy_one_file(
+            store, game, &data_dir, &src, rel, 0, chosen, &casing, abort_after, &mut report,
+        )?;
     }
 
     Ok(report)
+}
+
+/// Deploy a deterministic multi-root WINNER SET (CONF-03): the conflict resolver's
+/// output, where each file may come from a DIFFERENT mod's staging root and carries the
+/// winning mod's id (recorded as `FileEntry.source_mod`, D-03).
+///
+/// This reuses the EXACT same journaled, backup-before-overwrite, method-laddered
+/// per-file primitive as [`deploy`] ([`deploy_one_file`]) — the safe engine is never
+/// bypassed. The only differences from the single-root path are: (1) each file is
+/// probed against its own staging root, and (2) the winning mod id is recorded.
+///
+/// `winners` MUST already be deduped to one entry per `target_rel` (the resolver
+/// guarantees this), so `deployed_file UNIQUE(appid, target_rel)` is never violated.
+pub fn deploy_winners(
+    store: &Store,
+    game: &Game,
+    winners: &[WinnerFile],
+) -> Result<DeployReport, DeployError> {
+    let data_dir = crate::deploy_root(&game.install_dir);
+    std::fs::create_dir_all(&data_dir).map_err(|e| DeployError::io(&data_dir, e))?;
+
+    let mut report = DeployReport {
+        deployed: 0,
+        backed_up: 0,
+        methods: Vec::new(),
+        fs_warnings: Vec::new(),
+    };
+
+    if winners.is_empty() {
+        return Ok(report);
+    }
+
+    let casing = canonical_data_casing(&game.install_dir).unwrap_or_default();
+
+    // Accumulate fs warnings across the (possibly several) staging roots, de-duplicated
+    // (FsWarning is a tiny Copy enum, so a linear-scan dedup is fine).
+    let mut seen_warnings: Vec<FsWarning> = Vec::new();
+
+    for w in winners {
+        let src = w.staging_root.join(&w.rel);
+        if !src.is_file() {
+            // A winner whose source vanished is skipped defensively (the resolver read
+            // it moments ago; a race here just means one fewer file, never corruption).
+            continue;
+        }
+        // Probe per winner against its OWN staging root (winners come from different
+        // roots, each potentially on a different filesystem).
+        let caps = probe(&w.staging_root, &data_dir)
+            .map_err(|e| DeployError::io(&w.staging_root, e))?;
+        let chosen = choose_method(&caps);
+        for warn in fs_warnings_from_caps(&caps) {
+            if !seen_warnings.contains(&warn) {
+                seen_warnings.push(warn);
+            }
+        }
+
+        // No abort injection on the production winner-set path (None).
+        deploy_one_file(
+            store,
+            game,
+            &data_dir,
+            &src,
+            &w.rel,
+            w.mod_id,
+            chosen,
+            &casing,
+            None,
+            &mut report,
+        )?;
+    }
+
+    report.fs_warnings = seen_warnings;
+    Ok(report)
+}
+
+/// The shared per-file deploy primitive used by both [`deploy`] (single-root) and
+/// [`deploy_winners`] (multi-root). Performs the full safe sequence for ONE file:
+/// casing-normalize the relpath, guard containment, hash, journal `pending`,
+/// backup-before-overwrite, idempotent file op, then manifest row + `done` flip.
+///
+/// `source_mod` is the owning mod id recorded in the manifest (`0` for single-root
+/// Phase-1 deploys; the winning mod id for the conflict winner set — D-03).
+///
+/// `abort_after` is the test-only crash-injection seam (`None` in production): when set,
+/// once `report.deployed >= abort_after` the function returns [`DeployError::Aborted`]
+/// AFTER committing the pending journal row + placing the file but BEFORE writing the
+/// manifest row / flipping `done` — the exact kill-mid-deploy window the crash-recovery
+/// centerpiece relies on. The check uses `report.deployed` (the count BEFORE THIS file
+/// is finished), preserving the pre-refactor semantics exactly.
+#[allow(clippy::too_many_arguments)]
+fn deploy_one_file(
+    store: &Store,
+    game: &Game,
+    data_dir: &Path,
+    src: &Path,
+    rel: &Path,
+    source_mod: i64,
+    chosen: DeployMethod,
+    casing: &steam::CasingMap,
+    abort_after: Option<usize>,
+    report: &mut DeployReport,
+) -> Result<(), DeployError> {
+    // Normalize the mod's path casing to the game's canonical Data/ casing BEFORE
+    // resolving the on-disk target, so the deployed path matches what Wine opens
+    // (DEPLOY-08). The manifest then records the normalized relpath, preserving the
+    // round-trip-pristine guarantee (purge keys off the same normalized path).
+    let rel = normalize_to_canonical(rel, casing);
+    let rel = &rel;
+    let target = crate::resolve_target(&game.install_dir, rel);
+    guard_within_root(data_dir, &target)?;
+
+    let source_hash = backup::blake3_file(src)?;
+
+    // 1. Durable intent BEFORE any syscall.
+    let jid = journal::begin_deploy(store, game.appid, rel, chosen, &source_hash)?;
+
+    // 2. Backup-before-overwrite (idempotent, content-addressed).
+    let backed = backup::backup_vanilla_if_absent(store, game, &target, rel)?;
+    if backed {
+        report.backed_up += 1;
+    }
+
+    // 3. Idempotent file op (downgrades on EXDEV).
+    let used = apply_idempotent(chosen, src, &target)?;
+
+    // --- injected abort point (crash simulation): the pending row is committed and the
+    //     file is on disk, but we return BEFORE writing the manifest row / flipping the
+    //     intent to done — exactly the kill-mid-deploy window. ---
+    if let Some(n) = abort_after
+        && report.deployed >= n
+    {
+        return Err(DeployError::Aborted(report.deployed));
+    }
+
+    // 4. Manifest row + done flip together, AFTER the syscall succeeded.
+    let entry = FileEntry {
+        target_rel: rel.clone(),
+        source_mod,
+        method: used,
+        hash: source_hash,
+        pre_existing: backed,
+    };
+    journal::finish_deploy(store, jid, game.appid, &entry)?;
+
+    report.deployed += 1;
+    report.methods.push((rel.clone(), used));
+    Ok(())
 }
 
 /// Purge every recorded deployed file for `game`, restoring vanilla originals, and
@@ -366,35 +479,4 @@ pub fn recover_on_launch(store: &Store, game: &Game) -> Result<RecoveryReport, D
         replayed: outcome.replayed,
         drift,
     })
-}
-
-/// Assert `target` is within `root` (V4 access control: never write outside the
-/// resolved deploy root). Uses lexical containment so it works for not-yet-created
-/// paths (canonicalize would fail on a missing target).
-fn guard_within_root(root: &Path, target: &Path) -> Result<(), DeployError> {
-    // Both paths are constructed by us from `install_dir` + a validated relpath, but
-    // we still assert containment as a defence-in-depth boundary.
-    let root_norm = lexical_normalize(root);
-    let target_norm = lexical_normalize(target);
-    if target_norm.starts_with(&root_norm) {
-        Ok(())
-    } else {
-        Err(DeployError::PathEscape(target.to_path_buf()))
-    }
-}
-
-/// Lexically normalize a path (resolve `.`/`..` components) without touching disk.
-fn lexical_normalize(p: &Path) -> PathBuf {
-    use std::path::Component;
-    let mut out = PathBuf::new();
-    for comp in p.components() {
-        match comp {
-            Component::ParentDir => {
-                out.pop();
-            }
-            Component::CurDir => {}
-            other => out.push(other.as_os_str()),
-        }
-    }
-    out
 }
