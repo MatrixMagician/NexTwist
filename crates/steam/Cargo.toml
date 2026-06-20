@@ -1,0 +1,33 @@
+# `nextwist-steam` — quarantines all Steam/Proton-layout knowledge.
+#
+# This crate is the ONLY place that knows about libraryfolders.vdf, appmanifest_*.acf,
+# steamapps/common/<dir>, and compatdata/<appid>/pfx. It hands the deploy engine
+# already-resolved absolute paths (install_dir + Proton prefix) so deploy stays
+# Proton-agnostic (per the Architectural Responsibility Map in RESEARCH.md).
+[package]
+name = "nextwist-steam"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "steam"
+path = "src/lib.rs"
+
+[dependencies]
+# Alias the shared types crate as `nextwist_core` (NOT `core`) inside this crate:
+# this crate derives `thiserror::Error` locally, and a `core` extern alias would
+# shadow Rust's built-in `core` prelude that the derive macro expands to.
+nextwist_core = { path = "../core", package = "nextwist-core" }
+store.workspace = true
+steamlocate.workspace = true
+keyvalues-serde.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
