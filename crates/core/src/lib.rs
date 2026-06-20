@@ -9,4 +9,6 @@ pub mod error;
 pub mod model;
 
 pub use error::{CoreError, StoreError};
-pub use model::{DeployMethod, FileEntry, Game, ManagedMod};
+pub use model::{
+    DeployMethod, FileConflict, FileEntry, Game, ManagedMod, Plugin, PluginKind, Profile,
+};
