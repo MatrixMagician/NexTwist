@@ -19,11 +19,49 @@ use std::path::{Path, PathBuf};
 use nextwist_core::{DeployMethod, FileEntry, Game};
 use store::Store;
 
+use steam::canonical_data_casing;
+
 use crate::backup;
+use crate::casefold::normalize_to_canonical;
 use crate::error::DeployError;
 use crate::journal;
 use crate::method::{apply_idempotent, choose_method};
-use crate::probe::probe;
+use crate::probe::{probe, Casefold, FsCaps};
+
+/// An unsafe-filesystem warning surfaced through [`DeployReport`] so the UI (Plan 06)
+/// can warn the user before/at deploy (ENV-04 "warn about unsafe configurations").
+///
+/// These are WARNINGS, not gates: deploy still proceeds (the method ladder safely
+/// downgrades cross-device links, and casing normalization always runs), but the user
+/// is informed their filesystem configuration is sub-optimal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FsWarning {
+    /// The staging and game-data dirs are on different devices (cross-device / EXDEV):
+    /// hardlink/reflink are impossible, so deploy falls back to symlink/copy. Same-FS
+    /// staging is recommended.
+    CrossDevice,
+    /// The game-data filesystem does not have the case-folding flag set (or it could
+    /// not be determined). Mixed-case mod paths rely on path-casing normalization
+    /// instead; surfaced so the user knows case-sensitivity is being handled by us.
+    NotCasefolded,
+}
+
+/// Derive the [`FsWarning`]s implied by a probe result (ENV-04 warning half).
+///
+/// `CrossDevice` when staging and game data are not on the same device; `NotCasefolded`
+/// when the casefold flag is `Off` or `Unknown` (best-effort — A6: absence of a
+/// confirmed `On` means we cannot rely on the kernel for case-insensitivity, so we warn
+/// and lean on normalization).
+pub fn fs_warnings_from_caps(caps: &FsCaps) -> Vec<FsWarning> {
+    let mut warnings = Vec::new();
+    if !caps.same_device {
+        warnings.push(FsWarning::CrossDevice);
+    }
+    if !matches!(caps.casefold, Casefold::On) {
+        warnings.push(FsWarning::NotCasefolded);
+    }
+    warnings
+}
 
 /// What [`deploy`] placed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +72,9 @@ pub struct DeployReport {
     pub backed_up: usize,
     /// The method actually used per target (after any EXDEV downgrade).
     pub methods: Vec<(PathBuf, DeployMethod)>,
+    /// Unsafe-filesystem warnings (cross-device / non-casefolded) surfaced for the UI
+    /// to show the user before relying on this deployment (ENV-04 warning half).
+    pub fs_warnings: Vec<FsWarning>,
 }
 
 /// What [`purge`] removed/restored, plus any orphans it refused to blindly delete.
@@ -104,6 +145,7 @@ fn deploy_inner(
         deployed: 0,
         backed_up: 0,
         methods: Vec::new(),
+        fs_warnings: Vec::new(),
     };
 
     // An empty mod is a valid no-op deploy. Returning early also avoids probing a
@@ -118,6 +160,17 @@ fn deploy_inner(
         .map_err(|e| DeployError::io(&staged.staging_root, e))?;
     let chosen = choose_method(&caps);
 
+    // ENV-04 (warning half): surface unsafe-fs warnings (cross-device / non-casefolded)
+    // for the UI before the user relies on this deployment.
+    report.fs_warnings = fs_warnings_from_caps(&caps);
+
+    // DEPLOY-08: the per-game canonical Data/ casing map. Mixed-case mod directory
+    // components are rewritten to the game's REAL on-disk casing so Wine's
+    // case-sensitive open() resolves them. The map is produced by the steam crate (Plan
+    // 02); deploy only consumes it. It is best-effort: a game whose Data/ tree cannot be
+    // walked yields an empty map and normalization is a no-op (no worse than today).
+    let casing = canonical_data_casing(&game.install_dir).unwrap_or_default();
+
     for rel in &staged.files {
         let src = staged.staging_root.join(rel);
         if !src.is_file() {
@@ -125,6 +178,12 @@ fn deploy_inner(
             // extract time). Skip anything else defensively.
             continue;
         }
+        // Normalize the mod's path casing to the game's canonical Data/ casing BEFORE
+        // resolving the on-disk target, so the deployed path matches what Wine opens
+        // (DEPLOY-08). The manifest then records the normalized relpath, preserving the
+        // round-trip-pristine guarantee (purge keys off the same normalized path).
+        let rel = normalize_to_canonical(rel, &casing);
+        let rel = &rel;
         let target = crate::resolve_target(&game.install_dir, rel);
         guard_within_root(&data_dir, &target)?;
 

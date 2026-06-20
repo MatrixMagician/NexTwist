@@ -18,6 +18,11 @@ path = "src/lib.rs"
 [dependencies]
 nextwist_core = { path = "../core", package = "nextwist-core" }
 store.workspace = true
+# `steam` (aliased to avoid any `core` shadowing concern, mirroring nextwist_core)
+# provides the per-game canonical Data/ CasingMap that casefold.rs consumes to rewrite
+# mixed-case mod paths to the game's real on-disk casing (DEPLOY-08). No cycle: steam
+# does not depend on deploy.
+steam = { path = "../steam", package = "nextwist-steam" }
 reflink-copy.workspace = true
 blake3.workspace = true
 walkdir.workspace = true

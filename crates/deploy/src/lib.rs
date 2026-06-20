@@ -25,6 +25,7 @@
 //! * [`engine`] — `deploy()` / `purge()` / `recover_on_launch()` orchestration.
 
 pub mod backup;
+pub mod casefold;
 pub mod engine;
 pub mod journal;
 pub mod method;
@@ -32,12 +33,12 @@ pub mod probe;
 
 mod error;
 
+pub use casefold::normalize_to_canonical;
 pub use error::DeployError;
 pub use method::{apply_idempotent, choose_method, DeploymentMethod};
 pub use probe::{probe, Casefold, FsCaps};
 
-// Engine orchestration (deploy/purge/recover) is implemented in Task 2.
-#[allow(unused_imports)] // engine module is populated in Task 2
+// Engine orchestration (deploy/purge/recover) plus the deploy-path fs warnings.
 pub use engine::*;
 
 use std::path::{Path, PathBuf};
