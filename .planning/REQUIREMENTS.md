@@ -33,9 +33,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Conflicts & Load Order
 
-- [ ] **CONF-01**: User can see which mods overwrite which files (file-level conflicts)
+- [x] **CONF-01**: User can see which mods overwrite which files (file-level conflicts)
 - [x] **CONF-02**: User can set mod priority/order to control which mod wins a conflict
-- [ ] **CONF-03**: Deployment applies the user's conflict-winner choices deterministically
+- [x] **CONF-03**: Deployment applies the user's conflict-winner choices deterministically
 
 ### Plugin Management
 
@@ -133,9 +133,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEPLOY-06 | Phase 1 | Complete |
 | DEPLOY-07 | Phase 1 | Complete |
 | DEPLOY-08 | Phase 1 | Complete |
-| CONF-01 | Phase 2 | Pending |
+| CONF-01 | Phase 2 | Complete |
 | CONF-02 | Phase 2 | Complete |
-| CONF-03 | Phase 2 | Pending |
+| CONF-03 | Phase 2 | Complete |
 | PLUGIN-01 | Phase 2 | Pending |
 | PLUGIN-02 | Phase 2 | Pending |
 | PLUGIN-03 | Phase 2 | Pending |

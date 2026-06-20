@@ -60,7 +60,7 @@ Plans:
   3. User can auto-sort plugins via LOOT
   4. User can create multiple independent profiles per game, switch the active profile to change which mods/plugins/order are deployed, and each profile preserves its own enabled-mod set and load order
 
-**Plans**: 2/5 plans executed
+**Plans**: 3/5 plans executed
 **UI hint**: yes
 
 Plans:
@@ -71,7 +71,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-03-PLAN.md — Conflict slice (CONF-01/02/03): pure-fold resolver → single-winner StagedFiles + multi-root contract + winner deploy + conflict Tauri commands + Conflict view + round-trip-pristine redeploy test
+- [x] 02-03-PLAN.md — Conflict slice (CONF-01/02/03): pure-fold resolver → single-winner StagedFiles + multi-root contract + winner deploy + conflict Tauri commands + Conflict view + round-trip-pristine redeploy test
 - [ ] 02-04-PLAN.md — Plugin + LOOT slice (PLUGIN-01/02/03): plugin scan + libloot enable/order/plugins.txt write (asterisk, masters-first) + masterlist fetch/cache + LOOT propose-then-apply + plugin Tauri commands + Plugin manager view
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -143,7 +143,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Safe Local Round-Trip | 7/7 | Complete   | 2026-06-20 |
-| 2. Multi-Mod Management | 2/5 | In Progress|  |
+| 2. Multi-Mod Management | 3/5 | In Progress|  |
 | 3. NexusMods Login & Download | 0/TBD | Not started | - |
 | 4. Guided Installers & Collections | 0/TBD | Not started | - |
 | 5. AppImage Distribution | 0/TBD | Not started | - |

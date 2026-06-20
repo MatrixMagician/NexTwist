@@ -6,14 +6,14 @@ current_phase: 2
 current_phase_name: Multi-Mod Management
 status: executing
 stopped_at: Phase 2 UI-SPEC approved
-last_updated: "2026-06-20T23:39:35.411Z"
+last_updated: "2026-06-20T23:54:22.923Z"
 last_activity: 2026-06-20
 last_activity_desc: Phase 2 execution started
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 10
   percent: 20
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 ## Current Position
 
 Phase: 2 (Multi-Mod Management) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-06-20 — Phase 2 execution started
 
@@ -64,6 +64,7 @@ Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pen
 | Phase 01 P07 | 25 | 3 tasks | 5 files |
 | Phase 02 P01 | 7 | 3 tasks | 11 files |
 | Phase 02 P02 | 22 | 3 tasks | 9 files |
+| Phase 02 P03 | 27 | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 2 P01]: migration test reaches a genuine V1-only state via refinery Target::Version(1); store upserts use ON CONFLICT DO UPDATE keyed by UNIQUE constraints; MSRV 1.85->1.89 for libloot, cargo-deny allows the libloot GPL-3.0 family (Phase-5 DIST-02).
 - [Phase ?]: libloot 0.29.5: set_load_order persists internally (no Game::save); no active-plugin setter — active state enters via Plugins.txt, generated from DB plugin_state in Plan 04
 - [Phase ?]: deny.toml allows bare GPL-3.0 (libloadorder/esplugin declare it, not -or-later); compatible in the GPL-3.0-or-later AppImage
+- [Phase ?]: Conflict multi-root contract = Option A: new WinnerFile + deploy_winners; StagedFiles/deploy unchanged (02-03)
+- [Phase ?]: Conflict resolver = pure fold emitting one winner per target_rel (UNIQUE-safe); reused by Plan 02-05 profile switch deploy half (02-03)
 
 ### Pending Todos
 
@@ -117,7 +120,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T23:39:02.111Z
+Last session: 2026-06-20T23:53:54.596Z
 Stopped at: Phase 2 UI-SPEC approved
 Resume file: .planning/phases/02-multi-mod-management/02-UI-SPEC.md
 Resume command: `/gsd-autonomous --from 2` to continue the milestone (UAT-1/UAT-2 done + GAP-01 fixed). Optionally finish UAT-3/UAT-4 first.
