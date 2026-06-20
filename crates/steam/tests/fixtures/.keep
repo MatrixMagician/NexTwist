@@ -1,0 +1,4 @@
+# Tracked so the fixtures/ path exists. The resolve_game integration test builds its
+# synthetic Steam layout (libraryfolders.vdf / appmanifest_489830.acf / compatdata/)
+# under a TempDir at runtime, so no real Steam install — and no checked-in binary
+# fixtures — are required for CI.
