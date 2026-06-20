@@ -73,12 +73,12 @@ pub fn deploy_root(install_dir: &Path) -> PathBuf {
 pub(crate) fn resolve_target(install_dir: &Path, staged_rel: &Path) -> PathBuf {
     let root = deploy_root(install_dir);
     let comps = staged_rel.components();
-    if let Some(std::path::Component::Normal(first)) = comps.clone().next() {
-        if first.to_string_lossy().eq_ignore_ascii_case("data") {
-            // Drop the leading Data/ segment; the rest is relative to the deploy root.
-            let rest: PathBuf = comps.skip(1).collect();
-            return root.join(rest);
-        }
+    if let Some(std::path::Component::Normal(first)) = comps.clone().next()
+        && first.to_string_lossy().eq_ignore_ascii_case("data")
+    {
+        // Drop the leading Data/ segment; the rest is relative to the deploy root.
+        let rest: PathBuf = comps.skip(1).collect();
+        return root.join(rest);
     }
     root.join(staged_rel)
 }

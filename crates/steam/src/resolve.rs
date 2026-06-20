@@ -89,13 +89,12 @@ pub fn resolve_game(appid: u32) -> Result<ResolvedGame, SteamError> {
     // Re-resolve every call (paths can move; never cache to disk).
     let roots = steamlocate::locate_all().map_err(|e| SteamError::Locate(e.to_string()))?;
     let mut roots = roots;
-    if let Some(flatpak) = crate::discover::flatpak_steam_root() {
-        if flatpak.is_dir()
-            && !roots.iter().any(|d| d.path() == flatpak)
-            && let Ok(extra) = steamlocate::SteamDir::from_dir(&flatpak)
-        {
-            roots.push(extra);
-        }
+    if let Some(flatpak) = crate::discover::flatpak_steam_root()
+        && flatpak.is_dir()
+        && !roots.iter().any(|d| d.path() == flatpak)
+        && let Ok(extra) = steamlocate::SteamDir::from_dir(&flatpak)
+    {
+        roots.push(extra);
     }
     if roots.is_empty() {
         return Err(SteamError::NoSteam);

@@ -209,10 +209,10 @@ fn deploy_inner(
         // --- injected abort point (crash simulation): the pending row is committed
         //     and the file is on disk, but we return BEFORE writing the manifest row
         //     / flipping the intent to done — exactly the kill-mid-deploy window. ---
-        if let Some(n) = abort_after {
-            if report.deployed >= n {
-                return Err(DeployError::Aborted(report.deployed));
-            }
+        if let Some(n) = abort_after
+            && report.deployed >= n
+        {
+            return Err(DeployError::Aborted(report.deployed));
         }
 
         // 4. Manifest row + done flip together, AFTER the syscall succeeded.

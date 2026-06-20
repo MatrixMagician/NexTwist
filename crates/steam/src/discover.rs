@@ -44,13 +44,12 @@ pub fn detect_games() -> Result<Vec<DetectedGame>, SteamError> {
     // Additionally probe the explicit Flatpak root, since `locate_all` can miss it on
     // headless/CI-like environments where the native registry hint is absent.
     let mut roots = dirs;
-    if let Some(flatpak) = flatpak_steam_root() {
-        if flatpak.is_dir()
-            && !roots.iter().any(|d| d.path() == flatpak)
-            && let Ok(extra) = steamlocate::SteamDir::from_dir(&flatpak)
-        {
-            roots.push(extra);
-        }
+    if let Some(flatpak) = flatpak_steam_root()
+        && flatpak.is_dir()
+        && !roots.iter().any(|d| d.path() == flatpak)
+        && let Ok(extra) = steamlocate::SteamDir::from_dir(&flatpak)
+    {
+        roots.push(extra);
     }
 
     // TODO(A2): Snap root (~/snap/steam/common/.steam/steam) is LOW confidence and is

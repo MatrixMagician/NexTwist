@@ -242,10 +242,10 @@ fn walk_orphans(
         // A path we backed up a vanilla original for is explained (the vanilla file may
         // legitimately sit here when no mod overwrote it). Compute its Data/-relative
         // path and check the vanilla ledger.
-        if let Some(rel) = data_relative(&game.install_dir, &path) {
-            if store.vanilla_for(game.appid, &rel)?.is_some() {
-                continue;
-            }
+        if let Some(rel) = data_relative(&game.install_dir, &path)
+            && store.vanilla_for(game.appid, &rel)?.is_some()
+        {
+            continue;
         }
         orphans.push(path);
     }
@@ -325,10 +325,10 @@ fn walk_orphan_dirs(
         }
         // A directory that holds a known vanilla-backed original is explained — but such a
         // dir is non-empty, so the is_empty guard already excluded it. Empty + unexplained:
-        if let Some(rel) = data_relative(&game.install_dir, path) {
-            if store.vanilla_for(game.appid, &rel)?.is_some() {
-                continue;
-            }
+        if let Some(rel) = data_relative(&game.install_dir, path)
+            && store.vanilla_for(game.appid, &rel)?.is_some()
+        {
+            continue;
         }
         orphan_dirs.push(path.to_path_buf());
     }

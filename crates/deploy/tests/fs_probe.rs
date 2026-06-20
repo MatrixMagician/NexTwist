@@ -87,10 +87,9 @@ fn distinct_device_tempdir(reference: &std::path::Path) -> Option<TempDir> {
         if let Ok(td) = tempfile::Builder::new()
             .prefix("nextwist-xdev-")
             .tempdir_in(p)
+            && fs::metadata(td.path()).map(|m| m.dev()).ok() != Some(ref_dev)
         {
-            if fs::metadata(td.path()).map(|m| m.dev()).ok() != Some(ref_dev) {
-                return Some(td);
-            }
+            return Some(td);
         }
     }
     None
