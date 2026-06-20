@@ -324,7 +324,7 @@ fn remove_emptied_dirs(install_dir: &Path, removed_rels: &[PathBuf]) -> Result<(
 
     // Deepest-first: longest component count first, so children empty before parents.
     let mut ordered: Vec<PathBuf> = candidates.into_iter().collect();
-    ordered.sort_by(|a, b| b.components().count().cmp(&a.components().count()));
+    ordered.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
 
     for dir in &ordered {
         // Defence-in-depth: never remove the deploy root or any ancestor of it.

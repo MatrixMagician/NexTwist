@@ -29,3 +29,6 @@ src-tauri/gen
 # NOTE: Cargo.lock is intentionally NOT ignored.
 # NexTwist ships an application/binary (AppImage), so the lockfile is committed
 # for reproducible builds.
+
+# Editor-local config
+.vscode/
