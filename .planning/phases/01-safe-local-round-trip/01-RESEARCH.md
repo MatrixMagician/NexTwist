@@ -525,21 +525,26 @@ fn probe(staging: &Path, game_data: &Path) -> std::io::Result<FsCaps> {
 | A6 | FS_CASEFOLD_FL = 0x40000000 via FS_IOC_GETFLAGS | probe casefold comment | MEDIUM — flag value/ioctl path should be confirmed against `<linux/fs.h>` at code time; casefold detection is a *nice-to-have* warning in Phase 1 (normalization is the locked primary approach), so low blast radius. |
 | A7 | `synchronous=NORMAL` is sufficient with WAL for crash-safety of the journal | Pattern 1 | MEDIUM — NORMAL is safe against app crashes but a power-loss corner case may want FULL for the journal commits. Recommend FULL for the intent-commit, NORMAL elsewhere; confirm with a power-loss-simulation test. |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three are dispositioned with a concrete recommendation and threaded into executable Phase 1 tasks. None blocks the phase goal.
 
 1. **Exact `ReflinkSupport` enum variant names (0.1.30).**
    - What we know: `check_reflink_support(from, to) -> Result<ReflinkSupport>` exists; an "Unknown" variant is referenced in docs.
    - What's unclear: whether the negative variant is `Unsupported` or `NotSupported`.
    - Recommendation: read `reflink-copy` 0.1.30 source when writing `probe.rs`; trivial to confirm, no plan impact.
+   - **RESOLVED:** carried as an in-code TODO in Plan 01-04 (`probe.rs`) per Assumption A1 — confirm at code time; not a plan blocker.
 
 2. **Does Skyrim/FO4 under Proton tolerate symlinked *mod asset files* (not plugins.txt)?**
    - What we know: plugins.txt specifically must NOT be symlinked (Skyrim won't follow it) — but that's Phase 2. Hardlink/reflink are preferred for assets anyway.
    - What's unclear: empirical confirmation that symlinked loose texture/mesh files load under Proton for these two games.
    - Recommendation: keep symlink as the cross-FS fallback rung; add a Phase-1 manual UAT "known test mod loads in-game" check on a real Proton install. Reflink/hardlink (same-fs) is the happy path and avoids the question entirely.
+   - **RESOLVED:** symlink retained as the cross-FS fallback rung in the method ladder (Plan 01-04); empirical confirmation deferred to Plan 01-06 manual UAT. Same-fs reflink/hardlink is the happy path and sidesteps the question.
 
 3. **synchronous PRAGMA level for the operation journal.**
    - What we know: WAL + NORMAL survives app crashes; FULL adds power-loss durability at a perf cost.
    - Recommendation: FULL for the intent-commit transaction, NORMAL for bulk manifest writes; validate with a crash/power-loss-simulation test (kill -9 mid-deploy, then relaunch and assert pristine).
+   - **RESOLVED:** `synchronous=FULL` set for the intent-commit path in `store::open` (Plan 01-01); validated by the `crash_recovery` centerpiece test (Plan 01-04).
 
 ## Environment Availability
 
