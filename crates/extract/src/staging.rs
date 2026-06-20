@@ -8,13 +8,17 @@
 
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 
 use crate::validate::ExtractError;
 use crate::{list_files_rel, mark_tree_readonly, rar, sevenz, zip, ArchiveFormat};
 
 /// A validated, read-only per-mod staging tree produced by [`install_archive`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Derives serde so the Tauri command layer (Plan 06) can return it to the webview and
+/// receive it back for the deploy call — it maps 1:1 onto `deploy::StagedFiles`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StagedMod {
     /// Root directory of the staged tree (a child of the supplied `staging_root`).
     pub staging_root: PathBuf,

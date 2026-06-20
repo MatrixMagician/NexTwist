@@ -9,11 +9,16 @@
 
 use std::path::PathBuf;
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::SteamError;
 use crate::resolve::{SUPPORTED_APPIDS, is_supported};
 
 /// An installed, supported game found during discovery.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Derives serde so the Tauri command layer (Plan 06) can return it across the IPC
+/// boundary unchanged — the shape is a pure-data DTO with no I/O dependencies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DetectedGame {
     /// Steam AppID (one of [`crate::SKYRIM_SE`] / [`crate::FALLOUT4`]).
     pub appid: u32,

@@ -17,6 +17,7 @@
 use std::path::{Path, PathBuf};
 
 use nextwist_core::{DeployMethod, FileEntry, Game};
+use serde::{Deserialize, Serialize};
 use store::Store;
 
 use steam::canonical_data_casing;
@@ -34,7 +35,7 @@ use crate::probe::{probe, Casefold, FsCaps};
 /// These are WARNINGS, not gates: deploy still proceeds (the method ladder safely
 /// downgrades cross-device links, and casing normalization always runs), but the user
 /// is informed their filesystem configuration is sub-optimal.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FsWarning {
     /// The staging and game-data dirs are on different devices (cross-device / EXDEV):
     /// hardlink/reflink are impossible, so deploy falls back to symlink/copy. Same-FS
@@ -64,7 +65,7 @@ pub fn fs_warnings_from_caps(caps: &FsCaps) -> Vec<FsWarning> {
 }
 
 /// What [`deploy`] placed.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeployReport {
     /// Number of files deployed.
     pub deployed: usize,
@@ -78,7 +79,7 @@ pub struct DeployReport {
 }
 
 /// What [`purge`] removed/restored, plus any orphans it refused to blindly delete.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PurgeReport {
     /// Number of deployed files removed.
     pub removed: usize,
@@ -90,7 +91,7 @@ pub struct PurgeReport {
 }
 
 /// What [`recover_on_launch`] replayed, plus the post-replay drift report.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecoveryReport {
     /// Number of journal rows replayed (rolled forward or back).
     pub replayed: usize,

@@ -23,6 +23,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use nextwist_core::{FileEntry, Game};
+use serde::{Deserialize, Serialize};
 use store::Store;
 use walkdir::WalkDir;
 
@@ -31,7 +32,7 @@ use crate::error::DeployError;
 use crate::method::apply_idempotent;
 
 /// The result of a [`verify`] pass: manifest-vs-disk drift, classified.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct VerifyReport {
     /// Recorded files absent on disk (absolute target paths).
     pub missing: Vec<PathBuf>,
@@ -45,7 +46,7 @@ pub struct VerifyReport {
 }
 
 /// The result of a [`repair`] pass.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct RepairReport {
     /// Number of `missing` files re-deployed from staging.
     pub restored_missing: usize,
