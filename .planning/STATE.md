@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Safe Local Round-Trip
 status: executing
-stopped_at: "Completed 01-03-PLAN.md (crates/extract: safe archive extraction)"
-last_updated: "2026-06-20T21:55:18.885Z"
+stopped_at: Phase 2 UI-SPEC approved
+last_updated: "2026-06-20T22:19:40.983Z"
 last_activity: 2026-06-20
-last_activity_desc: Phase 1 built + auto-verified; paused for manual GUI/in-game UAT
+last_activity_desc: GAP-01 (orphan-empty-dir purge bug) closed via gap closure; phase re-verified green
 progress:
   total_phases: 5
   completed_phases: 1
@@ -111,8 +111,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T21:55:00.464Z
-Stopped at: Phase 1 built (7/7 plans incl. GAP-01 gap closure). Manual UAT found + fixed the purge orphan-empty-dir bug (GAP-01); re-verified green (82 tests on tmpfs+btrfs). User's live Skyrim Data/ cleaned to pristine. Paused per user choice; remaining manual UAT-3 (in-game load) + UAT-4 (Flatpak/Snap) are optional.
-Resume file: .planning/phases/01-safe-local-round-trip/01-UAT.md
+Last session: 2026-06-20T22:19:40.978Z
+Stopped at: Phase 2 UI-SPEC approved
+Resume file: .planning/phases/02-multi-mod-management/02-UI-SPEC.md
 Resume command: `/gsd-autonomous --from 2` to continue the milestone (UAT-1/UAT-2 done + GAP-01 fixed). Optionally finish UAT-3/UAT-4 first.
 Outstanding (non-blocking): TODO(A2) in crates/steam/src/discover.rs — convert to plain comment or tracked issue (intentional Snap-detect deferral, tested fallback exists).
