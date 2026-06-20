@@ -8,7 +8,12 @@ repository.workspace = true
 description = "NexTwist shared domain types and error enums (pure, headless, no I/O framework deps)"
 
 [lib]
-name = "core"
+# Lib target named `nextwist_core` (NOT `core`): a lib literally named `core`
+# shadows the std `::core` crate in the rustdoc doc-test compilation context,
+# breaking `thiserror`'s `::core::fmt`/`::core::write!` expansions (DEFER-01).
+# Dependants reference this crate by dependency key (`core` or `nextwist_core`),
+# which is independent of this lib target name, so the rename is transparent.
+name = "nextwist_core"
 path = "src/lib.rs"
 
 [dependencies]

@@ -3,7 +3,13 @@
 Items found during execution that are NOT part of the current plan's task scope.
 Logged per the executor SCOPE BOUNDARY rule (do not fix pre-existing/unrelated failures).
 
-## DEFER-01: `nextwist-core` doc-tests fail to compile (pre-existing, Wave 1)
+## DEFER-01: `nextwist-core` doc-tests fail to compile (pre-existing, Wave 1) — ✅ RESOLVED
+
+**RESOLVED (2026-06-20, orchestrator post-merge gate, Wave 2):** Renamed the `crates/core` `[lib] name` from `core` to `nextwist_core`, stopping the std-`::core` shadowing in the rustdoc doc-test context. Dependants reference the crate by dependency key (`store` → `core`, `steam`/`extract` → `nextwist_core`), which is independent of the lib target name, so the rename is transparent. `cargo test --workspace` now exits 0 with all doc-test suites compiling (44 passed, 13 suites). Caught by the execute-phase post-merge integration gate (the per-plan `--lib` self-checks missed it).
+
+---
+
+
 
 - **Discovered during:** Plan 01-03 Task 2 (`cargo test --workspace`)
 - **Symptom:** `Doc-tests core` fail with `error[E0433]: cannot find 'write'/'fmt'/'option' in 'core'` originating from the `#[derive(Error)]` macro in `crates/core/src/error.rs`.
