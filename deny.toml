@@ -44,6 +44,11 @@ allow = [
     # permissive BSD-style, GPL-compatible, free license — fine to ship in the AppImage.
     "bzip2-1.0.6",
     # NexTwist itself is GPL-3.0-or-later; allow it so the workspace crates pass.
+    # The libloot family — libloot / libloadorder / esplugin (added in Plan 04 for
+    # plugin load-order sorting) — is also GPL-3.0-or-later and is intentionally
+    # allowed here. NexTwist being GPL-3.0-or-later makes this license-compatible to
+    # ship in the AppImage. This allowance is carried forward to the Phase-5 DIST-02
+    # license audit (RESEARCH LICENSE FLAG).
     "GPL-3.0-or-later",
 ]
 confidence-threshold = 0.9

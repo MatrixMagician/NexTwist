@@ -12,7 +12,10 @@ members = ["crates/*", "src-tauri"]
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.85"
+# MSRV is 1.89: libloot (added in Plan 04) requires Rust >= 1.89 (D-09 / RESEARCH
+# Environment Availability). 1.89 is a superset of the 1.85 floor that EXDEV/
+# `CrossesDevices` deploy detection needs, so the safety-critical engine is unaffected.
+rust-version = "1.89"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/MatrixMagician/NexTwist"
 
