@@ -30,6 +30,7 @@ pub mod engine;
 pub mod journal;
 pub mod method;
 pub mod probe;
+pub mod verify;
 
 mod error;
 
@@ -37,6 +38,7 @@ pub use casefold::normalize_to_canonical;
 pub use error::DeployError;
 pub use method::{apply_idempotent, choose_method, DeploymentMethod};
 pub use probe::{probe, Casefold, FsCaps};
+pub use verify::{repair, verify, RepairReport, VerifyReport};
 
 // Engine orchestration (deploy/purge/recover) plus the deploy-path fs warnings.
 pub use engine::*;

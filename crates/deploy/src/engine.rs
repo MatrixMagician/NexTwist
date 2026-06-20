@@ -89,11 +89,14 @@ pub struct PurgeReport {
     pub orphans: Vec<PathBuf>,
 }
 
-/// What [`recover_on_launch`] replayed.
+/// What [`recover_on_launch`] replayed, plus the post-replay drift report.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecoveryReport {
     /// Number of journal rows replayed (rolled forward or back).
     pub replayed: usize,
+    /// Drift report from the automatic verify run after journal replay. An abnormal
+    /// exit thus always yields a drift status (DEPLOY-07: full-pristine-or-report).
+    pub drift: crate::verify::VerifyReport,
 }
 
 /// Deploy every file of `staged` into `game`'s `Data/` tree.
@@ -265,10 +268,15 @@ pub fn purge(store: &Store, game: &Game) -> Result<PurgeReport, DeployError> {
     Ok(report)
 }
 
-/// Replay any non-`done` journal rows on launch to reach a consistent state.
+/// Replay any non-`done` journal rows on launch to reach a consistent state, then
+/// auto-run a verify pass so an abnormal exit always yields a drift report (DEPLOY-07).
 pub fn recover_on_launch(store: &Store, game: &Game) -> Result<RecoveryReport, DeployError> {
     let replayed = journal::replay(store, game)?;
-    Ok(RecoveryReport { replayed })
+    // After journal replay reaches a consistent DB+disk state, hash-diff the manifest
+    // against disk so any external drift (orphans / missing / changed) is surfaced
+    // automatically — never blindly repaired or deleted here (the UI decides).
+    let drift = crate::verify::verify(store, game)?;
+    Ok(RecoveryReport { replayed, drift })
 }
 
 /// Assert `target` is within `root` (V4 access control: never write outside the
