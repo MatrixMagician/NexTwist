@@ -61,6 +61,40 @@ pub fn fake_staged_mod<P: AsRef<Path>>(
     Ok(root.as_ref().to_path_buf())
 }
 
+/// Build a fake Proton-prefix tree under `root` with the AppData/Local/<game_name>
+/// folder libloot's `with_local_path` targets on Linux, returning `root` (the prefix
+/// root, suitable to pass where the `steam` crate would supply a real prefix).
+///
+/// This mimics the exact location a real Proton prefix exposes:
+/// `<root>/drive_c/users/steamuser/AppData/Local/<game_name>/` (Pitfall 1/2). On Linux
+/// libloot cannot derive this path itself (it returns `NoLocalAppData`), so NexTwist
+/// must always supply it; this fixture lets `plugins.txt` round-trips be asserted
+/// **headlessly** in CI without a real Proton install. When `plugins_txt` is `Some`,
+/// a `Plugins.txt` seeded with that content is written inside the AppData/Local folder
+/// (the asterisk-format active-plugins file libloot reads/writes).
+///
+/// The `<game_name>` is the Steam AppData folder name —
+/// `"Skyrim Special Edition"` / `"Fallout4"` (mirrors libloadorder's
+/// `*_appdata_folder_name`). Parent directories are created as needed.
+pub fn fake_proton_prefix(
+    root: &Path,
+    game_name: &str,
+    plugins_txt: Option<&str>,
+) -> io::Result<PathBuf> {
+    let appdata_local = root
+        .join("drive_c")
+        .join("users")
+        .join("steamuser")
+        .join("AppData")
+        .join("Local")
+        .join(game_name);
+    fs::create_dir_all(&appdata_local)?;
+    if let Some(contents) = plugins_txt {
+        fs::write(appdata_local.join("Plugins.txt"), contents)?;
+    }
+    Ok(root.to_path_buf())
+}
+
 fn write_tree(root: &Path, files: &[(&str, &[u8])]) -> io::Result<()> {
     for (rel, bytes) in files {
         let path = root.join(rel);
@@ -283,6 +317,40 @@ mod tests {
         let (_d1, a) = build(&[("Data/a.esp", b"x"), ("Data/b.esp", b"y")]);
         let (_d2, b) = build(&[("Data/a.esp", b"x")]);
         assert_trees_identical(&a, &b);
+    }
+
+    #[test]
+    fn fake_proton_prefix_builds_appdata_local_and_seeds_plugins_txt() {
+        let dir = TempDir::new().unwrap();
+        let root = fake_proton_prefix(
+            dir.path(),
+            "Skyrim Special Edition",
+            Some("*Skyrim.esm\n*Update.esm\nUnmanaged.esp\n"),
+        )
+        .unwrap();
+        // Returns the prefix root unchanged.
+        assert_eq!(root, dir.path());
+        // The full AppData/Local/<game_name> tree exists (the with_local_path target).
+        let appdata_local = root
+            .join("drive_c/users/steamuser/AppData/Local/Skyrim Special Edition");
+        assert!(appdata_local.is_dir(), "AppData/Local/<game> must exist");
+        // The seeded Plugins.txt round-trips (asterisk-format active-plugins file).
+        let written = fs::read_to_string(appdata_local.join("Plugins.txt")).unwrap();
+        assert_eq!(written, "*Skyrim.esm\n*Update.esm\nUnmanaged.esp\n");
+    }
+
+    #[test]
+    fn fake_proton_prefix_without_plugins_txt_omits_the_file() {
+        let dir = TempDir::new().unwrap();
+        fake_proton_prefix(dir.path(), "Fallout4", None).unwrap();
+        let appdata_local = dir
+            .path()
+            .join("drive_c/users/steamuser/AppData/Local/Fallout4");
+        assert!(appdata_local.is_dir());
+        assert!(
+            !appdata_local.join("Plugins.txt").exists(),
+            "no Plugins.txt should be seeded when plugins_txt is None"
+        );
     }
 
     #[test]
