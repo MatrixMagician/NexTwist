@@ -11,7 +11,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **ENV-01**: User can have NexTwist auto-detect installed Steam games on Linux
 - [ ] **ENV-02**: User can have NexTwist resolve a game's install directory and Proton/Wine prefix
-- [ ] **ENV-03**: User can add and manage supported Bethesda Creation Engine games (Skyrim SE, Fallout 4) as managed games
+- [x] **ENV-03**: User can add and manage supported Bethesda Creation Engine games (Skyrim SE, Fallout 4) as managed games
 - [ ] **ENV-04**: NexTwist detects the deployment filesystem's capabilities (same-device, case-folding) and warns about unsafe configurations
 
 ### Mod Staging & Extraction
@@ -23,11 +23,11 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Deployment Engine (core safety)
 
 - [ ] **DEPLOY-01**: User can deploy enabled mods into the game without modifying original game files
-- [ ] **DEPLOY-02**: NexTwist records every deployed file in a per-game manifest/ledger
+- [x] **DEPLOY-02**: NexTwist records every deployed file in a per-game manifest/ledger
 - [ ] **DEPLOY-03**: User can purge/uninstall mods, restoring the game folder to its pristine vanilla state
-- [ ] **DEPLOY-04**: NexTwist backs up any overwritten original game file before deployment so it can be restored
+- [x] **DEPLOY-04**: NexTwist backs up any overwritten original game file before deployment so it can be restored
 - [ ] **DEPLOY-05**: NexTwist selects a safe deployment method per target (reflink → hardlink → symlink → copy) accounting for filesystem boundaries
-- [ ] **DEPLOY-06**: Deployment and purge are crash-safe (journaled) so an interrupted operation can be recovered
+- [x] **DEPLOY-06**: Deployment and purge are crash-safe (journaled) so an interrupted operation can be recovered
 - [ ] **DEPLOY-07**: User can run a verify/repair that detects manifest-vs-disk drift (files changed outside NexTwist)
 - [ ] **DEPLOY-08**: NexTwist resolves case-sensitivity mismatches so mods load correctly under Proton
 
@@ -120,17 +120,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | ENV-01 | Phase 1 | Pending |
 | ENV-02 | Phase 1 | Pending |
-| ENV-03 | Phase 1 | Pending |
+| ENV-03 | Phase 1 | Complete |
 | ENV-04 | Phase 1 | Pending |
 | STAGE-01 | Phase 1 | Pending |
 | STAGE-02 | Phase 1 | Pending |
 | STAGE-03 | Phase 1 | Pending |
 | DEPLOY-01 | Phase 1 | Pending |
-| DEPLOY-02 | Phase 1 | Pending |
+| DEPLOY-02 | Phase 1 | Complete |
 | DEPLOY-03 | Phase 1 | Pending |
-| DEPLOY-04 | Phase 1 | Pending |
+| DEPLOY-04 | Phase 1 | Complete |
 | DEPLOY-05 | Phase 1 | Pending |
-| DEPLOY-06 | Phase 1 | Pending |
+| DEPLOY-06 | Phase 1 | Complete |
 | DEPLOY-07 | Phase 1 | Pending |
 | DEPLOY-08 | Phase 1 | Pending |
 | CONF-01 | Phase 2 | Pending |
@@ -160,11 +160,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIST-02 | Phase 5 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 40 total (note: the earlier "36" tally undercounted the enumerated IDs; all 40 listed IDs are mapped)
 - Mapped to phases: 40 (100%) ✓
 - Unmapped: 0
 
 By phase:
+
 - Phase 1 — Safe Local Round-Trip: 15 (ENV-01..04, STAGE-01..03, DEPLOY-01..08)
 - Phase 2 — Multi-Mod Management: 9 (CONF-01..03, PLUGIN-01..03, PROF-01..03)
 - Phase 3 — NexusMods Login & Download: 7 (NEXUS-01..06, NXM-01)
