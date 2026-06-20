@@ -52,6 +52,22 @@ export interface VerifyReport {
   pristine: boolean;
 }
 
+/** A managed mod (mirrors core::ManagedMod). Lower rank = higher priority (1-based). */
+export interface ManagedMod {
+  id: number;
+  name: string;
+  staging_root: string;
+  enabled: boolean;
+  rank: number;
+}
+
+/** A file-level conflict (mirrors core::FileConflict). `providers`/`winner` are mod ids. */
+export interface FileConflict {
+  target_rel: string;
+  providers: number[];
+  winner: number;
+}
+
 export const detectGames = (): Promise<DetectedGame[]> => invoke("detect_games");
 
 export const addGame = (appid: number): Promise<Game> => invoke("add_game", { appid });
@@ -70,3 +86,15 @@ export const deploy = (appid: number, staged: StagedMod): Promise<DeployReport> 
 export const purge = (appid: number): Promise<PurgeReport> => invoke("purge", { appid });
 
 export const verify = (appid: number): Promise<VerifyReport> => invoke("verify", { appid });
+
+export const listMods = (appid: number): Promise<ManagedMod[]> =>
+  invoke("list_mods", { appid });
+
+export const listConflicts = (appid: number): Promise<FileConflict[]> =>
+  invoke("list_conflicts", { appid });
+
+export const setModRank = (appid: number, modId: number, rank: number): Promise<boolean> =>
+  invoke("set_mod_rank", { appid, modId, rank });
+
+export const deployWinnerSet = (appid: number): Promise<DeployReport> =>
+  invoke("deploy_winner_set", { appid });

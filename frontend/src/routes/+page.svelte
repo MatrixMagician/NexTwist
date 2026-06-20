@@ -10,6 +10,8 @@
     DeployReport,
     PurgeReport,
     VerifyReport,
+    ManagedMod,
+    FileConflict,
   } from "$lib/api";
 
   // Supported Bethesda AppIDs (display only; the backend enforces the allow-list).
@@ -31,11 +33,33 @@
   let purgeReport = $state<PurgeReport | null>(null);
   let verifyReport = $state<VerifyReport | null>(null);
 
+  // Conflict view state (UI-SPEC §A). `mods` is the priority list (rank-ascending);
+  // `conflicts` is the file-level conflict table. `deployedSig` captures the winner/
+  // priority signature that was last deployed, so we can show the pending-vs-deployed
+  // banner (D-04) when the current set differs.
+  let mods = $state<ManagedMod[]>([]);
+  let conflicts = $state<FileConflict[]>([]);
+  let deployedSig = $state<string | null>(null);
+
   let busy = $state(false);
   let error = $state<string | null>(null);
   let status = $state<string | null>(null);
 
   const selectedGame = $derived(managed.find((g) => g.appid === selectedAppid) ?? null);
+
+  // Enabled mods in priority order — the input the resolver folds over.
+  const enabledMods = $derived(mods.filter((m) => m.enabled));
+
+  // The current winner/priority signature: enabled mod ids in rank order. When this
+  // differs from what was last deployed, priority changes are PENDING on disk (D-04).
+  const currentSig = $derived(enabledMods.map((m) => m.id).join(","));
+  const pending = $derived(deployedSig !== null && deployedSig !== currentSig);
+  // Before any deploy this session we cannot prove the on-disk state, so treat an
+  // un-deployed selection with conflicts as pending too (so Deploy is offered).
+  const showPending = $derived(deployedSig === null ? mods.length > 0 : pending);
+
+  const modName = (id: number): string =>
+    mods.find((m) => m.id === id)?.name ?? `mod #${id}`;
 
   async function run<T>(label: string, fn: () => Promise<T>): Promise<T | undefined> {
     busy = true;
@@ -115,10 +139,59 @@
     if (result) verifyReport = result;
   }
 
+  // --- Conflict view (UI-SPEC §A) ---
+
+  async function loadConflicts() {
+    if (selectedAppid === null) return;
+    const ms = await run("List mods", () => api.listMods(selectedAppid!));
+    if (ms) mods = ms;
+    const cs = await run("List conflicts", () => api.listConflicts(selectedAppid!));
+    if (cs) conflicts = cs;
+  }
+
+  // Reorder by swapping ranks with the neighbor (▲▼). Keyboard/click reorder is the
+  // baseline path (no DnD-only) per UI-SPEC §A.1. Pending until Deploy (D-04).
+  async function onReorder(index: number, dir: -1 | 1) {
+    if (selectedAppid === null) return;
+    const other = index + dir;
+    if (other < 0 || other >= mods.length) return;
+    const a = mods[index];
+    const b = mods[other];
+    const ok = await run("Set priority", async () => {
+      await api.setModRank(selectedAppid!, a.id, b.rank);
+      await api.setModRank(selectedAppid!, b.id, a.rank);
+      return true;
+    });
+    if (ok) await loadConflicts();
+  }
+
+  async function onDeployWinners() {
+    if (selectedAppid === null) return;
+    const result = await run("Deploy winner set", () =>
+      api.deployWinnerSet(selectedAppid!),
+    );
+    if (result) {
+      deployReport = result;
+      // Record the deployed signature so the pending banner clears (D-04).
+      deployedSig = currentSig;
+    }
+  }
+
   const warningLabel = (w: string) =>
     w === "CrossDevice"
       ? "Cross-device staging (EXDEV): hardlink/reflink unavailable — using symlink/copy. Stage on the same filesystem for best safety."
       : "Filesystem case-folding not confirmed: mod path casing is normalized for Wine instead.";
+
+  // When the selected game changes, reset the conflict view and reload its mods +
+  // conflicts. `deployedSig` is reset because the on-disk deployed set is unknown for a
+  // freshly-selected game this session.
+  $effect(() => {
+    const appid = selectedAppid;
+    deployedSig = null;
+    mods = [];
+    conflicts = [];
+    if (appid !== null) loadConflicts();
+  });
 
   // Load any already-managed games on mount.
   refreshManaged();
@@ -263,6 +336,96 @@
         </div>
       {/if}
     </section>
+
+    <section>
+      <h2>4. Conflicts &amp; priority — {selectedGame.name}</h2>
+
+      <!-- Pending-vs-deployed banner (UI-SPEC §A.4 / D-04) -->
+      {#if showPending}
+        <div class="warn pending">
+          <strong>Changes pending</strong>
+          <p>Priority changes aren't on disk yet. Deploy to apply.</p>
+        </div>
+      {/if}
+
+      <div class="conflict-toolbar">
+        <button onclick={loadConflicts} disabled={busy}>Refresh</button>
+        {#if showPending}
+          <button class="cta" onclick={onDeployWinners} disabled={busy}>Deploy</button>
+        {:else}
+          <button disabled title="No pending priority changes">Up to date</button>
+        {/if}
+      </div>
+
+      <!-- Mod priority list (UI-SPEC §A.1): top = highest priority = wins -->
+      <h3>Mod priority <span class="muted">(top = highest priority = wins)</span></h3>
+      {#if mods.length === 0}
+        <p class="muted">No mods for this game yet. Install a mod above to set priority.</p>
+      {:else}
+        <ol class="priority">
+          {#each mods as m, i (m.id)}
+            <li class:disabled={!m.enabled}>
+              <span class="reorder">
+                <button
+                  onclick={() => onReorder(i, -1)}
+                  disabled={busy || i === 0}
+                  aria-label="Increase priority of {m.name}"
+                  title="Move up (higher priority)">▲</button>
+                <button
+                  onclick={() => onReorder(i, 1)}
+                  disabled={busy || i === mods.length - 1}
+                  aria-label="Decrease priority of {m.name}"
+                  title="Move down (lower priority)">▼</button>
+              </span>
+              <span class="rank">{i + 1}.</span>
+              <span class="mod-name">{m.name}</span>
+              <span class="mod-state {m.enabled ? 'on' : 'off'}">
+                {m.enabled ? "enabled" : "disabled"}
+              </span>
+            </li>
+          {/each}
+        </ol>
+      {/if}
+
+      <!-- File-level conflict table (UI-SPEC §A.2) -->
+      <h3>File conflicts</h3>
+      {#if conflicts.length === 0}
+        <div class="empty">
+          <strong>No conflicts</strong>
+          <p class="muted">
+            No two enabled mods write the same file. Enable more mods or adjust priority
+            to see conflicts here.
+          </p>
+        </div>
+      {:else}
+        <table class="conflicts">
+          <thead>
+            <tr>
+              <th>File (target)</th>
+              <th>Provided by</th>
+              <th>Winner</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each conflicts as c (c.target_rel)}
+              <tr>
+                <td><code>{c.target_rel}</code></td>
+                <td class="providers">
+                  {#each c.providers as p, pi (p)}
+                    <span class:loser={p !== c.winner}
+                      >{modName(p)}{pi < c.providers.length - 1 ? ", " : ""}</span>
+                  {/each}
+                </td>
+                <td class="winner">
+                  <span class="dot" aria-hidden="true">●</span>
+                  <span class="winner-name">{modName(c.winner)}</span>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </section>
   {/if}
 </main>
 
@@ -296,4 +459,58 @@
   .ok { color: #1a7f37; font-weight: 600; }
   .err { color: #cf222e; font-weight: 600; }
   .warn { color: #9a6700; background: #fff8e5; border: 1px solid #e6c200; border-radius: 6px; padding: 0.5rem 0.75rem; margin-top: 0.5rem; }
+
+  /* --- Conflict view (UI-SPEC §A) --- */
+  .pending p { margin: 0.25rem 0 0; }
+  .conflict-toolbar { margin: 0.75rem 0; display: flex; gap: 0.5rem; align-items: center; }
+  /* Accent (10%) reserved for the single primary Deploy CTA when changes are pending. */
+  button.cta {
+    background: #0a66c2;
+    color: #fff;
+    border: 1px solid #0a66c2;
+    font-weight: 600;
+  }
+  button.cta:hover:not(:disabled) { background: #0857a6; }
+
+  h3 .muted { font-weight: 400; font-size: 0.85rem; }
+
+  ol.priority { list-style: none; padding: 0; margin: 0.4rem 0; }
+  ol.priority li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 32px; /* desktop reorder hit target (UI-SPEC Spacing) */
+    padding: 0.25rem 0.5rem;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    margin-bottom: 0.25rem;
+  }
+  ol.priority li.disabled { color: #777; }
+  .reorder { display: inline-flex; flex-direction: column; line-height: 1; }
+  .reorder button {
+    padding: 0 0.4rem;
+    margin: 0;
+    min-height: 16px;
+    font-size: 0.75rem;
+  }
+  .rank { color: #777; min-width: 1.5rem; }
+  .mod-name { font-weight: 600; flex: 1; }
+  .mod-state { font-size: 0.85rem; }
+  .mod-state.on { color: #1a7f37; }
+  .mod-state.off { color: #777; }
+
+  .empty { background: #f3f3f3; border-radius: 6px; padding: 0.75rem; }
+  .empty p { margin: 0.25rem 0 0; }
+
+  table.conflicts { width: 100%; border-collapse: collapse; margin-top: 0.4rem; }
+  table.conflicts th, table.conflicts td {
+    text-align: left;
+    padding: 4px 8px; /* dense table padding (UI-SPEC Spacing exception) */
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+  }
+  table.conflicts thead th { background: #f3f3f3; font-weight: 600; }
+  td.providers .loser { color: #777; }
+  td.winner .dot { color: #0a66c2; }
+  td.winner .winner-name { font-weight: 600; }
 </style>
