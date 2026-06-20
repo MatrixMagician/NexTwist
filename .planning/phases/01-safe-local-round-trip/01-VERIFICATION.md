@@ -1,10 +1,22 @@
 ---
 phase: 01-safe-local-round-trip
 verified: 2026-06-20T00:00:00Z
-status: human_needed
-score: 30/30 must-haves verified
+status: gaps_found
+score: 29/30 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
+gaps:
+  - id: GAP-01
+    requirement: DEPLOY-03
+    severity: blocker
+    title: "purge leaves orphan empty directories — game folder not byte-for-byte pristine"
+    discovered_by: "Manual UAT (real Skyrim SE deploy/purge of Perk Point Gain on Skill Increase)"
+    evidence: "After install->deploy->purge, Data/ retained 3 empty dirs (Perk Point Gain on Skill Increase/Scripts/Source) with 0 files; deployed_file=0, journal all done."
+    root_cause: "crates/deploy/src/engine.rs:241 purge() removes deployed files + restores vanilla backups but never rmdir's the directories deploy created. testkit::snapshot (crates/testkit/src/lib.rs:70) skips non-files, so round_trip_pristine's blake3 file-tree comparison is blind to leftover empty dirs."
+    fix_spec:
+      - "purge() (and the purge branch of recover_on_launch): after removing each file, walk UP its created directory chain and remove_dir each dir that is now empty, stopping at the first non-empty dir and never above the deploy root (Data/). remove_dir fails safely on non-empty dirs, so pre-existing vanilla dirs are never removed. Prefer recording deploy-created dirs in the manifest for an exact, safe cleanup set."
+      - "Strengthen testkit: snapshot directory structure (including empty dirs) and add a tree-shape assertion so round_trip_pristine catches orphan empty dirs. Re-run on tmpfs AND btrfs."
+      - "Extend verify/repair (DEPLOY-07) to detect+report (repair: remove) orphan empty dirs under the deploy root."
 human_verification:
   - test: "Launch `cargo tauri dev`, let auto-detect find an installed Skyrim SE / FO4 (or add by folder), and confirm the resolved install dir + Proton prefix paths are shown"
     expected: "The managed game appears with correct install_dir and compatdata/<appid>/pfx prefix; add-by-folder works for non-standard/Snap installs"
@@ -164,7 +176,9 @@ Four items, all manual-only by nature (require a real GUI/webview, a real Steam 
 
 ### Gaps Summary
 
-No gaps. Every phase requirement is satisfied and every core-value safety prohibition is a real, executed, passing test — verified by re-running the deploy/extract/steam suites and `cargo deny check bans` during this verification, not by trusting SUMMARY claims. The four human-verification items are GUI/in-game/packaging surfaces that are manual-only by nature and were planned as such (checkpoint:human-verify in plan 01-06); they do not represent missing or stubbed implementation. The single TODO(A2) marker documents an intentional scope decision with a working tested fallback, not unfinished work — flagged as a Warning for auditability only.
+**GAP-01 (blocker, DEPLOY-03) — found by manual UAT after initial sign-off.** `purge()` removes deployed files and restores vanilla backups but leaves behind the empty directories `deploy()` created, so after install→purge the game `Data/` is **not byte-for-byte pristine** (real-world repro: 3 orphan empty dirs left in a live Skyrim SE install). The automated `round_trip_pristine` proptest missed this because `testkit::snapshot` hashes file contents only and is blind to empty directories. See the `gaps:` block in the frontmatter for the full root cause + fix spec. This is the project's #1 guarantee, so it is a blocker; resolved via gap closure (`/gsd-plan-phase 1 --gaps`).
+
+The remainder of verification stands: every other phase requirement is satisfied and every other core-value safety prohibition is a real, executed, passing test — verified by re-running the deploy/extract/steam suites and `cargo deny check bans` during this verification, not by trusting SUMMARY claims. The four human-verification items are GUI/in-game/packaging surfaces that are manual-only by nature and were planned as such (checkpoint:human-verify in plan 01-06); they do not represent missing or stubbed implementation. The single TODO(A2) marker documents an intentional scope decision with a working tested fallback, not unfinished work — flagged as a Warning for auditability only.
 
 Status is `human_needed` solely because manual GUI/in-game verification items exist (decision tree rule 2), not because of any failed truth, missing artifact, broken link, or blocker.
 
