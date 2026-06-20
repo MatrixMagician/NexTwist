@@ -12,7 +12,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **ENV-01**: User can have NexTwist auto-detect installed Steam games on Linux
 - [x] **ENV-02**: User can have NexTwist resolve a game's install directory and Proton/Wine prefix
 - [x] **ENV-03**: User can add and manage supported Bethesda Creation Engine games (Skyrim SE, Fallout 4) as managed games
-- [ ] **ENV-04**: NexTwist detects the deployment filesystem's capabilities (same-device, case-folding) and warns about unsafe configurations
+- [x] **ENV-04**: NexTwist detects the deployment filesystem's capabilities (same-device, case-folding) and warns about unsafe configurations
 
 ### Mod Staging & Extraction
 
@@ -22,11 +22,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Deployment Engine (core safety)
 
-- [ ] **DEPLOY-01**: User can deploy enabled mods into the game without modifying original game files
+- [x] **DEPLOY-01**: User can deploy enabled mods into the game without modifying original game files
 - [x] **DEPLOY-02**: NexTwist records every deployed file in a per-game manifest/ledger
-- [ ] **DEPLOY-03**: User can purge/uninstall mods, restoring the game folder to its pristine vanilla state
+- [x] **DEPLOY-03**: User can purge/uninstall mods, restoring the game folder to its pristine vanilla state
 - [x] **DEPLOY-04**: NexTwist backs up any overwritten original game file before deployment so it can be restored
-- [ ] **DEPLOY-05**: NexTwist selects a safe deployment method per target (reflink → hardlink → symlink → copy) accounting for filesystem boundaries
+- [x] **DEPLOY-05**: NexTwist selects a safe deployment method per target (reflink → hardlink → symlink → copy) accounting for filesystem boundaries
 - [x] **DEPLOY-06**: Deployment and purge are crash-safe (journaled) so an interrupted operation can be recovered
 - [ ] **DEPLOY-07**: User can run a verify/repair that detects manifest-vs-disk drift (files changed outside NexTwist)
 - [x] **DEPLOY-08**: NexTwist resolves case-sensitivity mismatches so mods load correctly under Proton
@@ -121,15 +121,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENV-01 | Phase 1 | Complete |
 | ENV-02 | Phase 1 | Complete |
 | ENV-03 | Phase 1 | Complete |
-| ENV-04 | Phase 1 | Pending |
+| ENV-04 | Phase 1 | Complete |
 | STAGE-01 | Phase 1 | Complete |
 | STAGE-02 | Phase 1 | Complete |
 | STAGE-03 | Phase 1 | Complete |
-| DEPLOY-01 | Phase 1 | Pending |
+| DEPLOY-01 | Phase 1 | Complete |
 | DEPLOY-02 | Phase 1 | Complete |
-| DEPLOY-03 | Phase 1 | Pending |
+| DEPLOY-03 | Phase 1 | Complete |
 | DEPLOY-04 | Phase 1 | Complete |
-| DEPLOY-05 | Phase 1 | Pending |
+| DEPLOY-05 | Phase 1 | Complete |
 | DEPLOY-06 | Phase 1 | Complete |
 | DEPLOY-07 | Phase 1 | Pending |
 | DEPLOY-08 | Phase 1 | Complete |

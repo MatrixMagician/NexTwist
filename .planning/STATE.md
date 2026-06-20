@@ -6,14 +6,14 @@ current_phase: 1
 current_phase_name: Safe Local Round-Trip
 status: executing
 stopped_at: "Completed 01-03-PLAN.md (crates/extract: safe archive extraction)"
-last_updated: "2026-06-20T19:32:07.019Z"
+last_updated: "2026-06-20T19:52:58.486Z"
 last_activity: 2026-06-20
 last_activity_desc: Completed Plan 01-02 (crates/steam)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 ## Current Position
 
 Phase: 1 (Safe Local Round-Trip) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Plan 01-02 complete; ready to execute next plan
 Last activity: 2026-06-20 — Completed Plan 01-02 (crates/steam)
 
@@ -58,6 +58,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 01 P01 | 20 | 3 tasks | 18 files |
 | Phase 01 P02 | 18 | 2 tasks | 8 files |
 | Phase 01 P03 | 35 | 2 tasks | 10 files |
+| Phase 01 P04 | 15 | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Recent decisions affecting current work:
 - [Phase 1 P02]: Snap Steam root not auto-detected (RESEARCH A2 low confidence); Snap users use the `add_game_by_folder` manual fallback.
 - [Phase ?]: extract: validate the RAW archive entry name (not enclosed_name, which relativizes absolute entries) so absolute-path entries are explicitly rejected
 - [Phase ?]: extract: single shared validate_entry is the only zip-slip/symlink path; zip/7z/system-rar all route through it; rar tool output is re-validated post-extraction
+- [Phase ?]: Deploy reflink verdict is empirical on Linux (check_reflink_support is Windows-only/Unknown); probe runs a throwaway reflink + throwaway hard_link to catch btrfs-subvolume EXDEV
+- [Phase ?]: Crash-recovery rolls a pending deploy forward when staging is at staging_dir/<rel>, else rolls back to pristine; journal does not persist the staging root (Phase-1)
 
 ### Pending Todos
 
@@ -100,6 +103,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T19:32:07.014Z
+Last session: 2026-06-20T19:52:58.475Z
 Stopped at: Completed 01-03-PLAN.md (crates/extract: safe archive extraction)
 Resume file: None
