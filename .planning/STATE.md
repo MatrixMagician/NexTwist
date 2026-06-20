@@ -28,12 +28,12 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 
 ## Current Position
 
-Phase: 1 (Safe Local Round-Trip) — EXECUTING
-Plan: 6 of 6
-Status: Plan 01-02 complete; ready to execute next plan
-Last activity: 2026-06-20 — Completed Plan 01-02 (crates/steam)
+Phase: 1 (Safe Local Round-Trip) — BUILT, AWAITING MANUAL UAT
+Plan: 6 of 6 complete
+Status: All 6 plans executed; automated verification PASSED (30/30 must-haves, 15/15 requirements). Phase verification is `human_needed` — 4 GUI/in-game/packaging UAT items remain (see 01-UAT.md). Autonomous run PAUSED here at user request for manual UAT.
+Last activity: 2026-06-20 — Phase 1 built + auto-verified; paused for manual GUI/in-game UAT
 
-Progress: [███░░░░░░░] 33%
+Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pending manual sign-off)
 
 ## Performance Metrics
 
@@ -107,6 +107,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T20:20:00.874Z
-Stopped at: Completed 01-03-PLAN.md (crates/extract: safe archive extraction)
-Resume file: None
+Last session: 2026-06-20
+Stopped at: Phase 1 fully built (6/6 plans) and auto-verified (human_needed, 30/30). Paused for manual GUI/in-game UAT per user choice. Tree left exactly as verified (no post-verification edits).
+Resume file: .planning/phases/01-safe-local-round-trip/01-UAT.md
+Resume command: After manual UAT passes → `/gsd-autonomous --from 2` (or `/gsd-plan-phase 1 --gaps` if UAT finds an issue)
+Outstanding (non-blocking): TODO(A2) in crates/steam/src/discover.rs — convert to plain comment or tracked issue (intentional Snap-detect deferral, tested fallback exists).
