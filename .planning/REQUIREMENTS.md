@@ -118,13 +118,59 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated during roadmap creation) | — | Pending |
+| ENV-01 | Phase 1 | Pending |
+| ENV-02 | Phase 1 | Pending |
+| ENV-03 | Phase 1 | Pending |
+| ENV-04 | Phase 1 | Pending |
+| STAGE-01 | Phase 1 | Pending |
+| STAGE-02 | Phase 1 | Pending |
+| STAGE-03 | Phase 1 | Pending |
+| DEPLOY-01 | Phase 1 | Pending |
+| DEPLOY-02 | Phase 1 | Pending |
+| DEPLOY-03 | Phase 1 | Pending |
+| DEPLOY-04 | Phase 1 | Pending |
+| DEPLOY-05 | Phase 1 | Pending |
+| DEPLOY-06 | Phase 1 | Pending |
+| DEPLOY-07 | Phase 1 | Pending |
+| DEPLOY-08 | Phase 1 | Pending |
+| CONF-01 | Phase 2 | Pending |
+| CONF-02 | Phase 2 | Pending |
+| CONF-03 | Phase 2 | Pending |
+| PLUGIN-01 | Phase 2 | Pending |
+| PLUGIN-02 | Phase 2 | Pending |
+| PLUGIN-03 | Phase 2 | Pending |
+| PROF-01 | Phase 2 | Pending |
+| PROF-02 | Phase 2 | Pending |
+| PROF-03 | Phase 2 | Pending |
+| NEXUS-01 | Phase 3 | Pending |
+| NEXUS-02 | Phase 3 | Pending |
+| NEXUS-03 | Phase 3 | Pending |
+| NEXUS-04 | Phase 3 | Pending |
+| NEXUS-05 | Phase 3 | Pending |
+| NEXUS-06 | Phase 3 | Pending |
+| NXM-01 | Phase 3 | Pending |
+| FOMOD-01 | Phase 4 | Pending |
+| FOMOD-02 | Phase 4 | Pending |
+| COLL-01 | Phase 4 | Pending |
+| COLL-02 | Phase 4 | Pending |
+| COLL-03 | Phase 4 | Pending |
+| COLL-04 | Phase 4 | Pending |
+| COLL-05 | Phase 4 | Pending |
+| DIST-01 | Phase 5 | Pending |
+| DIST-02 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 36 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 36 ⚠️
+- v1 requirements: 40 total (note: the earlier "36" tally undercounted the enumerated IDs; all 40 listed IDs are mapped)
+- Mapped to phases: 40 (100%) ✓
+- Unmapped: 0
+
+By phase:
+- Phase 1 — Safe Local Round-Trip: 15 (ENV-01..04, STAGE-01..03, DEPLOY-01..08)
+- Phase 2 — Multi-Mod Management: 9 (CONF-01..03, PLUGIN-01..03, PROF-01..03)
+- Phase 3 — NexusMods Login & Download: 7 (NEXUS-01..06, NXM-01)
+- Phase 4 — Guided Installers & Collections: 7 (FOMOD-01..02, COLL-01..05)
+- Phase 5 — AppImage Distribution: 2 (DIST-01..02)
 
 ---
 *Requirements defined: 2026-06-20*
-*Last updated: 2026-06-20 after initial definition*
+*Last updated: 2026-06-20 after roadmap creation (traceability populated, 40/40 mapped)*
