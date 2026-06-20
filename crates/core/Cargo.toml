@@ -1,0 +1,19 @@
+[package]
+name = "nextwist-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "NexTwist shared domain types and error enums (pure, headless, no I/O framework deps)"
+
+[lib]
+name = "core"
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

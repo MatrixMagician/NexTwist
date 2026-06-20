@@ -20,8 +20,14 @@ repository = "https://github.com/MatrixMagician/NexTwist"
 # Member crates reference these via `<dep>.workspace = true` so versions stay aligned.
 [workspace.dependencies]
 # Persistence
-rusqlite = { version = "0.40", features = ["bundled"] }
-refinery = { version = "0.9", features = ["rusqlite"] }
+# NOTE: rusqlite is pinned to 0.39 (not 0.40 as RESEARCH.md's compat table assumed):
+# refinery-core 0.9.2 (latest) caps its rusqlite feature at `<=0.39`, and the two
+# crates must agree on a single `libsqlite3-sys` (native `links="sqlite3"`). Pinning
+# rusqlite 0.39 + refinery 0.9.2 resolves to one libsqlite3-sys 0.37. This keeps the
+# locked decision intact (rusqlite bundled + refinery migrations); only the rusqlite
+# point version moved by one minor. Revisit when refinery gains rusqlite 0.40 support.
+rusqlite = { version = "0.39", features = ["bundled"] }
+refinery = { version = "0.9.2", features = ["rusqlite"] }
 
 # Filesystem / deploy primitives (consumed by later plans: steam/extract/deploy)
 reflink-copy = "0.1"

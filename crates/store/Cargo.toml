@@ -1,0 +1,21 @@
+[package]
+name = "nextwist-store"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "NexTwist persistence: rusqlite (bundled) + refinery migrations holding the game registry, per-file deploy manifest, write-ahead operation journal, and content-addressed vanilla backup table"
+
+[lib]
+name = "store"
+path = "src/lib.rs"
+
+[dependencies]
+core = { workspace = true }
+rusqlite.workspace = true
+refinery.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
