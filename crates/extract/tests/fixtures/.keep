@@ -1,0 +1,3 @@
+# Tracked so the fixtures directory exists in git. Crafted malicious archives are
+# built programmatically in-test (see tests/zip_slip_rejected.rs) rather than
+# checked in as opaque binaries.

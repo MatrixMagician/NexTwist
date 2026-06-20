@@ -1,0 +1,28 @@
+[package]
+name = "nextwist-extract"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "NexTwist archive extraction: the untrusted-archive -> validated read-only staging-tree transform (zip + sevenz-rust2 + system-rar), with zip-slip / symlink-write-through defense"
+
+[lib]
+name = "extract"
+path = "src/lib.rs"
+
+# Aliased as `nextwist_core` (NOT `core`): a dependency literally named `core`
+# shadows the std `::core` crate, which breaks `thiserror`'s derive (it expands to
+# `::core::fmt`). `extract` derives `thiserror` locally, so it must not shadow it.
+[dependencies]
+nextwist_core = { path = "../core", package = "nextwist-core" }
+zip.workspace = true
+sevenz-rust2.workspace = true
+walkdir.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+zip.workspace = true
+tempfile.workspace = true
