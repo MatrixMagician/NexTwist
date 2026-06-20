@@ -44,12 +44,22 @@ allow = [
     # permissive BSD-style, GPL-compatible, free license — fine to ship in the AppImage.
     "bzip2-1.0.6",
     # NexTwist itself is GPL-3.0-or-later; allow it so the workspace crates pass.
-    # The libloot family — libloot / libloadorder / esplugin (added in Plan 04 for
-    # plugin load-order sorting) — is also GPL-3.0-or-later and is intentionally
-    # allowed here. NexTwist being GPL-3.0-or-later makes this license-compatible to
-    # ship in the AppImage. This allowance is carried forward to the Phase-5 DIST-02
-    # license audit (RESEARCH LICENSE FLAG).
+    # The libloot family is the LOOT project's plugin/load-order stack (added in Plan
+    # 02 for the libloot Linux seam, fully consumed in Plan 04). Its members declare
+    # TWO distinct GPL SPDX identifiers as published on crates.io (verified against the
+    # installed crate sources, 2026-06-21):
+    #   * libloot 0.29.5                  -> GPL-3.0-or-later
+    #   * libloadorder 18.8.2             -> GPL-3.0 ("only" variant)
+    #   * esplugin 6.1.4                  -> GPL-3.0 ("only" variant)
+    #   * loot-condition-interpreter 6.0.0 -> MIT (already allowed above)
+    # Both GPL identifiers are allowed here. NexTwist being GPL-3.0-or-later can
+    # incorporate GPL-3.0-only components (a GPL-3.0-or-later work may be conveyed under
+    # GPLv3), so the shipped AppImage stays license-compatible. (Plan 01's allowance
+    # assumed the whole family was GPL-3.0-or-later; the published libloadorder/esplugin
+    # crates actually carry bare GPL-3.0, so GPL-3.0 is added here in Plan 02.) Both are
+    # carried forward to the Phase-5 DIST-02 license audit (RESEARCH LICENSE FLAG).
     "GPL-3.0-or-later",
+    "GPL-3.0",
 ]
 confidence-threshold = 0.9
 

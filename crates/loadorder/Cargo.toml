@@ -1,0 +1,28 @@
+[package]
+name = "nextwist-loadorder"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "NexTwist headless plugin / load-order management via libloot: Proton-prefix AppData resolution, with_local_path Game construction (the Linux seam), and asterisk-format plugins.txt round-trips. Tauri-free; the full plugin manager (scan/sort/masterlist) builds on this wrapper in Plan 04"
+
+[lib]
+name = "loadorder"
+path = "src/lib.rs"
+
+# Aliased as `nextwist_core` (NOT `core`): a dependency literally named `core`
+# shadows the std `::core` crate, which breaks `thiserror`'s derive (it expands to
+# `::core::fmt`). `loadorder` derives `thiserror` locally, so it must not shadow it.
+# `store` is safe under its workspace alias because we only call its methods (its
+# StoreError is re-exported through nextwist_core).
+[dependencies]
+nextwist_core = { path = "../core", package = "nextwist-core" }
+store.workspace = true
+libloot.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+testkit.workspace = true
+tempfile.workspace = true

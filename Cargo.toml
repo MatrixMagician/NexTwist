@@ -40,6 +40,11 @@ zip = "8"
 sevenz-rust2 = "0.21"
 walkdir = "2.5"
 
+# Plugin / load-order management (Phase 2, Plan 02). libloot is the LOOT project's
+# pure-Rust crate (GPL-3.0-or-later — deny.toml allows it; Plan 01 Task 1). Added behind
+# a blocking package-legitimacy checkpoint (verified crates.io + github.com/loot/libloot).
+libloot = "0.29"
+
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -66,6 +71,7 @@ testkit = { path = "crates/testkit", package = "nextwist-testkit" }
 steam = { path = "crates/steam", package = "nextwist-steam" }
 extract = { path = "crates/extract", package = "nextwist-extract" }
 deploy = { path = "crates/deploy", package = "nextwist-deploy" }
+loadorder = { path = "crates/loadorder", package = "nextwist-loadorder" }
 
 # Tauri shell (Plan 06). Pinned to the 2.11 line per CLAUDE.md. The embedded SvelteKit
 # SPA is served via `frontendDist` (no extra features needed); we keep the default
