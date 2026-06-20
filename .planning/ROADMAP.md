@@ -60,12 +60,16 @@ Plans:
   3. User can auto-sort plugins via LOOT
   4. User can create multiple independent profiles per game, switch the active profile to change which mods/plugins/order are deployed, and each profile preserves its own enabled-mod set and load order
 
-**Plans**: TBD
+**Plans**: 5 plans
 **UI hint**: yes
 
 Plans:
 
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md — Foundation: MSRV 1.89 + cargo-deny GPL allowance + core model (rank/Profile/Plugin/PluginKind/FileConflict) + V2 refinery migration (managed_mod/profile/profile_mod/plugin_state + Default-profile data migration, BLOCKING test) + store query modules
+- [ ] 02-02-PLAN.md — libloot spike (de-risk A1/A3): crates/loadorder scaffold + libloot dep behind legitimacy checkpoint + with_local_path round-trip against fixture Proton prefix + testkit fake_proton_prefix
+- [ ] 02-03-PLAN.md — Conflict slice (CONF-01/02/03): pure-fold resolver → single-winner StagedFiles + multi-root contract + winner deploy + conflict Tauri commands + Conflict view + round-trip-pristine redeploy test
+- [ ] 02-04-PLAN.md — Plugin + LOOT slice (PLUGIN-01/02/03): plugin scan + libloot enable/order/plugins.txt write (asterisk, masters-first) + masterlist fetch/cache + LOOT propose-then-apply + plugin Tauri commands + Plugin manager view
+- [ ] 02-05-PLAN.md — Profile slice (PROF-01/02/03): switch_profile reconcile (purge→deploy→plugins.txt) + profile Tauri commands + confirmation-gated Profile selector + cross-switch round-trip-pristine test
 
 ### Phase 3: NexusMods Login & Download
 
@@ -132,7 +136,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Safe Local Round-Trip | 7/7 | Complete   | 2026-06-20 |
-| 2. Multi-Mod Management | 0/TBD | Not started | - |
+| 2. Multi-Mod Management | 0/5 | Not started | - |
 | 3. NexusMods Login & Download | 0/TBD | Not started | - |
 | 4. Guided Installers & Collections | 0/TBD | Not started | - |
 | 5. AppImage Distribution | 0/TBD | Not started | - |
