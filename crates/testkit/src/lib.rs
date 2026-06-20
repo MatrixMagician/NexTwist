@@ -17,10 +17,25 @@ use std::path::{Path, PathBuf};
 
 use walkdir::WalkDir;
 
-/// A content snapshot of a directory tree: relative path -> blake3 hex of file bytes.
+/// A structural snapshot of a directory tree: relative path -> entry marker.
+///
+/// For a regular file the marker is the blake3 hex of its bytes. For a directory the
+/// marker is the reserved [`DIR_SENTINEL`] value — a non-hex string a 64-char blake3
+/// digest can never collide with — so the snapshot captures the directory *shape*
+/// (including EMPTY directories), not just file contents. This is load-bearing for the
+/// GAP-01 byte-for-byte-pristine guarantee: an orphan empty directory left behind by a
+/// purge is a real difference from vanilla and must be detected.
 ///
 /// `BTreeMap` so iteration/diffing is deterministic and ordered.
 pub type TreeSnapshot = BTreeMap<PathBuf, String>;
+
+/// Reserved snapshot marker for a directory entry.
+///
+/// A blake3 hex digest is exactly 64 lowercase-hex characters, so this `<dir>`-prefixed
+/// value (containing characters outside `[0-9a-f]`) can never equal a file's hash. That
+/// guarantees a file vs. a directory at the same path always compares as a difference,
+/// and that directory entries are unambiguously distinguishable from file entries.
+pub const DIR_SENTINEL: &str = "<dir>";
 
 /// Materialize a fake vanilla game tree under `root` from `(relpath, bytes)` pairs.
 ///
@@ -57,9 +72,16 @@ fn write_tree(root: &Path, files: &[(&str, &[u8])]) -> io::Result<()> {
     Ok(())
 }
 
-/// Walk `root` and content-hash every regular file, keyed by its path relative to
-/// `root`. Directories and symlinks are skipped (only file *contents* define
-/// pristineness; an empty directory is not a content difference).
+/// Walk `root` and record every descendant entry keyed by its path relative to `root`:
+/// each regular file by its blake3 content hash, and each DIRECTORY by the reserved
+/// [`DIR_SENTINEL`] marker. The `root` directory itself is NOT recorded (only its
+/// descendants), so a snapshot of an empty tree is empty and self-equality holds.
+///
+/// Tracking directories (including empty ones) is load-bearing: "byte-for-byte pristine"
+/// means the directory *shape* too, not just file contents. An orphan empty directory a
+/// purge fails to clean up is a real difference [`assert_trees_identical`] must flag.
+/// Symlinks are not followed (and a placed symlink hashes as the bytes it resolves to via
+/// `fs::read`, matching how the game would read it).
 ///
 /// Returns an error if the tree cannot be walked or a file cannot be read.
 pub fn snapshot_tree<P: AsRef<Path>>(root: P) -> io::Result<TreeSnapshot> {
@@ -67,17 +89,26 @@ pub fn snapshot_tree<P: AsRef<Path>>(root: P) -> io::Result<TreeSnapshot> {
     let mut snap = TreeSnapshot::new();
     for entry in WalkDir::new(root).follow_links(false) {
         let entry = entry.map_err(io::Error::other)?;
-        if !entry.file_type().is_file() {
+        let abs = entry.path();
+        // Never record the root itself — only its descendants — so an empty tree
+        // snapshots to an empty map and self-equality holds.
+        if abs == root {
             continue;
         }
-        let abs = entry.path();
         let rel = abs
             .strip_prefix(root)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
             .to_path_buf();
-        let bytes = fs::read(abs)?;
-        let hash = blake3::hash(&bytes).to_hex().to_string();
-        snap.insert(rel, hash);
+        let ft = entry.file_type();
+        if ft.is_dir() {
+            // Record the directory shape with the reserved sentinel (never a file hash).
+            snap.insert(rel, DIR_SENTINEL.to_string());
+        } else {
+            // Regular file or symlink: hash the bytes it resolves to.
+            let bytes = fs::read(abs)?;
+            let hash = blake3::hash(&bytes).to_hex().to_string();
+            snap.insert(rel, hash);
+        }
     }
     Ok(snap)
 }
@@ -164,9 +195,18 @@ mod tests {
             ("Data/textures/rock.dds", b"rockbytes"),
             ("readme.txt", b"hi"),
         ]);
-        assert_eq!(snap.len(), 3);
+        // 3 files + the intermediate Data/ and Data/textures/ directories.
         assert!(snap.contains_key(Path::new("Data/a.esp")));
         assert!(snap.contains_key(Path::new("Data/textures/rock.dds")));
+        // The intermediate directory is tracked, carrying the dir sentinel (not a hash).
+        assert_eq!(
+            snap.get(Path::new("Data/textures")).map(String::as_str),
+            Some(DIR_SENTINEL),
+            "intermediate directory must be recorded with the dir sentinel"
+        );
+        assert_eq!(snap.get(Path::new("Data")).map(String::as_str), Some(DIR_SENTINEL));
+        // A file entry is never the dir sentinel.
+        assert_ne!(snap.get(Path::new("Data/a.esp")).map(String::as_str), Some(DIR_SENTINEL));
         // Same bytes hash identically regardless of where they live.
         let dir2 = TempDir::new().unwrap();
         write_tree(dir2.path(), &[("elsewhere/a.esp", b"alpha")]).unwrap();
@@ -175,6 +215,43 @@ mod tests {
             snap.get(Path::new("Data/a.esp")),
             snap2.get(Path::new("elsewhere/a.esp"))
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "ORPHAN")]
+    fn extra_empty_dir_orphan_fails() {
+        // `actual` has an extra EMPTY directory absent from `expected` — an orphan.
+        let dir_a = TempDir::new().unwrap();
+        write_tree(dir_a.path(), &[("Data/a.esp", b"x")]).unwrap();
+        let a = snapshot_tree(dir_a.path()).unwrap();
+
+        let dir_b = TempDir::new().unwrap();
+        write_tree(dir_b.path(), &[("Data/a.esp", b"x")]).unwrap();
+        // Leftover empty directory the purge failed to clean up (the GAP-01 repro shape).
+        fs::create_dir_all(dir_b.path().join("Data/leftover/empty")).unwrap();
+        let b = snapshot_tree(dir_b.path()).unwrap();
+
+        assert!(
+            b.get(Path::new("Data/leftover/empty")).map(String::as_str) == Some(DIR_SENTINEL),
+            "the leftover empty dir must be snapshotted"
+        );
+        assert_trees_identical(&a, &b);
+    }
+
+    #[test]
+    fn identical_empty_dirs_pass() {
+        // Two trees with the SAME empty directory structure are pristine-equal.
+        let dir_a = TempDir::new().unwrap();
+        write_tree(dir_a.path(), &[("Data/a.esp", b"x")]).unwrap();
+        fs::create_dir_all(dir_a.path().join("Data/textures/empty")).unwrap();
+        let a = snapshot_tree(dir_a.path()).unwrap();
+
+        let dir_b = TempDir::new().unwrap();
+        write_tree(dir_b.path(), &[("Data/a.esp", b"x")]).unwrap();
+        fs::create_dir_all(dir_b.path().join("Data/textures/empty")).unwrap();
+        let b = snapshot_tree(dir_b.path()).unwrap();
+
+        assert_trees_identical(&a, &b);
     }
 
     #[test]
