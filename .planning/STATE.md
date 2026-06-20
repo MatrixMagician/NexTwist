@@ -5,16 +5,16 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Safe Local Round-Trip
 status: executing
-stopped_at: Completed 01-02-PLAN.md (steam discovery/resolution/casing). Wave 2 plan done.
-last_updated: "2026-06-20T19:20:00.000Z"
+stopped_at: "Completed 01-03-PLAN.md (crates/extract: safe archive extraction)"
+last_updated: "2026-06-20T19:32:07.019Z"
 last_activity: 2026-06-20
 last_activity_desc: Completed Plan 01-02 (crates/steam)
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 6
-  completed_plans: 2
-  percent: 33
+  completed_plans: 3
+  percent: 0
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 ## Current Position
 
 Phase: 1 (Safe Local Round-Trip) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Plan 01-02 complete; ready to execute next plan
 Last activity: 2026-06-20 — Completed Plan 01-02 (crates/steam)
 
@@ -57,6 +57,7 @@ Progress: [███░░░░░░░] 33%
 *Updated after each plan completion*
 | Phase 01 P01 | 20 | 3 tasks | 18 files |
 | Phase 01 P02 | 18 | 2 tasks | 8 files |
+| Phase 01 P03 | 35 | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Recent decisions affecting current work:
 - [Phase 1 P02]: steam crate aliases the shared-types dep as `nextwist_core` (not `core`) to avoid shadowing Rust's built-in `core` in the local thiserror derive.
 - [Phase 1 P02]: Proton prefix derived manually as `compatdata/<appid>/pfx` (steamlocate has no compatdata API); honor `$STEAM_COMPAT_DATA_PATH`; re-resolve each session.
 - [Phase 1 P02]: Snap Steam root not auto-detected (RESEARCH A2 low confidence); Snap users use the `add_game_by_folder` manual fallback.
+- [Phase ?]: extract: validate the RAW archive entry name (not enclosed_name, which relativizes absolute entries) so absolute-path entries are explicitly rejected
+- [Phase ?]: extract: single shared validate_entry is the only zip-slip/symlink path; zip/7z/system-rar all route through it; rar tool output is re-validated post-extraction
 
 ### Pending Todos
 
@@ -97,6 +100,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T19:20:00.000Z
-Stopped at: Completed 01-02-PLAN.md (crates/steam discovery/resolution/casing).
+Last session: 2026-06-20T19:32:07.014Z
+Stopped at: Completed 01-03-PLAN.md (crates/extract: safe archive extraction)
 Resume file: None

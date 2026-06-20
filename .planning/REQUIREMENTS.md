@@ -16,9 +16,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Mod Staging & Extraction
 
-- [ ] **STAGE-01**: User can install a mod from a local archive (.zip, .7z) into a managed staging store
-- [ ] **STAGE-02**: NexTwist safely extracts archives, rejecting path-traversal (zip-slip) entries
-- [ ] **STAGE-03**: User can install .rar mods via the system unrar/7z tool (no non-free code bundled)
+- [x] **STAGE-01**: User can install a mod from a local archive (.zip, .7z) into a managed staging store
+- [x] **STAGE-02**: NexTwist safely extracts archives, rejecting path-traversal (zip-slip) entries
+- [x] **STAGE-03**: User can install .rar mods via the system unrar/7z tool (no non-free code bundled)
 
 ### Deployment Engine (core safety)
 
@@ -122,9 +122,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENV-02 | Phase 1 | Complete |
 | ENV-03 | Phase 1 | Complete |
 | ENV-04 | Phase 1 | Pending |
-| STAGE-01 | Phase 1 | Pending |
-| STAGE-02 | Phase 1 | Pending |
-| STAGE-03 | Phase 1 | Pending |
+| STAGE-01 | Phase 1 | Complete |
+| STAGE-02 | Phase 1 | Complete |
+| STAGE-03 | Phase 1 | Complete |
 | DEPLOY-01 | Phase 1 | Pending |
 | DEPLOY-02 | Phase 1 | Complete |
 | DEPLOY-03 | Phase 1 | Pending |
