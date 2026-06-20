@@ -100,16 +100,23 @@ fn deploy_inner(
     let data_dir = crate::deploy_root(&game.install_dir);
     std::fs::create_dir_all(&data_dir).map_err(|e| DeployError::io(&data_dir, e))?;
 
-    // Probe once per deploy at the staging-root → data-dir granularity (both are
-    // directories; the method ladder still catches a late per-file EXDEV).
-    let caps = probe(&staged.staging_root, &data_dir).map_err(|e| DeployError::io(&data_dir, e))?;
-    let chosen = choose_method(&caps);
-
     let mut report = DeployReport {
         deployed: 0,
         backed_up: 0,
         methods: Vec::new(),
     };
+
+    // An empty mod is a valid no-op deploy. Returning early also avoids probing a
+    // staging root that a no-file extract may not have materialized.
+    if staged.files.is_empty() {
+        return Ok(report);
+    }
+
+    // Probe once per deploy at the staging-root → data-dir granularity (both are
+    // directories; the method ladder still catches a late per-file EXDEV).
+    let caps = probe(&staged.staging_root, &data_dir)
+        .map_err(|e| DeployError::io(&staged.staging_root, e))?;
+    let chosen = choose_method(&caps);
 
     for rel in &staged.files {
         let src = staged.staging_root.join(rel);
