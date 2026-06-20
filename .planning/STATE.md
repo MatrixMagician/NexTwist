@@ -6,14 +6,14 @@ current_phase: 1
 current_phase_name: Safe Local Round-Trip
 status: executing
 stopped_at: "Completed 01-03-PLAN.md (crates/extract: safe archive extraction)"
-last_updated: "2026-06-20T20:20:07.495Z"
+last_updated: "2026-06-20T21:55:18.885Z"
 last_activity: 2026-06-20
-last_activity_desc: Completed Plan 01-02 (crates/steam)
+last_activity_desc: Phase 1 built + auto-verified; paused for manual GUI/in-game UAT
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 7
+  completed_plans: 7
   percent: 20
 ---
 
@@ -61,6 +61,7 @@ Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pen
 | Phase 01 P04 | 15 | 3 tasks | 17 files |
 | Phase 01 P05 | 12 | 2 tasks | 8 files |
 | Phase 01 P06 | 35 | 2 tasks | 23 files |
+| Phase 01 P07 | 25 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Crash-recovery rolls a pending deploy forward when staging is at staging_dir/<rel>, else rolls back to pristine; journal does not persist the staging root (Phase-1)
 - [Phase ?]: DEPLOY-08 casefold normalizes only directory components vs the steam CasingMap; leaf filenames and game-absent mod dirs preserved; normalized relpath recorded in manifest to keep purge pristine
 - [Phase ?]: DEPLOY-07 verify is read-only; repair touches only manifest-recorded paths; orphans reported never deleted; recover_on_launch auto-runs verify after replay
+- [Phase ?]: GAP-01 fix: empty-dir cleanup is manifest/journal-derived (never a disk scan); bottom-up remove_dir bounded strictly below the deploy root protects vanilla dirs.
+- [Phase ?]: testkit snapshots directory shape via a reserved non-hex DIR_SENTINEL so the pristine assertion catches orphan empty dirs, not just file content.
+- [Phase ?]: verify/repair (DEPLOY-07) classify+remove orphan EMPTY dirs to a fixed point; file orphans stay strictly report-only (T-01-16 preserved).
 
 ### Pending Todos
 
@@ -107,7 +111,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20
+Last session: 2026-06-20T21:55:00.464Z
 Stopped at: Phase 1 fully built (6/6 plans) and auto-verified (human_needed, 30/30). Paused for manual GUI/in-game UAT per user choice. Tree left exactly as verified (no post-verification edits).
 Resume file: .planning/phases/01-safe-local-round-trip/01-UAT.md
 Resume command: After manual UAT passes → `/gsd-autonomous --from 2` (or `/gsd-plan-phase 1 --gaps` if UAT finds an issue)
