@@ -28,12 +28,12 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 
 ## Current Position
 
-Phase: 1 (Safe Local Round-Trip) — BUILT, AWAITING MANUAL UAT
-Plan: 6 of 6 complete
-Status: All 6 plans executed; automated verification PASSED (30/30 must-haves, 15/15 requirements). Phase verification is `human_needed` — 4 GUI/in-game/packaging UAT items remain (see 01-UAT.md). Autonomous run PAUSED here at user request for manual UAT.
-Last activity: 2026-06-20 — Phase 1 built + auto-verified; paused for manual GUI/in-game UAT
+Phase: 1 (Safe Local Round-Trip) — BUILT + GAP-01 CLOSED, awaiting remaining manual UAT
+Plan: 7 of 7 complete (01-07 = GAP-01 gap closure)
+Status: All 7 plans executed; cargo test --workspace 82 passed on tmpfs + btrfs, clippy 0, deny ok. Manual UAT found GAP-01 (purge left orphan empty dirs → not byte-for-byte pristine); FIXED + regression-locked by a directory-aware round_trip_pristine test (commits fa0152a/29cda71/ff94898). UAT-1 (detection) + UAT-2 (install→deploy→purge) effectively passed by the user; remaining manual items: UAT-3 (in-game Proton load) + UAT-4 (real Flatpak/Snap). Autonomous run PAUSED at user request.
+Last activity: 2026-06-20 — GAP-01 (orphan-empty-dir purge bug) closed via gap closure; phase re-verified green
 
-Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pending manual sign-off)
+Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pending final manual UAT sign-off)
 
 ## Performance Metrics
 
@@ -112,7 +112,7 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-06-20T21:55:00.464Z
-Stopped at: Phase 1 fully built (6/6 plans) and auto-verified (human_needed, 30/30). Paused for manual GUI/in-game UAT per user choice. Tree left exactly as verified (no post-verification edits).
+Stopped at: Phase 1 built (7/7 plans incl. GAP-01 gap closure). Manual UAT found + fixed the purge orphan-empty-dir bug (GAP-01); re-verified green (82 tests on tmpfs+btrfs). User's live Skyrim Data/ cleaned to pristine. Paused per user choice; remaining manual UAT-3 (in-game load) + UAT-4 (Flatpak/Snap) are optional.
 Resume file: .planning/phases/01-safe-local-round-trip/01-UAT.md
-Resume command: After manual UAT passes → `/gsd-autonomous --from 2` (or `/gsd-plan-phase 1 --gaps` if UAT finds an issue)
+Resume command: `/gsd-autonomous --from 2` to continue the milestone (UAT-1/UAT-2 done + GAP-01 fixed). Optionally finish UAT-3/UAT-4 first.
 Outstanding (non-blocking): TODO(A2) in crates/steam/src/discover.rs — convert to plain comment or tracked issue (intentional Snap-detect deferral, tested fallback exists).

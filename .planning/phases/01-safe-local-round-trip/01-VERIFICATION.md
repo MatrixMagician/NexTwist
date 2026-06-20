@@ -1,14 +1,16 @@
 ---
 phase: 01-safe-local-round-trip
 verified: 2026-06-20T00:00:00Z
-status: gaps_found
-score: 29/30 must-haves verified
+status: human_needed
+score: 31/31 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
 gaps:
   - id: GAP-01
     requirement: DEPLOY-03
     severity: blocker
+    status: RESOLVED
+    resolved_by: "Plan 01-07 (commits fa0152a RED, 29cda71 GREEN, ff94898 DEPLOY-07). cargo test --workspace 82 passed on tmpfs + btrfs; round_trip_pristine is now directory-aware (testkit DIR_SENTINEL) and reproduces+catches the orphan-empty-dir case. Real Skyrim Data/ leftover dirs were also cleaned up manually."
     title: "purge leaves orphan empty directories — game folder not byte-for-byte pristine"
     discovered_by: "Manual UAT (real Skyrim SE deploy/purge of Perk Point Gain on Skill Increase)"
     evidence: "After install->deploy->purge, Data/ retained 3 empty dirs (Perk Point Gain on Skill Increase/Scripts/Source) with 0 files; deployed_file=0, journal all done."
@@ -176,7 +178,7 @@ Four items, all manual-only by nature (require a real GUI/webview, a real Steam 
 
 ### Gaps Summary
 
-**GAP-01 (blocker, DEPLOY-03) — found by manual UAT after initial sign-off.** `purge()` removes deployed files and restores vanilla backups but leaves behind the empty directories `deploy()` created, so after install→purge the game `Data/` is **not byte-for-byte pristine** (real-world repro: 3 orphan empty dirs left in a live Skyrim SE install). The automated `round_trip_pristine` proptest missed this because `testkit::snapshot` hashes file contents only and is blind to empty directories. See the `gaps:` block in the frontmatter for the full root cause + fix spec. This is the project's #1 guarantee, so it is a blocker; resolved via gap closure (`/gsd-plan-phase 1 --gaps`).
+**GAP-01 (blocker, DEPLOY-03) — found by manual UAT, now ✅ RESOLVED (Plan 01-07).** `purge()` removed deployed files and restored vanilla backups but left behind the empty directories `deploy()` created, so after install→purge the game `Data/` was **not byte-for-byte pristine** (real-world repro: 3 orphan empty dirs left in a live Skyrim SE install). The automated `round_trip_pristine` proptest missed it because `testkit::snapshot` hashed file contents only and was blind to empty directories. **Fix (commits fa0152a/29cda71/ff94898):** `testkit` now records directory shape (`DIR_SENTINEL`) so the pristine assertion catches orphan empty dirs; `engine::remove_emptied_dirs` does a manifest-derived, deploy-root-bounded, bottom-up `remove_dir` cleanup in both `purge()` and the recovery purge branch; `verify`/`repair` (DEPLOY-07) detect+remove orphan empty dirs. `cargo test --workspace` 82 passed on tmpfs + btrfs. The user's live Skyrim `Data/` was also cleaned up manually.
 
 The remainder of verification stands: every other phase requirement is satisfied and every other core-value safety prohibition is a real, executed, passing test — verified by re-running the deploy/extract/steam suites and `cargo deny check bans` during this verification, not by trusting SUMMARY claims. The four human-verification items are GUI/in-game/packaging surfaces that are manual-only by nature and were planned as such (checkpoint:human-verify in plan 01-06); they do not represent missing or stubbed implementation. The single TODO(A2) marker documents an intentional scope decision with a working tested fallback, not unfinished work — flagged as a Warning for auditability only.
 
