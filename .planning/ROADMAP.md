@@ -60,14 +60,14 @@ Plans:
   3. User can auto-sort plugins via LOOT
   4. User can create multiple independent profiles per game, switch the active profile to change which mods/plugins/order are deployed, and each profile preserves its own enabled-mod set and load order
 
-**Plans**: 1/5 plans executed
+**Plans**: 2/5 plans executed
 **UI hint**: yes
 
 Plans:
 **Wave 1**
 
 - [x] 02-01-PLAN.md — Foundation: MSRV 1.89 + cargo-deny GPL allowance + core model (rank/Profile/Plugin/PluginKind/FileConflict) + V2 refinery migration (managed_mod/profile/profile_mod/plugin_state + Default-profile data migration, BLOCKING test) + store query modules
-- [ ] 02-02-PLAN.md — libloot spike (de-risk A1/A3): crates/loadorder scaffold + libloot dep behind legitimacy checkpoint + with_local_path round-trip against fixture Proton prefix + testkit fake_proton_prefix
+- [x] 02-02-PLAN.md — libloot spike (de-risk A1/A3): crates/loadorder scaffold + libloot dep behind legitimacy checkpoint + with_local_path round-trip against fixture Proton prefix + testkit fake_proton_prefix
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -143,7 +143,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Safe Local Round-Trip | 7/7 | Complete   | 2026-06-20 |
-| 2. Multi-Mod Management | 1/5 | In Progress|  |
+| 2. Multi-Mod Management | 2/5 | In Progress|  |
 | 3. NexusMods Login & Download | 0/TBD | Not started | - |
 | 4. Guided Installers & Collections | 0/TBD | Not started | - |
 | 5. AppImage Distribution | 0/TBD | Not started | - |
