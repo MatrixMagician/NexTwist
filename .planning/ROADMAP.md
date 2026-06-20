@@ -31,10 +31,15 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can deploy the enabled mod into the game with zero original game files modified in place, every deployed file recorded in a per-game manifest, and any overwritten vanilla file backed up first
   4. User can purge/uninstall and verify (hash-diff) the game folder is byte-for-byte pristine — no orphans, originals restored — even after an interrupted (crash-mid-deploy) operation
   5. User is warned before deploying when the filesystem configuration is unsafe (cross-device/EXDEV, case-folding), and NexTwist selects a safe method (reflink → hardlink → symlink → copy) and resolves case mismatches so the mod loads under Proton
-**Plans**: TBD
+**Plans**: 6 plans (5 waves)
 
 Plans:
-- [ ] 01-01: TBD
+- [ ] 01-01-PLAN.md — Workspace scaffold + toolchain + core/store persistence (manifest, op-journal, vanilla store) + testkit + cargo-deny ban
+- [ ] 01-02-PLAN.md — steam crate: Steam/Proton detection + prefix resolution + manual-add + canonical Data/ casing map
+- [ ] 01-03-PLAN.md — extract crate: safe zip/7z/system-rar extraction with zip-slip/symlink defense -> read-only staging
+- [ ] 01-04-PLAN.md — deploy engine (crown jewel): probe + method ladder + journal + vanilla backup + deploy/purge/recover; round_trip + crash_recovery tests
+- [ ] 01-05-PLAN.md — deploy integrity: case-sensitivity normalization (DEPLOY-08) + verify/repair drift (DEPLOY-07) + fs-warnings
+- [ ] 01-06-PLAN.md — Tauri shell + thin command adapters + functional-minimal Svelte 5 UI + startup recovery + CI; human-verify checkpoint
 
 ### Phase 2: Multi-Mod Management
 **Goal**: A user managing many mods can see and resolve file conflicts, control which mod wins via priority/load order, order game plugins correctly in the right Proton prefix, and maintain multiple independent profiles per game that switch the deployed mod set on demand.
