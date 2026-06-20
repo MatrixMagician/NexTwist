@@ -1,0 +1,61 @@
+# NexTwist virtual workspace manifest.
+#
+# The safety-critical engine lives in `crates/*` as pure, headless Rust with ZERO
+# Tauri dependencies, so it is unit/property-testable in CI without a webview.
+#
+# NOTE FOR PLAN 06: the Tauri shell `src-tauri` is created in Plan 06. When it exists,
+# extend `members` below to include it (i.e. `members = ["crates/*", "src-tauri"]`).
+# It is intentionally omitted now so the workspace builds with only the headless crates.
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/MatrixMagician/NexTwist"
+
+# Shared dependency versions, pinned to the RESEARCH.md Standard Stack table.
+# Member crates reference these via `<dep>.workspace = true` so versions stay aligned.
+[workspace.dependencies]
+# Persistence
+rusqlite = { version = "0.40", features = ["bundled"] }
+refinery = { version = "0.9", features = ["rusqlite"] }
+
+# Filesystem / deploy primitives (consumed by later plans: steam/extract/deploy)
+reflink-copy = "0.1"
+steamlocate = "2.1"
+keyvalues-serde = "0.2"
+zip = "8"
+sevenz-rust2 = "0.21"
+walkdir = "2.5"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Hashing (content-addressed vanilla store + pristine assertions)
+blake3 = "1.8"
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Error handling: thiserror in libs, anyhow only at the app/Tauri boundary
+thiserror = "2"
+anyhow = "1"
+
+# Dev / test
+proptest = "1.11"
+tempfile = "3.27"
+
+# Internal crates (path deps so members can depend on each other by workspace alias)
+core = { path = "crates/core", package = "nextwist-core" }
+store = { path = "crates/store", package = "nextwist-store" }
+testkit = { path = "crates/testkit", package = "nextwist-testkit" }
+
+[profile.release]
+# Smaller, faster AppImage binary (Phase 5). Safe defaults for a desktop app.
+lto = "thin"
+strip = true

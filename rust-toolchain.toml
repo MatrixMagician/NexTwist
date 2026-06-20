@@ -1,0 +1,11 @@
+# Pinned toolchain for NexTwist.
+#
+# Rust >= 1.85 is REQUIRED: `io::ErrorKind::CrossesDevices` (EXDEV detection for the
+# per-target deploy-method ladder) was stabilized in 1.85, and the workspace targets
+# the 2024 edition. The "stable" channel here is resolved to the installed toolchain
+# (>= 1.85); CI should pin an explicit version if reproducibility across machines is
+# required.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "default"

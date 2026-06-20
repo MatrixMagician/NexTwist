@@ -1,0 +1,27 @@
+# Rust build output
+/target
+**/target
+
+# Node / frontend (Plan 06)
+**/node_modules
+frontend/.svelte-kit
+frontend/build
+
+# Tauri build dirs (Plan 06)
+src-tauri/target
+src-tauri/gen
+
+# SQLite databases / journals (runtime data, never committed)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Editor / OS noise
+.DS_Store
+*.swp
+
+# NOTE: Cargo.lock is intentionally NOT ignored.
+# NexTwist ships an application/binary (AppImage), so the lockfile is committed
+# for reproducible builds.

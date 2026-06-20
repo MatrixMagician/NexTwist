@@ -1,0 +1,54 @@
+# cargo-deny policy for NexTwist.
+#
+# Two jobs this file enforces from day one:
+#   1. BANS: the non-free UnRAR C++ source (`unrar` / `unrar_sys` crates) must never
+#      enter the dependency graph. Its license forbids using it to recreate the RAR
+#      algorithm, making it non-free and GPL-incompatible — a licensing liability in
+#      a redistributed AppImage. `.rar` support is handled by shelling out to a system
+#      `unrar`/`7z` binary instead (Plan 03). This pre-positions DIST-02.
+#   2. LICENSES: only permissive / project-compatible licenses are allowed in the
+#      shipped binary.
+#
+# Run: `cargo deny check bans` (and `cargo deny check` for the full gate).
+
+[graph]
+all-features = true
+
+[bans]
+# Deny known/duplicate trouble crates. The UnRAR ban is the load-bearing rule.
+multiple-versions = "warn"
+wildcards = "allow"
+
+[[bans.deny]]
+name = "unrar"
+
+[[bans.deny]]
+name = "unrar_sys"
+
+[licenses]
+# Permissive set the stack uses. blake3/ring may pull Apache-2.0 WITH LLVM-exception;
+# unicode-ident pulls Unicode-3.0. MPL-2.0 is file-level copyleft and compatible.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "ISC",
+    "MPL-2.0",
+    "CC0-1.0",
+    # NexTwist itself is GPL-3.0-or-later; allow it so the workspace crates pass.
+    "GPL-3.0-or-later",
+]
+confidence-threshold = 0.9
+
+[advisories]
+# Advisory DB check is available now; wired into CI in Plan 06.
+yanked = "warn"
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
