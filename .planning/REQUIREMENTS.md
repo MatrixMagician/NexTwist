@@ -39,9 +39,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Plugin Management
 
-- [ ] **PLUGIN-01**: User can enable and disable individual game plugins (.esp/.esm/.esl)
-- [ ] **PLUGIN-02**: User can view and adjust plugin load order, written to plugins.txt in the correct prefix location
-- [ ] **PLUGIN-03**: User can auto-sort plugins via LOOT
+- [x] **PLUGIN-01**: User can enable and disable individual game plugins (.esp/.esm/.esl)
+- [x] **PLUGIN-02**: User can view and adjust plugin load order, written to plugins.txt in the correct prefix location
+- [x] **PLUGIN-03**: User can auto-sort plugins via LOOT
 
 ### Profiles
 
@@ -136,9 +136,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONF-01 | Phase 2 | Complete |
 | CONF-02 | Phase 2 | Complete |
 | CONF-03 | Phase 2 | Complete |
-| PLUGIN-01 | Phase 2 | Pending |
-| PLUGIN-02 | Phase 2 | Pending |
-| PLUGIN-03 | Phase 2 | Pending |
+| PLUGIN-01 | Phase 2 | Complete |
+| PLUGIN-02 | Phase 2 | Complete |
+| PLUGIN-03 | Phase 2 | Complete |
 | PROF-01 | Phase 2 | Complete |
 | PROF-02 | Phase 2 | Pending |
 | PROF-03 | Phase 2 | Complete |
