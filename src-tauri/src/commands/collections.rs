@@ -278,47 +278,59 @@ pub async fn deploy_collection(
     collection_id: i64,
 ) -> Result<deploy::SwitchReport, String> {
     let game = require_game(&state, appid).await?;
-    let guard = state.lock().await;
 
-    let collection = guard
-        .store
-        .get_collection(collection_id)
-        .map_err(boundary_err)?
-        .ok_or_else(|| format!("collection {collection_id} is not installed"))?;
-    let mods = guard
-        .store
-        .list_collection_mods(collection_id)
-        .map_err(boundary_err)?;
+    // ── Store-read/setup section: hold the lock ONLY for the quick DB reads + profile
+    //    membership writes, then RELEASE it before the long blocking FS engine call (WR-03).
+    //    Holding the single AppState mutex across `switch_profile` (a journaled purge→deploy→
+    //    load-order pass that performs many syscalls) would freeze every other command for the
+    //    full duration of a large Collection deploy. ──────────────────────────────────────
+    let profile_id = {
+        let guard = state.lock().await;
 
-    // Create (or reuse) the dedicated profile for this collection.
-    let profile_id = match collection.profile_id {
-        Some(id) => id,
-        None => {
-            let name = format!("Collection: {}", collection.name);
-            let id = guard.store.create_profile(appid, &name).map_err(boundary_err)?;
-            // Re-link the profile to the collection (idempotent upsert preserves the link).
+        let collection = guard
+            .store
+            .get_collection(collection_id)
+            .map_err(boundary_err)?
+            .ok_or_else(|| format!("collection {collection_id} is not installed"))?;
+        let mods = guard
+            .store
+            .list_collection_mods(collection_id)
+            .map_err(boundary_err)?;
+
+        // Create (or reuse) the dedicated profile for this collection.
+        let profile_id = match collection.profile_id {
+            Some(id) => id,
+            None => {
+                let name = format!("Collection: {}", collection.name);
+                let id = guard.store.create_profile(appid, &name).map_err(boundary_err)?;
+                // Re-link the profile to the collection (idempotent upsert preserves the link).
+                guard
+                    .store
+                    .add_collection(&nextwist_core::Collection {
+                        profile_id: Some(id),
+                        ..collection.clone()
+                    })
+                    .map_err(boundary_err)?;
+                id
+            }
+        };
+
+        // Set per-profile membership: each collection mod enabled, ranked by its stored rank
+        // (which was derived from the manifest's modRules at download time, Pattern 7).
+        for cm in &mods {
             guard
                 .store
-                .add_collection(&nextwist_core::Collection {
-                    profile_id: Some(id),
-                    ..collection.clone()
-                })
+                .set_profile_mod(profile_id, cm.mod_id, true, cm.rank)
                 .map_err(boundary_err)?;
-            id
         }
-    };
 
-    // Set per-profile membership: each collection mod enabled, ranked by its stored rank
-    // (which was derived from the manifest's modRules at download time, Pattern 7).
-    for cm in &mods {
-        guard
-            .store
-            .set_profile_mod(profile_id, cm.mod_id, true, cm.rank)
-            .map_err(boundary_err)?;
-    }
+        profile_id
+    }; // lock released here, before the blocking deploy.
 
-    // Deploy via the existing safe profile-switch path — no new primitive (COLL-04).
-    deploy::switch_profile(&guard.store, &game, profile_id).map_err(boundary_err)
+    // Deploy via the existing safe profile-switch path — no new primitive (COLL-04). The lock
+    // is re-acquired only for the single engine call (mirrors commands/deploy.rs), not held
+    // across the store reads above.
+    deploy::switch_profile(&state.lock().await.store, &game, profile_id).map_err(boundary_err)
 }
 
 /// Uninstall an installed Collection, fully reversibly (COLL-05): purge the deployment back
@@ -333,51 +345,64 @@ pub async fn uninstall_collection(
     collection_id: i64,
 ) -> Result<deploy::PurgeReport, String> {
     let game = require_game(&state, appid).await?;
-    let guard = state.lock().await;
 
-    let collection = guard
-        .store
-        .get_collection(collection_id)
-        .map_err(boundary_err)?
-        .ok_or_else(|| format!("collection {collection_id} is not installed"))?;
-    let mods = guard
-        .store
-        .list_collection_mods(collection_id)
-        .map_err(boundary_err)?;
+    // Read the collection + its mods under a brief lock, released before the blocking purge.
+    let (collection, mods) = {
+        let guard = state.lock().await;
+        let collection = guard
+            .store
+            .get_collection(collection_id)
+            .map_err(boundary_err)?
+            .ok_or_else(|| format!("collection {collection_id} is not installed"))?;
+        let mods = guard
+            .store
+            .list_collection_mods(collection_id)
+            .map_err(boundary_err)?;
+        (collection, mods)
+    };
 
     // 1. Purge the deployment to pristine FIRST. `purge` is manifest-driven + crash-safe;
     //    it restores the install byte-for-byte vanilla regardless of which profile is
     //    active, and clears the on-disk deployment so the profile can be safely dropped.
-    let purged = deploy::purge(&guard.store, &game).map_err(boundary_err)?;
+    //    The lock is held ONLY for this single engine call (mirrors commands/deploy.rs), not
+    //    across the row cleanup below — so a large Collection purge does not freeze every
+    //    other command for its full duration (WR-03).
+    let purged = deploy::purge(&state.lock().await.store, &game).map_err(boundary_err)?;
 
-    // 2. The collection's profile is no longer deployed. If it is the active one, clear the
-    //    active flag so `delete_profile` (which REJECTS an active profile) succeeds — the
-    //    deployment is already pristine, so clearing the flag cannot strand any files.
-    if let Some(profile_id) = collection.profile_id {
-        if let Some(active) = guard.store.active_profile(appid).map_err(boundary_err)?
-            && active.id == profile_id
-        {
-            guard.store.clear_active_profile(appid).map_err(boundary_err)?;
-        }
-        guard.store.delete_profile(profile_id).map_err(boundary_err)?;
-    }
+    // ── Row/tree cleanup section: re-acquire the lock for the quick DB writes + the staged
+    //    tree removals (no long blocking engine call here). ──────────────────────────────
+    {
+        let guard = state.lock().await;
 
-    // 3. Remove the collection's staged mod trees + their managed_mod rows, then drop the
-    //    V5 collection rows (collection_mod + fomod_choice CASCADE off the collection).
-    for cm in &mods {
-        if let Some(m) = guard
-            .store
-            .list_mods(appid)
-            .map_err(boundary_err)?
-            .into_iter()
-            .find(|m| m.id == cm.mod_id)
-        {
-            // Best-effort remove the staged tree (already purged from the live game).
-            let _ = std::fs::remove_dir_all(&m.staging_root);
+        // 2. The collection's profile is no longer deployed. If it is the active one, clear
+        //    the active flag so `delete_profile` (which REJECTS an active profile) succeeds —
+        //    the deployment is already pristine, so clearing the flag cannot strand any files.
+        if let Some(profile_id) = collection.profile_id {
+            if let Some(active) = guard.store.active_profile(appid).map_err(boundary_err)?
+                && active.id == profile_id
+            {
+                guard.store.clear_active_profile(appid).map_err(boundary_err)?;
+            }
+            guard.store.delete_profile(profile_id).map_err(boundary_err)?;
         }
-        let _ = guard.store.remove_mod(cm.mod_id);
+
+        // 3. Remove the collection's staged mod trees + their managed_mod rows, then drop the
+        //    V5 collection rows (collection_mod + fomod_choice CASCADE off the collection).
+        for cm in &mods {
+            if let Some(m) = guard
+                .store
+                .list_mods(appid)
+                .map_err(boundary_err)?
+                .into_iter()
+                .find(|m| m.id == cm.mod_id)
+            {
+                // Best-effort remove the staged tree (already purged from the live game).
+                let _ = std::fs::remove_dir_all(&m.staging_root);
+            }
+            let _ = guard.store.remove_mod(cm.mod_id);
+        }
+        guard.store.remove_collection(collection_id).map_err(boundary_err)?;
     }
-    guard.store.remove_collection(collection_id).map_err(boundary_err)?;
 
     Ok(purged)
 }
