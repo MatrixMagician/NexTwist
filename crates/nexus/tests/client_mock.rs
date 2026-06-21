@@ -211,15 +211,25 @@ async fn low_remaining_header_on_success_is_consumed() {
     assert_eq!(links.len(), 1);
 }
 
-/// GraphQL v2 metadata read parses `version` + `name` from the `{data:{modFile:…}}` shape.
+/// BUG 1 fix: `mod_file_metadata` reads the proven REST v1 file-info endpoint
+/// `.../files/{file_id}.json` (NOT a GraphQL POST) and parses `version` + `name` from the
+/// returned file object. The mock asserts the request method/path AND the auth header, so a
+/// regression back to the non-existent GraphQL v2 `modFile` field fails this test.
 #[tokio::test]
-async fn mod_file_metadata_reads_graphql_v2() {
+async fn mod_file_metadata_reads_v1_file_info() {
     let mut server = mockito::Server::new_async().await;
-    let _m = server
-        .mock("POST", "/v2/graphql")
+    let m = server
+        .mock(
+            "GET",
+            "/v1/games/skyrimspecialedition/mods/12604/files/120063.json",
+        )
+        .match_header("authorization", "Bearer tok")
         .with_status(200)
         .with_header("content-type", "application/json")
-        .with_body(r#"{"data":{"modFile":{"version":"1.6.3","name":"SKSE64"}}}"#)
+        // A representative (trimmed) v1 file object — extra fields are ignored.
+        .with_body(
+            r#"{"file_id":120063,"name":"SKSE64","version":"1.6.3","file_name":"skse64.7z","category_name":"MAIN","size":1024}"#,
+        )
         .create_async()
         .await;
 
@@ -228,9 +238,38 @@ async fn mod_file_metadata_reads_graphql_v2() {
     let mf = client
         .mod_file_metadata("skyrimspecialedition", 12604, 120063)
         .await
-        .expect("metadata read should succeed");
+        .expect("v1 file-info metadata read should succeed");
+    m.assert_async().await;
     assert_eq!(mf.version, "1.6.3");
     assert_eq!(mf.display_name, "SKSE64");
+}
+
+/// BUG 1 fix: a 404 from the v1 file-info endpoint (deleted/unknown file id) surfaces as a
+/// clean `NexusError::Http`, not a panic or a silent empty `ModFile` — the download row then
+/// fails with a clear reason instead of the old "GraphQL response missing modFile" abort.
+#[tokio::test]
+async fn mod_file_metadata_missing_file_maps_to_http_error() {
+    let mut server = mockito::Server::new_async().await;
+    let _m = server
+        .mock(
+            "GET",
+            "/v1/games/skyrimspecialedition/mods/1/files/2.json",
+        )
+        .with_status(404)
+        .with_body(r#"{"message":"Not found"}"#)
+        .create_async()
+        .await;
+
+    let client =
+        NexusClient::with_base(&server.url(), NexusAuth::ApiKey("k".into())).unwrap();
+    let err = client
+        .mod_file_metadata("skyrimspecialedition", 1, 2)
+        .await
+        .expect_err("a missing file must error");
+    assert!(
+        matches!(err, NexusError::Http(_)),
+        "a 404 file-info must map to Http, got: {err:?}"
+    );
 }
 
 /// Test (streaming): `download_to` streams a stubbed body chunk-by-chunk to a temp file,

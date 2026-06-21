@@ -3,7 +3,7 @@
 //! lives here. The adapter:
 //!
 //! 1. resolves the managed game + the session auth (OAuth bearer or the keyring API key),
-//! 2. asks the headless `nexus` client for the REST v1 download link + GraphQL v2 metadata,
+//! 2. asks the headless `nexus` client for the REST v1 download link + REST v1 file metadata,
 //! 3. streams the file to a staging-adjacent temp path via `nexus::download_to`, wrapping
 //!    the headless `Fn(u64, Option<u64>)` progress callback into
 //!    `window.emit("download://progress", …)` (the single Tauri-type touch point),
@@ -45,7 +45,7 @@ struct ProgressEvent {
 pub struct DownloadResult {
     /// The local `managed_mod` row id created for the staged mod.
     pub mod_id: i64,
-    /// The mod's display name (from the GraphQL v2 metadata).
+    /// The mod's display name (from the REST v1 file-info metadata).
     pub display_name: String,
     /// Root of the staged tree the deploy engine will use.
     pub staging_root: PathBuf,
@@ -256,7 +256,7 @@ async fn run_download(
             retry_after: None,
         })?;
 
-    // 2. GraphQL v2 metadata (version + display name) for the provenance record + label.
+    // 2. REST v1 file-info metadata (version + display name) for the provenance record + label.
     let meta = client
         .mod_file_metadata(game_domain, nexus_mod_id, file_id)
         .await

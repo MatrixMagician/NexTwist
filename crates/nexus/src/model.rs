@@ -60,11 +60,13 @@ pub struct DownloadLink {
     pub uri: String,
 }
 
-/// Mod-file metadata read over GraphQL v2 (version + display name).
+/// Mod-file metadata read over the REST v1 file-info endpoint (version + display name).
 ///
-/// v2 is the modern read path for metadata (RESEARCH Pitfall 2); the download link
-/// itself still comes from REST v1. These two fields are what the provenance record
-/// and the downloads-list row label need.
+/// The metadata read and the download link both come from REST v1
+/// (`.../files/{file_id}.json` and `.../download_link.json` respectively) — the proven,
+/// stable path. (A guessed GraphQL v2 `modFile` top-level field did not exist in the
+/// live schema; see [`crate::client::NexusClient::mod_file_metadata`].) These two fields
+/// are what the provenance record and the downloads-list row label need.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModFile {
     /// The file's version string (e.g. "1.6.3").

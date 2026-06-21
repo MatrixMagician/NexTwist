@@ -1,10 +1,13 @@
 //! `NexusClient` — the async reqwest + governor NexusMods API client.
 //!
 //! The hybrid surface (RESEARCH Pitfall 2): the **download link** comes from REST v1
-//! `download_link.json` (v2 does NOT generate links and v1 is load-bearing), while
-//! **file metadata** (version / display name) is read over GraphQL v2. Both calls go
-//! through the [`RateLimiter`] — proactively gated by `until_ready().await` and
-//! reactively backed off from the response's `X-RL-*` headers.
+//! `download_link.json` (v2 does NOT generate links and v1 is load-bearing), and
+//! **file metadata** (version / display name) is read from the REST v1 file-info
+//! endpoint `.../files/{file_id}.json`. (An earlier GraphQL v2 `modFile` metadata read
+//! was a MEDIUM-confidence guess at a field the live v2 schema does not expose, so it
+//! always returned a null `modFile` and aborted the download — it is replaced by the
+//! proven v1 path here.) Both calls go through the [`RateLimiter`] — proactively gated
+//! by `until_ready().await` and reactively backed off from the response's `X-RL-*` headers.
 //!
 //! The HTTP client mirrors `crates/loadorder`'s `real_fetch` (rustls, redirects
 //! disabled via `Policy::none()`, `error_for_status()`) converted to async — these are
@@ -195,11 +198,23 @@ impl NexusClient {
             .map_err(|e| NexusError::Http(e.to_string()))
     }
 
-    /// Read a mod-file's metadata (version + display name) over GraphQL v2.
+    /// Read a mod-file's metadata (version + display name) over REST v1.
     ///
-    /// v2 is the modern metadata read path (the download link itself still comes from
-    /// REST v1 — see [`download_link`]). The base URL is centralised so a future host
-    /// swap is one edit.
+    /// Uses the stable v1 file-info endpoint
+    /// `GET {base}/v1/games/{game_domain}/mods/{mod_id}/files/{file_id}.json`, which
+    /// returns a single file object whose `version` and `name` fields are exactly the
+    /// two values the provenance record + downloads-list label need. This is the proven,
+    /// load-bearing path that the same base + auth header already use for
+    /// [`download_link`]. (A previously-guessed GraphQL v2 `modFile(gameDomain,modId,fileId)`
+    /// top-level field does NOT exist in the live v2 schema, so it always returned a null
+    /// `modFile` and aborted the download — RESEARCH was only MEDIUM-confidence on v2.)
+    ///
+    /// The base URL is centralised so a future host swap is one edit.
+    ///
+    /// # Errors
+    /// * [`NexusError::RateLimited`] on HTTP 429 (retry-after from `X-RL-*-Reset`).
+    /// * [`NexusError::Http`] for a missing file (404) or any other transport/status
+    ///   failure.
     pub async fn mod_file_metadata(
         &self,
         game_domain: &str,
@@ -208,18 +223,13 @@ impl NexusClient {
     ) -> Result<ModFile, NexusError> {
         self.limiter.until_ready().await;
 
-        let url = format!("{}/v2/graphql", self.base);
-        // A minimal GraphQL query for the two fields we persist. The server shape is
-        // `{ "data": { "modFile": { "version", "name" } } }`.
-        let query = serde_json::json!({
-            "query": "query($gameDomain:String!,$modId:Int!,$fileId:Int!){\
-                modFile(gameDomain:$gameDomain,modId:$modId,fileId:$fileId){version name}}",
-            "variables": { "gameDomain": game_domain, "modId": mod_id, "fileId": file_id },
-        });
+        let url = format!(
+            "{}/v1/games/{}/mods/{}/files/{}.json",
+            self.base, game_domain, mod_id, file_id
+        );
 
         let resp = self
-            .authed(self.http.post(&url))
-            .json(&query)
+            .authed(self.http.get(&url))
             .send()
             .await
             .map_err(|e| NexusError::Http(e.to_string()))?;
@@ -232,22 +242,19 @@ impl NexusClient {
             return Err(NexusError::RateLimited(RateLimiter::retry_after_secs(&headers)));
         }
         if !status.is_success() {
+            // A 404 here means the mod/file id pair has no such file (deleted/wrong id);
+            // surface it as a plain Http error so the download row fails with a clear reason.
             return Err(NexusError::Http(format!("HTTP {}", status.as_u16())));
         }
 
-        let body: GraphQlResponse = resp
+        let file: V1FileInfo = resp
             .json()
             .await
             .map_err(|e| NexusError::Http(e.to_string()))?;
 
-        let mf = body
-            .data
-            .and_then(|d| d.mod_file)
-            .ok_or_else(|| NexusError::Http("GraphQL response missing modFile".to_string()))?;
-
         Ok(ModFile {
-            version: mf.version,
-            display_name: mf.name,
+            version: file.version,
+            display_name: file.name,
         })
     }
 }
@@ -270,20 +277,18 @@ fn urlencode(s: &str) -> String {
     out
 }
 
-/// The minimal shape of the GraphQL v2 `modFile` response we parse.
+/// The minimal shape of a REST v1 file-info object (`.../files/{file_id}.json`).
+///
+/// The endpoint returns a richer object (`file_name`, `category_name`, `size`, …); we
+/// only deserialise the two fields we persist. `#[serde(default)]` keeps the parse
+/// resilient if Nexus ever omits one for an unusual file (we'd rather fall back to an
+/// empty string than fail the whole download on a missing optional label).
 #[derive(Debug, Deserialize)]
-struct GraphQlResponse {
-    data: Option<GraphQlData>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQlData {
-    #[serde(rename = "modFile")]
-    mod_file: Option<GraphQlModFile>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQlModFile {
-    version: String,
+struct V1FileInfo {
+    /// The file's display name (e.g. "SKSE64").
+    #[serde(default)]
     name: String,
+    /// The file's version string (e.g. "1.6.3").
+    #[serde(default)]
+    version: String,
 }
