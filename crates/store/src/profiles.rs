@@ -81,6 +81,24 @@ impl Store {
         Ok(n > 0)
     }
 
+    /// Clear the active flag on every profile for a game, leaving NO active profile.
+    ///
+    /// Used to recover from a mid-switch failure (WR-02): if `switch_profile` purges the
+    /// old deployment to pristine but a later step (deploy / plugins write) fails, the
+    /// store must not keep the OLD profile flagged active — its deployment no longer exists
+    /// on disk. Clearing the flag makes the persisted "no active profile" state honest
+    /// (the game is pristine), so the UI can prompt a fresh switch instead of showing a
+    /// profile whose deployment is gone. Idempotent.
+    pub fn clear_active_profile(&self, appid: u32) -> Result<(), StoreError> {
+        self.conn
+            .execute(
+                "UPDATE profile SET active = 0 WHERE appid = ?1",
+                params![appid],
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+        Ok(())
+    }
+
     /// Upsert a (profile, mod) membership row with its enabled flag and per-profile rank.
     /// Keyed by `UNIQUE(profile_id, mod_id)`.
     pub fn set_profile_mod(

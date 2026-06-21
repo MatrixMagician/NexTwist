@@ -71,6 +71,10 @@ pub struct SwitchReport {
 ///
 /// On any error after the purge, the deployment is already pristine (purge succeeded) or
 /// the journal will recover it on next launch — the game is never left unreversible.
+/// Additionally (WR-02), on any failure AFTER the purge but BEFORE the target is marked
+/// active, the active flag is CLEARED, so the store never reports an OLD profile as active
+/// while its deployment has already been purged off disk (a stale-active-flag drift the
+/// UI would otherwise act on, e.g. a subsequent conflict deploy against a phantom set).
 pub fn switch_profile(
     store: &Store,
     game: &Game,
@@ -78,8 +82,28 @@ pub fn switch_profile(
 ) -> Result<SwitchReport, DeployError> {
     // 1. Purge the CURRENT deployment back to byte-for-byte pristine (Pitfall 4: always a
     //    full purge between profiles, never a diff-deploy). Manifest-driven + crash-safe.
+    //    (If this fails, nothing has changed and the OLD active flag is still correct.)
     let purged = purge(store, game)?;
 
+    // From here on the on-disk deployment is pristine — the OLD active profile no longer
+    // describes any deployed files. Any failure before we mark the TARGET active must
+    // clear the stale active flag so the persisted state stays honest (WR-02).
+    switch_after_purge(store, game, target_profile_id, purged).inspect_err(|_| {
+        // Best-effort: drop the stale active flag. If this cleanup itself fails we keep
+        // the original error (the deployment is still pristine / journal-recoverable).
+        let _ = store.clear_active_profile(game.appid);
+    })
+}
+
+/// The post-purge half of [`switch_profile`] (deploy → plugins → mark active), factored
+/// out so [`switch_profile`] can run a single stale-active-flag cleanup on any error from
+/// these steps (WR-02). `purged` is threaded through to build the final report.
+fn switch_after_purge(
+    store: &Store,
+    game: &Game,
+    target_profile_id: i64,
+    purged: PurgeReport,
+) -> Result<SwitchReport, DeployError> {
     // 2. Build the target profile's enabled-mod winner set and deploy it through the
     //    UNCHANGED safe engine. The per-profile membership (enabled flag + per-profile
     //    rank) is the source of truth — PROF-03 (each profile keeps its own set/order).
