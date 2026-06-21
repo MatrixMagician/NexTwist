@@ -609,18 +609,18 @@ Then `loadorder::apply_load_order` writes `plugins.txt` exactly as Phase 2 does.
 
 **These `[ASSUMED]` items (esp. A1, A2, A4, A5) should be confirmed during planning against a real Collection revision + the live GraphQL schema, or gated behind a `checkpoint:human-verify` before the Collection resolve/replay path is locked.**
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **The exact `collectionRevision` GraphQL query + the collection archive format.**
    - What we know: `collectionRevision(slug, revision, domainName)` returns `downloadLink` + `fileSize`; the archive contains `collection.json` (Vortex `ICollection`).
    - What's unclear: whether the archive is a tarball/zip and any auth header needed for the download.
-   - Recommendation: fetch a real public Collection revision at Wave 0 and pin the parsed `collection.json` as a fixture; gate the live query behind a `checkpoint:human-verify`.
+   - RESOLVED: treat the collection archive as a zip via the existing extract path; fetch a real public Collection revision at Wave 0 of 04-03 and pin the parsed `collection.json` as a fixture (mockito covers the API shape); confirm the container format + any download auth header at the Wave-0 fetch and at the `checkpoint:human-verify` gate before the live query is locked.
 
 2. **Whether Premium bulk download differs from single-mod `download_link.json`.**
-   - Recommendation: build on the Phase-3 path; verify with a real Premium account in UAT.
+   - RESOLVED: build on the Phase-3 Premium `run_download_to_window` path unchanged; confirm bulk vs single-mod equivalence with a real Premium account at the 04-04 human-verify checkpoint (UAT).
 
 3. **The real-world `IChoices` ↔ current ModuleConfig matching when a pinned mod was updated.**
-   - Recommendation: name-match step→group→option; on a miss, surface the mod for a manual wizard pass rather than silently mis-installing.
+   - RESOLVED: name-match step→group→option; on a miss, return a specific error and surface the mod for a manual wizard pass rather than silently mis-installing.
 
 ## Sources
 
