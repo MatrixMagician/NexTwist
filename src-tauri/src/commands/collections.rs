@@ -134,6 +134,21 @@ pub async fn download_collection(
     let collection = NexusCollection::parse(&manifest_json).map_err(boundary_err)?;
     let domain = collection.info.domain_name.clone();
 
+    // ── GAME-DOMAIN GATE (CR-01): bind the manifest domain to the selected appid BEFORE any
+    //    download begins — the SAME check resolve_collection enforces. download_collection is
+    //    a thin boundary that writes to disk (it stages mods under game.staging_dir), so it
+    //    MUST re-assert the resolve-before-download safety invariant rather than trusting the
+    //    caller's appid: a wrong-game/mismatched manifest must never stage another game's mods
+    //    into the selected game's staging dir (invariants #1/#5). ───────────────────────────
+    match appid_for_domain(&domain) {
+        Some(resolved) if resolved == appid => {}
+        _ => {
+            return Err(format!(
+                "This Collection is for '{domain}', not the selected game"
+            ))
+        }
+    }
+
     // ── PREMIUM GATE (T-04-16): checked BEFORE any download begins. ──────────────────
     let is_premium = {
         let guard = state.lock().await;
