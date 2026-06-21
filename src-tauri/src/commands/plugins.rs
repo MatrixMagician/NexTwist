@@ -13,10 +13,61 @@
 
 use nextwist_core::Plugin;
 use tauri::State;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard};
 
 use crate::commands::{boundary_err, require_game};
 use crate::state::AppState;
+
+/// Build the merged plugin view for a game using an ALREADY-HELD state guard (WR-03).
+///
+/// Identical merge to [`merged_plugins`] but it performs every store read (active profile,
+/// scan roots, stored state) and the on-disk scan under the SAME lock the caller holds, so
+/// a read-modify-write (e.g. [`set_plugin_enabled`]) is atomic against concurrent plugin
+/// ops — no lost update / kind-order disagreement from a released-then-reacquired lock.
+fn merged_plugins_locked(
+    guard: &MutexGuard<'_, AppState>,
+    appid: u32,
+) -> Result<Vec<Plugin>, String> {
+    let game = guard
+        .store
+        .get_game(appid)
+        .map_err(boundary_err)?
+        .ok_or_else(|| format!("game {appid} is not managed"))?;
+    let game_id =
+        loadorder::esplugin_game_id(appid).ok_or_else(|| format!("game {appid} is not supported"))?;
+    let roots: Vec<std::path::PathBuf> = guard
+        .store
+        .list_mods(appid)
+        .map_err(boundary_err)?
+        .into_iter()
+        .filter(|m| m.enabled)
+        .map(|m| m.staging_root)
+        .collect();
+    let data_dir = game.install_dir.join("Data");
+    let scanned =
+        loadorder::scan_plugins_for(game_id, &roots, &data_dir).map_err(boundary_err)?;
+
+    let profile_id = guard
+        .store
+        .active_profile(appid)
+        .map_err(boundary_err)?
+        .map(|p| p.id)
+        .ok_or_else(|| format!("game {appid} has no active profile"))?;
+    let stored = guard.store.list_plugin_state(profile_id).map_err(boundary_err)?;
+
+    let mut merged: Vec<Plugin> = scanned
+        .into_iter()
+        .map(|mut p| {
+            if let Some(s) = stored.iter().find(|s| s.name == p.name) {
+                p.enabled = s.enabled;
+                p.order = s.order;
+            }
+            p
+        })
+        .collect();
+    merged.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.name.cmp(&b.name)));
+    Ok(merged)
+}
 
 /// Resolve the active profile id for a game, or a clear boundary error if none is set.
 /// Plugin enable/order is per-profile, so every plugin op needs the active profile.
@@ -34,20 +85,6 @@ async fn active_profile_id(
         .ok_or_else(|| format!("game {appid} has no active profile"))
 }
 
-/// The enabled mods' staging roots for a game (the trees `scan_plugins` walks for plugins).
-/// A single `list_mods` read filtered to enabled — not business logic.
-async fn enabled_staging_roots(
-    state: &State<'_, Mutex<AppState>>,
-    appid: u32,
-) -> Result<Vec<std::path::PathBuf>, String> {
-    let mods = state.lock().await.store.list_mods(appid).map_err(boundary_err)?;
-    Ok(mods
-        .into_iter()
-        .filter(|m| m.enabled)
-        .map(|m| m.staging_root)
-        .collect())
-}
-
 /// Merge the on-disk plugin scan (filenames + ESM/ESL/ESP badges) with the per-profile
 /// stored enable/order. The scan owns the type badge and which plugins exist; the store
 /// owns enabled/order. A scanned plugin with no stored row defaults to disabled/order 0;
@@ -56,37 +93,11 @@ async fn merged_plugins(
     state: &State<'_, Mutex<AppState>>,
     appid: u32,
 ) -> Result<Vec<Plugin>, String> {
-    // Scan the enabled mods' trees + game Data/ for plugins (badge from header flags).
-    let game = require_game(state, appid).await?;
-    let game_id =
-        loadorder::esplugin_game_id(appid).ok_or_else(|| format!("game {appid} is not supported"))?;
-    let roots = enabled_staging_roots(state, appid).await?;
-    let data_dir = game.install_dir.join("Data");
-    let scanned =
-        loadorder::scan_plugins_for(game_id, &roots, &data_dir).map_err(boundary_err)?;
-
-    // Per-profile stored enable/order.
-    let profile_id = active_profile_id(state, appid).await?;
-    let stored = state
-        .lock()
-        .await
-        .store
-        .list_plugin_state(profile_id)
-        .map_err(boundary_err)?;
-
-    // Merge: stored enable/order over scanned kind/name; keep scan as the existence source.
-    let mut merged: Vec<Plugin> = scanned
-        .into_iter()
-        .map(|mut p| {
-            if let Some(s) = stored.iter().find(|s| s.name == p.name) {
-                p.enabled = s.enabled;
-                p.order = s.order;
-            }
-            p
-        })
-        .collect();
-    merged.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.name.cmp(&b.name)));
-    Ok(merged)
+    // WR-03: acquire the state lock once and build the entire merged view (all store reads
+    // + the scan) under it, so the scan and the stored-state read it is merged with are a
+    // consistent snapshot rather than two separately-locked reads with a scan between.
+    let guard = state.lock().await;
+    merged_plugins_locked(&guard, appid)
 }
 
 /// List a game's plugins (PLUGIN-01 discovery): the enabled mods' + game `Data/` plugins,
@@ -110,19 +121,24 @@ pub async fn set_plugin_enabled(
     name: String,
     enabled: bool,
 ) -> Result<(), String> {
-    let profile_id = active_profile_id(&state, appid).await?;
-    let merged = merged_plugins(&state, appid).await?;
+    // WR-03: hold the state lock for the WHOLE read-modify-write (resolve active profile,
+    // build the merged view, toggle, persist) so the row written cannot be stale relative
+    // to a concurrent plugin op. The on-disk scan inside the merge runs under the lock too
+    // — on a single-user desktop app the brief extra hold is worth the atomicity.
+    let guard = state.lock().await;
+    let profile_id = guard
+        .store
+        .active_profile(appid)
+        .map_err(boundary_err)?
+        .map(|p| p.id)
+        .ok_or_else(|| format!("game {appid} has no active profile"))?;
+    let merged = merged_plugins_locked(&guard, appid)?;
     let mut plugin = merged
         .into_iter()
         .find(|p| p.name == name)
         .ok_or_else(|| format!("plugin '{name}' not found for game {appid}"))?;
     plugin.enabled = enabled;
-    state
-        .lock()
-        .await
-        .store
-        .set_plugin_state(profile_id, &plugin)
-        .map_err(boundary_err)
+    guard.store.set_plugin_state(profile_id, &plugin).map_err(boundary_err)
 }
 
 /// Persist a plugin load order (PLUGIN-02) and write the asterisk `plugins.txt` at the
