@@ -314,19 +314,30 @@ fn has_file_ci(dir: &Path, name: &str) -> bool {
     entry_ci(dir, name).map(|p| p.is_file()).unwrap_or(false)
 }
 
-/// Return the first child of `dir` whose name matches `name` case-insensitively.
+/// Return the child of `dir` whose name matches `name` case-insensitively, chosen
+/// DETERMINISTICALLY (WR-07): an exact-case match wins, else the lexicographically
+/// smallest case-variant. `read_dir` order is filesystem-dependent and unordered, so a
+/// first-match-wins choice would be nondeterministic across runs if a case-sensitive FS
+/// (NexTwist's Proton target) holds multiple case-variants of `name` (e.g. `Data`/`data`,
+/// or two executables) — a hazard for the reversibility guarantee built on top of it.
 fn entry_ci(dir: &Path, name: &str) -> Option<PathBuf> {
     let rd = std::fs::read_dir(dir).ok()?;
-    for entry in rd.flatten() {
-        if entry
-            .file_name()
-            .to_str()
-            .is_some_and(|n| n.eq_ignore_ascii_case(name))
-        {
-            return Some(entry.path());
-        }
+    let mut matches: Vec<String> = rd
+        .flatten()
+        .filter_map(|entry| {
+            let n = entry.file_name().to_str()?.to_owned();
+            n.eq_ignore_ascii_case(name).then_some(n)
+        })
+        .collect();
+    if matches.is_empty() {
+        return None;
     }
-    None
+    matches.sort();
+    let chosen = matches
+        .iter()
+        .find(|n| n.as_str() == name)
+        .unwrap_or(&matches[0]);
+    Some(dir.join(chosen))
 }
 
 #[cfg(test)]

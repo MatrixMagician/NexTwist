@@ -57,12 +57,30 @@ use std::path::{Path, PathBuf};
 /// `<install_dir>/Data/foo/bar.esp`. We resolve the real on-disk `Data` directory
 /// case-insensitively (Wine/Proton case-sensitivity), defaulting to `Data`.
 pub fn deploy_root(install_dir: &Path) -> PathBuf {
-    // Find an existing top-level entry matching "data" case-insensitively, else "Data".
+    // Collect ALL top-level entries matching "data" case-insensitively. `read_dir` order
+    // is filesystem-dependent and unordered, so a first-match-wins choice would be
+    // NONDETERMINISTIC if a case-sensitive Linux FS (exactly NexTwist's Proton target)
+    // somehow held both `Data` and `data` — a purge computed against one casing could then
+    // leave files under the other, breaking reversibility (WR-07). Choose deterministically.
     if let Ok(rd) = std::fs::read_dir(install_dir) {
-        for entry in rd.flatten() {
-            if entry.file_name().to_string_lossy().eq_ignore_ascii_case("data") {
-                return entry.path();
-            }
+        let mut matches: Vec<String> = rd
+            .flatten()
+            .filter_map(|entry| {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                name.eq_ignore_ascii_case("data").then_some(name)
+            })
+            .collect();
+        if !matches.is_empty() {
+            // Prefer an exact canonical "Data", then exact lowercase "data", else the
+            // lexicographically smallest variant — a stable choice across runs regardless
+            // of `read_dir` order.
+            matches.sort();
+            let chosen = matches
+                .iter()
+                .find(|n| n.as_str() == "Data")
+                .or_else(|| matches.iter().find(|n| n.as_str() == "data"))
+                .unwrap_or(&matches[0]);
+            return install_dir.join(chosen);
         }
     }
     install_dir.join("Data")
