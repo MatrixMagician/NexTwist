@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 04
 current_phase_name: guided-installers-collections
-status: executing
+status: verifying
 stopped_at: Phase 2 (Multi-Mod Management) BUILT + auto-verified (21/21 must-haves, code review 2 BLOCKERs fixed, 142 tests green); autonomous run STOPPED at user request. Phase 2 awaiting 4 manual/in-game UAT items (02-UAT.md).
-last_updated: "2026-06-21T18:07:25.893Z"
+last_updated: "2026-06-21T18:28:45.875Z"
 last_activity: 2026-06-21
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 19
-  completed_plans: 18
-  percent: 60
+  completed_plans: 19
+  percent: 80
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 
 Phase: 04 (guided-installers-collections) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-21 — Phase 04 execution started
 
 Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pending final manual UAT sign-off)
@@ -73,6 +73,7 @@ Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pen
 | Phase 04 P01 | 12 | 3 tasks | 13 files |
 | Phase 04 P04-03 | 7 | 2 tasks | 12 files |
 | Phase 04 P04-02 | 35m | 3 tasks | 6 files |
+| Phase 04 P04 | 16 | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -117,6 +118,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 04 P03]: resolve-before-download gate is download-free by construction — added client.file_availability (metadata-only v1 file-info: 404=>Unavailable, ARCHIVED=>Archived); off-Nexus sources classified Manual from source.type alone (no request; T-04-08 SSRF mitigation).
 - [Phase ?]: FOMOD apply stages the whole validated archive via extract::install_archive — no new write primitive (T-04-05)
 - [Phase ?]: FOMOD dry-run conflict classification is honest: a resolved plan is ConflictClass::None; a no-winner construct is surfaced via the engine Err with Install disabled
+- [Phase ?]: Collections add ZERO new engine primitives: deploy=switch_profile, uninstall=purge->delete_profile, bulk download reuses run_download_to_window (04-04)
+- [Phase ?]: replay_choices returns NexusError::Replay on a stale FOMOD choice (mod changed since pin) — never a silent mis-install (04-04)
+- [Phase ?]: Premium gate enforced before any Collection download via UserInfo.is_premium; no nxm:// free-user fallback; live Premium round-trip deferred to human UAT (04-04)
 
 ### Pending Todos
 
@@ -143,7 +147,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-21T18:06:58.586Z
+Last session: 2026-06-21T18:28:21.016Z
 Stopped at: Phase 2 (Multi-Mod Management) BUILT + auto-verified (21/21 must-haves, code review 2 BLOCKERs fixed, 142 tests green); autonomous run STOPPED at user request. Phase 2 awaiting 4 manual/in-game UAT items (02-UAT.md).
 Resume file: .planning/phases/02-multi-mod-management/02-UAT.md
 Resume command: `/gsd-autonomous --from 2` to continue the milestone (UAT-1/UAT-2 done + GAP-01 fixed). Optionally finish UAT-3/UAT-4 first.

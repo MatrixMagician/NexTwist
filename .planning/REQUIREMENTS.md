@@ -68,9 +68,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **COLL-01**: User can browse and select a NexusMods Collection for a managed game
 - [x] **COLL-02**: NexTwist downloads all mods in a Collection revision per its manifest
-- [ ] **COLL-03**: NexTwist applies the Collection's FOMOD choices, load order, and rules automatically
-- [ ] **COLL-04**: User can deploy an installed Collection so the modded game launches
-- [ ] **COLL-05**: User can cleanly uninstall a Collection (fully reversible)
+- [x] **COLL-03**: NexTwist applies the Collection's FOMOD choices, load order, and rules automatically
+- [x] **COLL-04**: User can deploy an installed Collection so the modded game launches
+- [x] **COLL-05**: User can cleanly uninstall a Collection (fully reversible)
 
 ### Distribution
 
@@ -153,9 +153,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FOMOD-02 | Phase 4 | Complete |
 | COLL-01 | Phase 4 | Complete |
 | COLL-02 | Phase 4 | Complete |
-| COLL-03 | Phase 4 | Pending |
-| COLL-04 | Phase 4 | Pending |
-| COLL-05 | Phase 4 | Pending |
+| COLL-03 | Phase 4 | Complete |
+| COLL-04 | Phase 4 | Complete |
+| COLL-05 | Phase 4 | Complete |
 | DIST-01 | Phase 5 | Pending |
 | DIST-02 | Phase 5 | Pending |
 

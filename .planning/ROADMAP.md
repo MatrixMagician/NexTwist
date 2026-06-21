@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Safe Local Round-Trip** - Detect a Bethesda Proton game, install a LOCAL archive, deploy non-destructively, purge to pristine (completed 2026-06-20)
 - [x] **Phase 2: Multi-Mod Management** - Many mods with conflict resolution, load order, plugin ordering, and per-game profiles (completed 2026-06-21)
 - [x] **Phase 3: NexusMods Login & Download** - OAuth login, secure tokens, in-app + nxm:// one-click downloads into staging (completed 2026-06-21)
-- [ ] **Phase 4: Guided Installers & Collections** - FOMOD wizard installs and end-to-end NexusMods Collection install/deploy/uninstall
+- [x] **Phase 4: Guided Installers & Collections** - FOMOD wizard installs and end-to-end NexusMods Collection install/deploy/uninstall (completed 2026-06-21)
 - [ ] **Phase 5: AppImage Distribution** - License-clean, single-file Linux AppImage with registered nxm:// handler
 
 ## Phase Details
@@ -120,7 +120,7 @@ Plans:
   3. NexTwist automatically applies the Collection's FOMOD choices, load order, and rules
   4. User can deploy an installed Collection so the modded game launches, and can later cleanly uninstall the Collection with full reversibility
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans complete
 **UI hint**: yes
 
 Plans:
@@ -135,7 +135,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 04-04-PLAN.md — Collection lifecycle slice: headless FOMOD-choice replay + `commands/collections.rs` (resolve/download/deploy/uninstall, Premium-only, reuse run_download_to_window + switch_profile + purge) + Collections UI + install→uninstall pristine round-trip test (COLL-02/03/04/05)
+- [x] 04-04-PLAN.md — Collection lifecycle slice: headless FOMOD-choice replay + `commands/collections.rs` (resolve/download/deploy/uninstall, Premium-only, reuse run_download_to_window + switch_profile + purge) + Collections UI + install→uninstall pristine round-trip test (COLL-02/03/04/05)
 
 ### Phase 5: AppImage Distribution
 
@@ -164,5 +164,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Safe Local Round-Trip | 7/7 | Complete   | 2026-06-20 |
 | 2. Multi-Mod Management | 5/5 | Complete   | 2026-06-21 |
 | 3. NexusMods Login & Download | 3/3 | Complete    | 2026-06-21 |
-| 4. Guided Installers & Collections | 3/4 | In Progress|  |
+| 4. Guided Installers & Collections | 4/4 | Complete   | 2026-06-21 |
 | 5. AppImage Distribution | 0/TBD | Not started | - |
