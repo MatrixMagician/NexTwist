@@ -4,11 +4,11 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 2
 current_phase_name: Multi-Mod Management
-status: verifying
-stopped_at: Phase 2 (Multi-Mod Management) BUILT + auto-verified (21/21 must-haves, code review 2 BLOCKERs fixed, 142 tests green); autonomous run STOPPED at user request. Phase 2 awaiting 4 manual/in-game UAT items (02-UAT.md).
-last_updated: "2026-06-21T07:49:41.811Z"
-last_activity: 2026-06-20
-last_activity_desc: Phase 2 execution started
+status: verified
+stopped_at: Phase 2 (Multi-Mod Management) VERIFIED — UAT 4/4 passed (02-UAT.md complete). UAT-1 in-game plugins.txt confirmed on real Fallout 4 after fixing 3 bugs found on hardware: loadorder early-loader ordering (749b5e3), LOOT-sort async panic (62d12dc), tauri dev-launch config (a0440bd). UAT-2/3/4 passed earlier. Carried forward (separate, ~Phase-4): install archive root-detection — mods with a wrapper folder deploy double-nested (.planning/todos/pending/install-archive-root-detection.md). Next: plan Phase 3 (NexusMods Login & Download).
+last_updated: "2026-06-21T13:00:00.000Z"
+last_activity: 2026-06-21
+last_activity_desc: Phase 2 UAT verified on real hardware; 3 fixes committed
 progress:
   total_phases: 5
   completed_phases: 2
