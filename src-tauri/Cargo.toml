@@ -44,6 +44,10 @@ tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
+# anyhow stays the boundary error context; thiserror is used for the two small typed
+# shell error enums (keyring NoKeyringBackend hard-fail + OAuth orchestration) that the
+# UI must distinguish (e.g. the NEXUS-02 no-keyring banner keys on a distinct variant).
+thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
@@ -58,3 +62,9 @@ tracing-subscriber = { workspace = true }
 keyring = { version = "3.6", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
 tauri-plugin-deep-link = "2.4"
 tauri-plugin-single-instance = { version = "2.4", features = ["deep-link"] }
+# Browser launch for the OAuth authorize step. RESEARCH A7 named tauri-plugin-opener
+# as the [ASSUMED] choice but allowed a `webbrowser` swap; `webbrowser` is chosen here
+# because it opens the system browser with a plain function call and needs NO Tauri
+# plugin registration or capability-file change (plugin wiring is deferred to Plan 03).
+# Introduced in this task so it clears the cargo-deny supply-chain gate here, not later.
+webbrowser = "1"

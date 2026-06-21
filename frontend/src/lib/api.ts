@@ -106,6 +106,13 @@ export interface SwitchReport {
   plugins_txt: string;
 }
 
+/** The authenticated NexusMods user (mirrors nexus::UserInfo). */
+export interface UserInfo {
+  user_id: number;
+  name: string;
+  is_premium: boolean;
+}
+
 export const detectGames = (): Promise<DetectedGame[]> => invoke("detect_games");
 
 export const addGame = (appid: number): Promise<Game> => invoke("add_game", { appid });
@@ -163,3 +170,18 @@ export const switchProfile = (appid: number, profileId: number): Promise<SwitchR
 
 export const deleteProfile = (appid: number, profileId: number): Promise<boolean> =>
   invoke("delete_profile", { appid, profileId });
+
+// --- NexusMods auth (NEXUS-01/02). Tokens never cross this boundary; only UserInfo. ---
+
+/** Log in with a manual NexusMods personal API key (the works-today fallback). */
+export const loginWithApiKey = (key: string): Promise<UserInfo> =>
+  invoke("login_with_api_key", { key });
+
+/** Begin the OAuth2+PKCE login; opens the system browser and returns the authorize URL. */
+export const loginOAuthStart = (): Promise<string> => invoke("login_oauth_start");
+
+/** Log out: clears the keyring entry + in-memory token. */
+export const logout = (): Promise<void> => invoke("logout");
+
+/** The currently logged-in user, or null if logged out. */
+export const accountInfo = (): Promise<UserInfo | null> => invoke("account_info");

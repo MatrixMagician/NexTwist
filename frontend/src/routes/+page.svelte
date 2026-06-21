@@ -16,6 +16,7 @@
     SortProposal,
     Profile,
     SwitchReport,
+    UserInfo,
   } from "$lib/api";
 
   // Supported Bethesda AppIDs (display only; the backend enforces the allow-list).
@@ -62,6 +63,17 @@
   let deleteTarget = $state<Profile | null>(null); // pending confirm-to-delete
   let switchReport = $state<SwitchReport | null>(null);
 
+  // Account panel state (UI-SPEC §A). `userInfo` drives logged-in vs logged-out; the
+  // refresh token / API key NEVER reaches the UI (only UserInfo does). `noKeyring` is
+  // set when a login attempt hits the NEXUS-02 no-Secret-Service hard-fail — it blocks
+  // login behind the destructive banner. `apiKeyReveal` toggles the key-paste fallback.
+  let userInfo = $state<UserInfo | null>(null);
+  let noKeyring = $state(false);
+  let apiKeyReveal = $state(false);
+  let apiKeyInput = $state("");
+  let confirmLogout = $state(false);
+  const loggedIn = $derived(userInfo !== null);
+
   let busy = $state(false);
   let error = $state<string | null>(null);
   let status = $state<string | null>(null);
@@ -101,6 +113,60 @@
   async function refreshManaged() {
     const games = await run("List games", api.listGames);
     if (games) managed = games;
+  }
+
+  // --- NexusMods account (UI-SPEC §A) ---
+
+  // The backend surfaces the no-keyring hard-fail (NEXUS-02) as a distinct error string
+  // containing "no keyring backend"; the UI keys its destructive banner on that.
+  function isNoKeyring(e: unknown): boolean {
+    return String(e).toLowerCase().includes("no keyring backend");
+  }
+
+  async function loadAccount() {
+    try {
+      userInfo = await api.accountInfo();
+    } catch (e) {
+      // Account read failing is non-fatal (stay logged-out); surface for visibility.
+      error = `Account info failed: ${String(e)}`;
+    }
+  }
+
+  async function onLoginApiKey() {
+    if (!apiKeyInput) {
+      error = "Paste your NexusMods API key first.";
+      return;
+    }
+    busy = true;
+    error = null;
+    status = null;
+    try {
+      userInfo = await api.loginWithApiKey(apiKeyInput);
+      noKeyring = false;
+      apiKeyInput = ""; // never keep the key in component state after use
+      apiKeyReveal = false;
+      status = "Logged in";
+    } catch (e) {
+      if (isNoKeyring(e)) {
+        noKeyring = true; // block login behind the destructive banner (NEXUS-02)
+      } else {
+        error = `Login failed: ${String(e)}. Try again, or use an API key instead.`;
+      }
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function onLoginOAuth() {
+    await run("Log in with NexusMods", api.loginOAuthStart);
+  }
+
+  async function onLogout() {
+    const ok = await run("Log out", api.logout);
+    if (ok !== undefined) {
+      userInfo = null;
+      confirmLogout = false;
+    }
   }
 
   async function onDetect() {
@@ -407,8 +473,9 @@
     }
   });
 
-  // Load any already-managed games on mount.
+  // Load any already-managed games + the current account on mount.
   refreshManaged();
+  loadAccount();
 </script>
 
 <main>
@@ -417,6 +484,65 @@
   {#if busy}<p class="busy">Working…</p>{/if}
   {#if status}<p class="ok">{status}</p>{/if}
   {#if error}<p class="err">{error}</p>{/if}
+
+  <!-- Account panel (UI-SPEC §A): logged-out / logged-in / no-keyring. A token or key
+       is never rendered. -->
+  <section class="account">
+    <h2>Account</h2>
+
+    {#if noKeyring}
+      <!-- NEXUS-02 hard-fail: no Secret Service backend. Login is blocked; NexTwist
+           never falls back to a plaintext file. -->
+      <div class="keyring-banner" role="alert">
+        <strong>Can't store your login securely</strong>
+        <p>
+          NexTwist won't save your NexusMods credentials as plaintext. Enable a system
+          keyring (GNOME Keyring or KWallet) and try again.
+        </p>
+      </div>
+    {:else if loggedIn && userInfo}
+      <p class="account-line">
+        <span class="dot" aria-hidden="true">●</span>
+        <strong class="username">{userInfo.name}</strong>
+        <span class="tier">{userInfo.is_premium ? "Premium" : "Free"}</span>
+      </p>
+      {#if confirmLogout}
+        <div class="confirm">
+          <p><strong>Log out of NexusMods?</strong></p>
+          <p class="muted">
+            This clears your saved login from the system keyring. You'll need to log in
+            again to download mods.
+          </p>
+          <button onclick={onLogout} disabled={busy}>Log out</button>
+          <button onclick={() => (confirmLogout = false)} disabled={busy}>Cancel</button>
+        </div>
+      {:else}
+        <button onclick={() => (confirmLogout = true)} disabled={busy}>Log out</button>
+      {/if}
+    {:else}
+      <!-- Logged out -->
+      <p class="muted">Log in to download mods from NexusMods.</p>
+      <button class="cta" onclick={onLoginOAuth} disabled={busy}>
+        Log in with NexusMods
+      </button>
+      <button class="link-btn" onclick={() => (apiKeyReveal = !apiKeyReveal)} disabled={busy}>
+        Use an API key instead
+      </button>
+      {#if apiKeyReveal}
+        <div class="apikey">
+          <label>
+            API key:
+            <input
+              type="password"
+              bind:value={apiKeyInput}
+              placeholder="Paste your NexusMods personal API key"
+            />
+          </label>
+          <button onclick={onLoginApiKey} disabled={busy}>Save key</button>
+        </div>
+      {/if}
+    {/if}
+  </section>
 
   <section>
     <h2>1. Detect games</h2>
@@ -873,6 +999,34 @@
   .ok { color: #1a7f37; font-weight: 600; }
   .err { color: #cf222e; font-weight: 600; }
   .warn { color: #9a6700; background: #fff8e5; border: 1px solid #e6c200; border-radius: 6px; padding: 0.5rem 0.75rem; margin-top: 0.5rem; }
+
+  /* --- Account panel (UI-SPEC §A) --- */
+  .account-line { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0 0.75rem; }
+  .account-line .dot { color: #1a7f37; }            /* Success green status dot */
+  .account-line .username { font-weight: 600; }
+  .account-line .tier {
+    font-size: 0.875rem;
+    background: #f3f3f3;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    padding: 0 0.4rem;
+  }
+  /* The single Accent (10%) primary login CTA. */
+  button.cta { background: #0a66c2; color: #fff; border: 1px solid #0a66c2; }
+  button.cta:disabled { opacity: 0.6; }
+  /* Neutral secondary "Use an API key instead" reveal — link-styled, not accent. */
+  button.link-btn { background: none; border: none; color: #0a66c2; text-decoration: underline; padding: 0.35rem 0; }
+  .apikey { margin-top: 0.5rem; }
+  .confirm { border: 1px solid #ccc; border-radius: 6px; padding: 0.5rem 0.75rem; margin-top: 0.5rem; background: #f3f3f3; }
+  /* NEXUS-02 destructive no-keyring banner. */
+  .keyring-banner {
+    color: #cf222e;
+    background: #fff;
+    border: 1px solid #cf222e;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+  }
+  .keyring-banner p { color: #333; margin: 0.4rem 0 0; }
 
   /* --- Conflict view (UI-SPEC §A) --- */
   .pending p { margin: 0.25rem 0 0; }

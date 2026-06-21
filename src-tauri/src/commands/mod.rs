@@ -11,6 +11,7 @@ pub mod conflicts;
 pub mod deploy;
 pub mod games;
 pub mod mods;
+pub mod nexus;
 pub mod plugins;
 pub mod profiles;
 

@@ -7,7 +7,9 @@
 //!    (the DEPLOY-06 startup half — an interrupted prior op is recovered first), and
 //! 3. registers the thin command adapters.
 
+pub mod auth;
 pub mod commands;
+pub mod keyring;
 pub mod state;
 
 use std::path::PathBuf;
@@ -83,6 +85,10 @@ pub fn run() {
             commands::profiles::create_profile,
             commands::profiles::switch_profile,
             commands::profiles::delete_profile,
+            commands::nexus::login_with_api_key,
+            commands::nexus::login_oauth_start,
+            commands::nexus::logout,
+            commands::nexus::account_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NexTwist");
