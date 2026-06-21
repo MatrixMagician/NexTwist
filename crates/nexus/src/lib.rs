@@ -32,6 +32,7 @@ pub use auth::{
     build_authorize_url, exchange_code, validate_api_key, AuthorizeRequest, API_BASE, TOKEN_BASE,
 };
 pub use client::{NexusAuth, NexusClient, NEXUS_API_BASE};
+pub use download::{download_to, CancelFlag};
 pub use error::NexusError;
 pub use model::{DownloadLink, ModFile, OAuthTokens, UserInfo};
 pub use ratelimit::RateLimiter;

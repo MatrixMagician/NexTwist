@@ -232,4 +232,67 @@ mod tests {
             "Skyrim Special Edition"
         );
     }
+
+    /// V4 guard (NEXUS-03/06): reach a V3-only state, then apply V4 and confirm it ADDED
+    /// `nexus_source` WITHOUT altering `managed_mod`'s columns (additive-only). Mirrors
+    /// the `v2_migrates_phase1_state` test seam (refinery pinned to a target version).
+    #[test]
+    fn v4_adds_nexus_source_additively_over_v3() {
+        use refinery::Target;
+
+        let dir = TempDir::new().unwrap();
+        let db = dir.path().join("v3.db");
+
+        // Capture managed_mod's column set at V3 (before V4 runs).
+        let cols_v3: Vec<String> = {
+            let mut conn = Connection::open(&db).unwrap();
+            let _: String = conn
+                .query_row("PRAGMA journal_mode=WAL;", [], |r| r.get(0))
+                .unwrap();
+            migrations::runner()
+                .set_target(Target::Version(3))
+                .run(&mut conn)
+                .unwrap();
+
+            // nexus_source must NOT exist yet at V3.
+            let n: i64 = conn
+                .query_row(
+                    "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='nexus_source'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 0, "nexus_source must be absent at V3");
+
+            let mut stmt = conn.prepare("PRAGMA table_info(managed_mod)").unwrap();
+            stmt.query_map([], |r| r.get::<_, String>(1))
+                .unwrap()
+                .map(|c| c.unwrap())
+                .collect::<Vec<_>>()
+        };
+
+        // Open via Store::open → refinery applies ONLY V4 over the V3 state.
+        let store = Store::open(&db).unwrap();
+
+        // V4 added nexus_source.
+        let n: i64 = store
+            .conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='nexus_source'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1, "V4 must create nexus_source");
+
+        // managed_mod's columns are UNCHANGED (V4 is additive, never ALTERs a safety table).
+        let cols_v4: Vec<String> = {
+            let mut stmt = store.conn.prepare("PRAGMA table_info(managed_mod)").unwrap();
+            stmt.query_map([], |r| r.get::<_, String>(1))
+                .unwrap()
+                .map(|c| c.unwrap())
+                .collect()
+        };
+        assert_eq!(cols_v3, cols_v4, "V4 must not alter managed_mod's columns");
+    }
 }

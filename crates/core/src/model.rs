@@ -63,6 +63,28 @@ pub struct Profile {
     pub active: bool,
 }
 
+/// NexusMods provenance for a managed mod that was acquired in-app (NEXUS-03/06).
+///
+/// Recorded additively (V4 migration) against the mod's `managed_mod` row so a
+/// Nexus-sourced mod is otherwise indistinguishable from a local-archive mod — it still
+/// deploys/purges through the Phase-1/2 engine. `mod_id` is the local `managed_mod` row
+/// id; `nexus_mod_id`/`file_id` identify the file on NexusMods; `version`/`display_name`
+/// come from the GraphQL v2 metadata read. The FK CASCADEs, so deleting the mod sheds
+/// this row.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NexusSource {
+    /// Local `managed_mod` row id this provenance belongs to.
+    pub mod_id: i64,
+    /// NexusMods mod id the file came from.
+    pub nexus_mod_id: u64,
+    /// NexusMods file id that was downloaded.
+    pub file_id: u64,
+    /// The downloaded file's version string (from GraphQL v2 metadata).
+    pub version: String,
+    /// The downloaded file's display name (shown in the downloads list).
+    pub display_name: String,
+}
+
 /// The kind of a Bethesda plugin master/light/regular file, used to group masters
 /// ahead of regular plugins when sorting load order (D-08).
 ///
@@ -246,6 +268,20 @@ mod tests {
         let json = serde_json::to_string(&m).unwrap();
         let back: ManagedMod = serde_json::from_str(&json).unwrap();
         assert_eq!(m, back);
+    }
+
+    #[test]
+    fn nexus_source_serde_round_trips() {
+        let s = NexusSource {
+            mod_id: 7,
+            nexus_mod_id: 12604,
+            file_id: 120063,
+            version: "1.6.3".into(),
+            display_name: "SKSE64".into(),
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let back: NexusSource = serde_json::from_str(&json).unwrap();
+        assert_eq!(s, back);
     }
 
     #[test]

@@ -12,6 +12,9 @@
 //!   * **profiles + membership** (D-13/D-14) — [`Store::create_profile`] / [`Store::set_active_profile`] / [`Store::set_profile_mod`]
 //!   * **plugin state** (D-07/D-13) — [`Store::set_plugin_state`] / [`Store::list_plugin_state`]
 //!
+//! The V4 migration (Phase 3) adds Nexus provenance additively:
+//!   * **nexus provenance** (NEXUS-03/06) — [`Store::add_nexus_source`] / [`Store::get_nexus_source`]
+//!
 //! Encapsulation invariant: NO `rusqlite` type appears in this crate's public API.
 //! Downstream crates (`deploy`, `steam`, the Tauri shell) speak only in `core` types
 //! and the small journal value types re-exported below. All SQL stays inside `store`.
@@ -20,6 +23,7 @@ mod db;
 mod journal;
 mod manifest;
 mod mods;
+mod nexus;
 mod plugins;
 mod profiles;
 mod registry;

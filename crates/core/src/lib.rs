@@ -10,5 +10,6 @@ pub mod model;
 
 pub use error::{CoreError, StoreError};
 pub use model::{
-    DeployMethod, FileConflict, FileEntry, Game, ManagedMod, Plugin, PluginKind, Profile,
+    DeployMethod, FileConflict, FileEntry, Game, ManagedMod, NexusSource, Plugin, PluginKind,
+    Profile,
 };

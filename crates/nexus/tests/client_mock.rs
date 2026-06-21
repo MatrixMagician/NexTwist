@@ -6,6 +6,7 @@
 //! a separate human-verify checkpoint (Task 4).
 
 use nexus::client::{NexusAuth, NexusClient};
+use nexus::download::{download_to, CancelFlag};
 use nexus::NexusError;
 
 /// Test 1: a PREMIUM download_link request carries NO `key`/`expires` query params and
@@ -185,4 +186,83 @@ async fn mod_file_metadata_reads_graphql_v2() {
         .expect("metadata read should succeed");
     assert_eq!(mf.version, "1.6.3");
     assert_eq!(mf.display_name, "SKSE64");
+}
+
+/// Test (streaming): `download_to` streams a stubbed body chunk-by-chunk to a temp file,
+/// invoking `on_progress` with a monotonically increasing `downloaded` and the
+/// Content-Length as `total`; the written bytes equal the stubbed body. Named `*_stage_*`
+/// so `cargo test -p nextwist-nexus stage` selects it (NEXUS-03/06 streaming gate).
+#[tokio::test]
+async fn download_to_streams_to_staging_file_with_progress() {
+    use std::sync::Mutex;
+
+    let mut server = mockito::Server::new_async().await;
+    // A body comfortably larger than one chunk so progress advances in steps.
+    let body = vec![7u8; 64 * 1024];
+    let _m = server
+        .mock("GET", "/cdn/file.zip")
+        .with_status(200)
+        .with_header("content-length", &body.len().to_string())
+        .with_body(body.clone())
+        .create_async()
+        .await;
+
+    let dir = tempfile::tempdir().unwrap();
+    let dest = dir.path().join("file.zip");
+
+    let progress: Mutex<Vec<(u64, Option<u64>)>> = Mutex::new(Vec::new());
+    let http = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let cancel = CancelFlag::new();
+    let uri = format!("{}/cdn/file.zip", server.url());
+
+    let written = download_to(&http, &uri, &dest, &cancel, |downloaded, total| {
+        progress.lock().unwrap().push((downloaded, total));
+    })
+    .await
+    .expect("streaming download should succeed");
+
+    // The whole body landed on disk, byte-for-byte.
+    let on_disk = std::fs::read(&dest).unwrap();
+    assert_eq!(on_disk, body, "written file must equal the streamed body");
+    assert_eq!(written, body.len() as u64);
+
+    // Progress was reported, monotonic, and ended at the full size with the right total.
+    let events = progress.lock().unwrap();
+    assert!(!events.is_empty(), "on_progress must be called");
+    let mut last = 0u64;
+    for (downloaded, total) in events.iter() {
+        assert!(*downloaded >= last, "downloaded must be monotonic");
+        last = *downloaded;
+        assert_eq!(*total, Some(body.len() as u64), "total = Content-Length");
+    }
+    assert_eq!(last, body.len() as u64, "final progress = full size");
+}
+
+/// A tripped CancelFlag aborts the stream and removes the partial file.
+#[tokio::test]
+async fn download_to_cancel_removes_partial_file() {
+    let mut server = mockito::Server::new_async().await;
+    let body = vec![1u8; 32 * 1024];
+    let _m = server
+        .mock("GET", "/cdn/cancel.zip")
+        .with_status(200)
+        .with_body(body)
+        .create_async()
+        .await;
+
+    let dir = tempfile::tempdir().unwrap();
+    let dest = dir.path().join("cancel.zip");
+    let http = reqwest::Client::new();
+    let cancel = CancelFlag::new();
+    cancel.cancel(); // cancelled before the first chunk is written
+    let uri = format!("{}/cdn/cancel.zip", server.url());
+
+    let err = download_to(&http, &uri, &dest, &cancel, |_, _| {})
+        .await
+        .expect_err("a cancelled download must error");
+    assert!(matches!(err, NexusError::Http(_)));
+    assert!(!dest.exists(), "the partial file must be removed on cancel");
 }
