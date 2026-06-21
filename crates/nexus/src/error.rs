@@ -59,6 +59,13 @@ pub enum NexusError {
     #[allow(dead_code)] // wired in Plan 02 (free-user nxm:// redemption)
     #[error("download-link redemption failed: {0}")]
     Redeem(String),
+
+    /// A Collection's pinned FOMOD choice no longer matches the mod's `ModuleConfig.xml`
+    /// (the mod was updated since the Collection captured the choice). Distinct from a
+    /// parse error so the UI can surface the "this mod changed — run its installer
+    /// manually" hint rather than mis-installing the stale plan (COLL-03; RESEARCH A3).
+    #[error("collection choice replay failed: {0}")]
+    Replay(String),
 }
 
 impl NexusError {

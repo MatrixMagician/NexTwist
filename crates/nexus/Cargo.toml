@@ -23,6 +23,11 @@ path = "src/lib.rs"
 [dependencies]
 nextwist_core = { path = "../core", package = "nextwist-core" }
 store.workspace = true
+# fomod is depended on (non-dev) for the headless Collection FOMOD-choice replay
+# (`replay.rs` / COLL-03): `replay_choices` matches the manifest's IChoices against a
+# parsed `FomodModule` and builds the `fomod::Selection` the SAME `fomod::resolve` drives.
+# This stays headless — `fomod` is itself Tauri/keyring-free, so the invariant holds.
+fomod.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

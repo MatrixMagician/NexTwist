@@ -2914,6 +2914,7 @@ dependencies = [
  "governor",
  "mockito",
  "nextwist-core",
+ "nextwist-fomod",
  "nextwist-store",
  "oauth2",
  "reqwest 0.13.4",
