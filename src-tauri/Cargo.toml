@@ -20,6 +20,11 @@ path = "src/main.rs"
 [build-dependencies]
 tauri-build = { workspace = true }
 
+[dev-dependencies]
+# Headless unit tests for the thin command adapters (no webview): WR-05 plugins.txt
+# write-before-persist ordering uses a temp DB + fake prefix.
+tempfile = { workspace = true }
+
 [dependencies]
 # Headless safety core — the command adapters delegate to these and add ZERO logic.
 # Aliased `nextwist_core` (NOT `core`): a dep literally named `core` shadows the std

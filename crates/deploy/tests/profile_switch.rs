@@ -235,3 +235,60 @@ fn switch_writes_target_profile_plugins_txt_at_prefix() {
     );
     assert!(report.plugins_txt.is_file(), "switch wrote the plugins.txt file");
 }
+
+/// WR-02 (failure-injection): if a profile switch fails AFTER the purge step, no profile is
+/// left falsely marked active — the stale active flag is cleared so state/disk stay
+/// consistent (02-UAT.md item 3). The happy path is covered above; this exercises the
+/// error path the code-fixer flagged as reasoned-through but not directly tested.
+///
+/// Injection: the managed game uses an UNSUPPORTED appid, so `apply_profile_plugins` fails
+/// (`appdata_folder_name` returns `None`) AFTER `purge` and `deploy_winners` have already
+/// run. `switch_profile`'s `inspect_err` must then call `clear_active_profile`, leaving NO
+/// profile active rather than keeping the OLD one flagged while its deployment is gone.
+#[test]
+fn failed_switch_after_purge_clears_stale_active_flag() {
+    let fx = Fixture::new();
+    let pristine = lay_vanilla(&fx);
+
+    // An UNSUPPORTED game (not Skyrim SE / FO4): the engine (purge + deploy_winners) is
+    // appid-agnostic and runs fine, but `apply_profile_plugins` has no AppData folder name
+    // for this appid and so the switch fails at the plugins step — after the purge.
+    let game = Game {
+        appid: 1, // unsupported: forces apply_profile_plugins to error post-purge
+        name: "Unsupported Game".into(),
+        install_dir: fx.install.clone(),
+        prefix: fx.root.path().join("prefix"),
+        staging_dir: fx.root.path().join("app/staging/1"),
+    };
+
+    let store = Store::open(&fx.db).unwrap();
+    store.add_managed_game(&game).unwrap();
+
+    let mod_root = fx.stage_mod("modX", &[("Data/only_x.esp", b"X-ONLY")]);
+    let m = add_mod(&store, game.appid, "modX", &mod_root, 1);
+
+    // OLD profile is the currently-active one; TARGET is what we switch to.
+    let old = store.create_profile(game.appid, "OLD").unwrap();
+    let target = store.create_profile(game.appid, "TARGET").unwrap();
+    store.set_profile_mod(target, m, true, 1).unwrap();
+    // Mark OLD active up front — this is the flag that must NOT survive a failed switch.
+    assert!(store.set_active_profile(game.appid, old).unwrap());
+
+    // The switch must FAIL at the plugins step (unsupported game), after purge + deploy.
+    let result = switch_profile(&store, &game, target);
+    assert!(result.is_err(), "switch must fail at the unsupported-game plugins step");
+
+    // WR-02: no profile is left marked active — neither the stale OLD nor the half-applied
+    // TARGET. Without the fix, OLD would still be flagged active while its set is gone.
+    assert!(
+        store.active_profile(game.appid).unwrap().is_none(),
+        "WR-02: a failed mid-switch must leave NO profile active (stale flag cleared)"
+    );
+
+    // State/disk consistency: whatever deploy_winners placed is manifest-recorded, so a
+    // purge still restores the install byte-for-byte pristine (the game stays reversible).
+    let purged = purge(&store, &game).unwrap();
+    assert!(purged.orphans.is_empty(), "purge leaves no orphans: {:?}", purged.orphans);
+    let after = snapshot_tree(&fx.install).unwrap();
+    assert_trees_identical(&pristine, &after);
+}

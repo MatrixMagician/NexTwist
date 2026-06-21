@@ -28,18 +28,18 @@ result: [pending]
 
 ### 3. WR-02 mid-switch failure clears stale active flag
 expected: If a profile switch fails after the purge step, no profile is left falsely marked active (state/disk consistent). Happy path is test-covered; this is the failure-injection path the fixer flagged as not automatically tested.
-result: [pending]
+result: [passed] — automated via failure-injection test `failed_switch_after_purge_clears_stale_active_flag` in `crates/deploy/tests/profile_switch.rs`. Switching an unsupported-appid game forces `apply_profile_plugins` to fail AFTER purge+deploy; asserts no profile remains active (stale flag cleared) and a subsequent purge restores the install byte-for-byte pristine. (was manual/in-game; now machine-verified)
 
 ### 4. WR-05 plugins.txt write-failure leaves DB untouched
 expected: If the plugins.txt write fails, the DB plugin_state is not persisted (write-before-persist ordering holds). Happy path is test-covered; this is the failure-injection path the fixer flagged as not automatically tested.
-result: [pending]
+result: [passed] — automated via unit test `save_plugin_order_inner_leaves_db_untouched_on_write_failure` in `src-tauri/src/commands/plugins.rs`. The write-before-persist ordering was extracted into the sync `save_plugin_order_inner` helper (command is now a thin wrapper); the test forces `apply_load_order` to fail (unwritable prefix) and asserts `plugin_state` stays empty. (was manual; now machine-verified)
 
 ## Summary
 
 total: 4
-passed: 0
+passed: 2
 issues: 0
-pending: 4
+pending: 2
 skipped: 0
 blocked: 0
 

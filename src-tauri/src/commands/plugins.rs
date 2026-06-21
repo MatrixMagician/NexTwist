@@ -11,7 +11,8 @@
 //! the pristine invariant — RESEARCH OQ3). `list_plugins` MERGES the on-disk scan
 //! (filenames + ESM/ESL/ESP badges) with the stored enable/order per profile.
 
-use nextwist_core::Plugin;
+use nextwist_core::{Game, Plugin};
+use store::Store;
 use tauri::State;
 use tokio::sync::{Mutex, MutexGuard};
 
@@ -164,27 +165,47 @@ pub async fn save_plugin_order(
     let game = require_game(&state, appid).await?;
     let profile_id = active_profile_id(&state, appid).await?;
 
+    // Persist under one held lock for a consistent snapshot; the write-before-persist
+    // ordering (WR-05) lives in the synchronous core so it is unit-testable.
+    let guard = state.lock().await;
+    save_plugin_order_inner(&guard.store, &game, profile_id, &order)
+}
+
+/// Synchronous core of [`save_plugin_order`] (WR-05): write the asterisk `plugins.txt` at
+/// the Proton-prefix AppData location FIRST, then persist every plugin row to the profile's
+/// `plugin_state` only after the file write succeeds.
+///
+/// Ordering is the invariant under test: a libloot/IO failure during the file write returns
+/// `Err` BEFORE any `set_plugin_state`, so the DB is left UNTOUCHED — matching the user's
+/// "nothing was saved" mental model. Writing the DB first would record a new order while the
+/// on-disk `plugins.txt` was never written, leaving the persisted state and the prefix
+/// disagreeing after a failure. Extracted from the command so this ordering is unit-testable
+/// without a Tauri runtime (the `#[tauri::command]` is now a thin lock-and-delegate wrapper).
+fn save_plugin_order_inner(
+    store: &Store,
+    game: &Game,
+    profile_id: i64,
+    order: &[Plugin],
+) -> Result<std::path::PathBuf, String> {
     // 1. Write plugins.txt at the prefix AppData via libloot (masters-first; D-08). Doing
     //    this FIRST means a failure here leaves the DB untouched (WR-05: nothing saved).
-    let folder = loadorder::appdata_folder_name(appid)
-        .ok_or_else(|| format!("game {appid} is not supported"))?;
+    let folder = loadorder::appdata_folder_name(game.appid)
+        .ok_or_else(|| format!("game {} is not supported", game.appid))?;
     let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
-    let written = loadorder::apply_load_order(appid, &game.install_dir, &appdata_local, &order)
-        .map_err(boundary_err)?;
+    let written =
+        loadorder::apply_load_order(game.appid, &game.install_dir, &appdata_local, order)
+            .map_err(boundary_err)?;
 
     // 2. Only AFTER the file write succeeded, persist each plugin's enable/order to the
-    //    active profile (the index = order), under one lock for a consistent snapshot.
-    {
-        let guard = state.lock().await;
-        for (idx, p) in order.iter().enumerate() {
-            let row = Plugin {
-                name: p.name.clone(),
-                kind: p.kind,
-                enabled: p.enabled,
-                order: idx as u32,
-            };
-            guard.store.set_plugin_state(profile_id, &row).map_err(boundary_err)?;
-        }
+    //    active profile (the index = order).
+    for (idx, p) in order.iter().enumerate() {
+        let row = Plugin {
+            name: p.name.clone(),
+            kind: p.kind,
+            enabled: p.enabled,
+            order: idx as u32,
+        };
+        store.set_plugin_state(profile_id, &row).map_err(boundary_err)?;
     }
 
     Ok(written)
@@ -206,4 +227,67 @@ pub async fn sort_with_loot(
     let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
     loadorder::propose_sort(appid, &game.install_dir, &appdata_local, &app_data, &plugins)
         .map_err(boundary_err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nextwist_core::PluginKind;
+    use std::fs;
+
+    /// WR-05 (failure-injection): if the `plugins.txt` write fails, the DB `plugin_state`
+    /// is left UNTOUCHED — the write-before-persist ordering holds even on the error path.
+    ///
+    /// This is the failure path the code-fixer flagged as reasoned-through but not directly
+    /// exercised (02-UAT.md item 4). The happy path is covered by the loadorder crate's
+    /// round-trip tests; here we force `apply_load_order` to fail and assert NOTHING was
+    /// persisted.
+    ///
+    /// Injection: the Proton prefix path is a regular FILE, so libloot's
+    /// `create_dir_all(<prefix>/drive_c/.../AppData/Local/<game>)` cannot create the
+    /// directory and `apply_load_order` returns an IO error BEFORE any `set_plugin_state`.
+    #[test]
+    fn save_plugin_order_inner_leaves_db_untouched_on_write_failure() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+
+        // A supported game (Skyrim SE) so `appdata_folder_name` resolves — the failure must
+        // come from the file write, not an unsupported-game early return.
+        let install = root.join("game");
+        fs::create_dir_all(install.join("Data")).unwrap();
+
+        // The prefix is a FILE, not a directory: any AppData path under it is uncreatable.
+        let prefix = root.join("prefix_is_a_file");
+        fs::write(&prefix, b"not a directory").unwrap();
+
+        let game = Game {
+            appid: 489830,
+            name: "Skyrim Special Edition".into(),
+            install_dir: install,
+            prefix,
+            staging_dir: root.join("staging"),
+        };
+
+        let store = Store::open(&root.join("nextwist.db")).unwrap();
+        store.add_managed_game(&game).unwrap();
+        let profile_id = store.create_profile(game.appid, "P").unwrap();
+
+        let order = vec![Plugin {
+            name: "Skyrim.esm".into(),
+            kind: PluginKind::Esm,
+            enabled: true,
+            order: 0,
+        }];
+
+        let result = save_plugin_order_inner(&store, &game, profile_id, &order);
+
+        assert!(
+            result.is_err(),
+            "the plugins.txt write must fail when the prefix is unwritable"
+        );
+        assert!(
+            store.list_plugin_state(profile_id).unwrap().is_empty(),
+            "WR-05: a plugins.txt write failure must leave plugin_state UNTOUCHED (nothing saved)"
+        );
+    }
 }
