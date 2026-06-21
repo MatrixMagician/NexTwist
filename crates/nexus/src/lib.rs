@@ -34,5 +34,5 @@ pub use auth::{
 pub use client::{NexusAuth, NexusClient, NEXUS_API_BASE};
 pub use download::{download_to, CancelFlag};
 pub use error::NexusError;
-pub use model::{DownloadLink, ModFile, OAuthTokens, UserInfo};
+pub use model::{DownloadLink, ModFile, NxmLink, NxmLinkKind, OAuthTokens, UserInfo};
 pub use ratelimit::RateLimiter;
