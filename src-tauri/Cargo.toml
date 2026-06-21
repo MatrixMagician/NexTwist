@@ -43,6 +43,13 @@ extract = { workspace = true }
 deploy = { workspace = true }
 loadorder = { workspace = true }
 nexus = { workspace = true }
+# The headless FOMOD engine (Plan 04-01): parse -> condition -> pure dry-run resolve.
+# The fomod command adapter delegates to this and adds ZERO FOMOD logic (Anti-Pattern-4).
+fomod = { workspace = true }
+# The FOMOD adapter extracts an archive to a temp tree (via the SAME validated extractor
+# the install path uses) to parse/resolve before any staging write. tempfile owns the
+# RAII-cleaned temp dir for that dry-run extraction.
+tempfile = { workspace = true }
 
 # Shell runtime.
 tauri = { workspace = true }

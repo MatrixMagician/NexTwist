@@ -2813,6 +2813,7 @@ dependencies = [
  "nextwist-core",
  "nextwist-deploy",
  "nextwist-extract",
+ "nextwist-fomod",
  "nextwist-loadorder",
  "nextwist-nexus",
  "nextwist-steam",
