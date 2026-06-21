@@ -62,6 +62,14 @@ impl Store {
     /// active flag on every profile for the game, then sets it on the target. Returns
     /// `false` if the target id does not belong to that game (nothing activated).
     pub fn set_active_profile(&self, appid: u32, profile_id: i64) -> Result<bool, StoreError> {
+        // INVARIANT (WR-08): `unchecked_transaction` is REQUIRED here, not a footgun. The
+        // whole `Store` facade exposes `&self` methods over an owned `Connection`, so the
+        // checked `Connection::transaction()` (which needs `&mut self`) is not callable
+        // from a `&self` method. Every `Store` call site is top-level (no method wraps
+        // another in an outer transaction), so no nested `BEGIN`/`COMMIT` ever occurs —
+        // the runtime guard `unchecked_transaction` skips would never fire. If a future
+        // refactor introduces an outer transaction, switch the facade to `&mut self` +
+        // `transaction()` rather than nesting these.
         let tx = self
             .conn
             .unchecked_transaction()
@@ -175,6 +183,11 @@ impl Store {
                 "cannot delete the active profile; switch to another profile first".into(),
             ));
         }
+        // INVARIANT (WR-08): `unchecked_transaction` is required for the same reason as
+        // `set_active_profile` — the `&self` facade over an owned `Connection` cannot call
+        // the checked `transaction()` (`&mut self`). All call sites are top-level, so no
+        // outer transaction is ever open. (The child-row deletes below are also covered by
+        // V3's `ON DELETE CASCADE`, but are kept explicit for clarity / pre-V3 safety.)
         let tx = self
             .conn
             .unchecked_transaction()
