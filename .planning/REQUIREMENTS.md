@@ -61,8 +61,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Installers (FOMOD)
 
-- [ ] **FOMOD-01**: User can install mods with FOMOD scripted installers, making option choices through a guided UI
-- [ ] **FOMOD-02**: FOMOD conditional/option-driven file installation is applied correctly to staging
+- [x] **FOMOD-01**: User can install mods with FOMOD scripted installers, making option choices through a guided UI
+- [x] **FOMOD-02**: FOMOD conditional/option-driven file installation is applied correctly to staging
 
 ### Collections
 
@@ -149,8 +149,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NEXUS-05 | Phase 3 | Complete |
 | NEXUS-06 | Phase 3 | Complete |
 | NXM-01 | Phase 3 | Complete |
-| FOMOD-01 | Phase 4 | Pending |
-| FOMOD-02 | Phase 4 | Pending |
+| FOMOD-01 | Phase 4 | Complete |
+| FOMOD-02 | Phase 4 | Complete |
 | COLL-01 | Phase 4 | Pending |
 | COLL-02 | Phase 4 | Pending |
 | COLL-03 | Phase 4 | Pending |

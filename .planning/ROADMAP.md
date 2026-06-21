@@ -120,13 +120,13 @@ Plans:
   3. NexTwist automatically applies the Collection's FOMOD choices, load order, and rules
   4. User can deploy an installed Collection so the modded game launches, and can later cleanly uninstall the Collection with full reversibility
 
-**Plans**: 4 plans
+**Plans**: 1/4 plans executed
 **UI hint**: yes
 
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Headless `crates/fomod` engine (parse→condition→resolve, dry-run) + close the carried archive-root-detection gap in `crates/extract` (FOMOD-01/02)
+- [x] 04-01-PLAN.md — Headless `crates/fomod` engine (parse→condition→resolve, dry-run) + close the carried archive-root-detection gap in `crates/extract` (FOMOD-01/02)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -164,5 +164,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Safe Local Round-Trip | 7/7 | Complete   | 2026-06-20 |
 | 2. Multi-Mod Management | 5/5 | Complete   | 2026-06-21 |
 | 3. NexusMods Login & Download | 3/3 | Complete    | 2026-06-21 |
-| 4. Guided Installers & Collections | 0/4 | Planned | - |
+| 4. Guided Installers & Collections | 1/4 | In Progress|  |
 | 5. AppImage Distribution | 0/TBD | Not started | - |
