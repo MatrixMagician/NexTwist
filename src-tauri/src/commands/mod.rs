@@ -7,6 +7,7 @@
 //! `String` at the boundary (the webview only speaks JSON/strings), and returns. All
 //! validation and safety logic lives in the (tested) `steam`/`extract`/`deploy` crates.
 
+pub mod collections;
 pub mod conflicts;
 pub mod deploy;
 pub mod downloads;

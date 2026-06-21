@@ -50,6 +50,11 @@ fomod = { workspace = true }
 # the install path uses) to parse/resolve before any staging write. tempfile owns the
 # RAII-cleaned temp dir for that dry-run extraction.
 tempfile = { workspace = true }
+# The Collection bulk-download adapter (Plan 04-04) drives per-mod downloads with a
+# small bounded concurrency (`buffer_unordered`) so the shared governor limiter governs
+# the global rate (WR-03). No new download primitive — each mod reuses
+# `run_download_to_window` VERBATIM.
+futures-util = { workspace = true }
 
 # Shell runtime.
 tauri = { workspace = true }

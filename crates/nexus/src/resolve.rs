@@ -21,7 +21,10 @@ use crate::collection::{Collection, SourceType};
 use crate::error::NexusError;
 
 /// The resolved availability of one Collection mod (COLL-02; UI-SPEC §B.3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Serializable so it crosses the Tauri IPC boundary to the resolve-report UI (UI-SPEC
+/// §B.3) — the report is rendered before any download.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum ModStatus {
     /// The mod's file is available to download (nexus) or bundled (bundle).
     Available,
@@ -34,7 +37,7 @@ pub enum ModStatus {
 }
 
 /// One mod's entry in the resolve report.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ResolvedMod {
     /// Mod display name (from the manifest).
     pub name: String,
@@ -48,7 +51,7 @@ pub struct ResolvedMod {
 
 /// The full resolve report for a Collection: one [`ResolvedMod`] per pinned mod, computed
 /// with ZERO downloads. The "Download Collection" CTA is gated behind the user accepting this.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ResolveReport {
     /// One entry per mod in the manifest, in manifest order.
     pub mods: Vec<ResolvedMod>,
