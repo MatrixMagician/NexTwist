@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Safe Local Round-Trip** - Detect a Bethesda Proton game, install a LOCAL archive, deploy non-destructively, purge to pristine (completed 2026-06-20)
 - [x] **Phase 2: Multi-Mod Management** - Many mods with conflict resolution, load order, plugin ordering, and per-game profiles (completed 2026-06-21)
-- [ ] **Phase 3: NexusMods Login & Download** - OAuth login, secure tokens, in-app + nxm:// one-click downloads into staging
+- [x] **Phase 3: NexusMods Login & Download** - OAuth login, secure tokens, in-app + nxm:// one-click downloads into staging (completed 2026-06-21)
 - [ ] **Phase 4: Guided Installers & Collections** - FOMOD wizard installs and end-to-end NexusMods Collection install/deploy/uninstall
 - [ ] **Phase 5: AppImage Distribution** - License-clean, single-file Linux AppImage with registered nxm:// handler
 
@@ -91,7 +91,7 @@ Plans:
   3. User can one-click install from an nxm:// link on nexusmods.com, routed to the running app via a registered Linux deep-link handler
   4. A downloaded mod is auto-extracted into staging, ready to deploy, while NexTwist respects NexusMods API rate limits (no UI freeze on large downloads)
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 **UI hint**: yes
 
 Plans:
@@ -105,7 +105,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 03-03-PLAN.md — Free-user nxm:// handoff slice (NEXUS-04, NXM-01): headless strict nxm:// parser + single-instance-first + deep-link wiring + on_open_url routing (oauth-callback vs download) + free-user key+expires redemption + nxm:// toast / free-user hint / expired-link Warning UI
+- [x] 03-03-PLAN.md — Free-user nxm:// handoff slice (NEXUS-04, NXM-01): headless strict nxm:// parser + single-instance-first + deep-link wiring + on_open_url routing (oauth-callback vs download) + free-user key+expires redemption + nxm:// toast / free-user hint / expired-link Warning UI
 
 ### Phase 4: Guided Installers & Collections
 
@@ -153,6 +153,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Safe Local Round-Trip | 7/7 | Complete   | 2026-06-20 |
 | 2. Multi-Mod Management | 5/5 | Complete   | 2026-06-21 |
-| 3. NexusMods Login & Download | 2/3 | In Progress|  |
+| 3. NexusMods Login & Download | 3/3 | Complete   | 2026-06-21 |
 | 4. Guided Installers & Collections | 0/TBD | Not started | - |
 | 5. AppImage Distribution | 0/TBD | Not started | - |
