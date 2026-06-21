@@ -39,6 +39,11 @@ pub struct AppState {
     pub pending_oauth: Option<PendingOAuth>,
     /// The currently logged-in user, cached for the account panel.
     pub user: Option<nexus::UserInfo>,
+    /// Whether we have already tried to restore a session from the keyring this run
+    /// (WR-07). Set the first time `account_info` runs the keyring → API-key re-validate
+    /// so a persisted credential survives a restart, without re-hitting the network (or
+    /// re-tripping a no-backend banner) on every subsequent `account_info` poll.
+    pub session_restore_attempted: bool,
     /// In-flight downloads' cancellation flags, keyed by the UI download id. A
     /// `cancel_download` command trips the matching flag; the streaming loop in
     /// `crates/nexus` checks it once per chunk and aborts (NEXUS-03 Cancel affordance).
@@ -65,6 +70,7 @@ impl AppState {
             access_token: None,
             pending_oauth: None,
             user: None,
+            session_restore_attempted: false,
             downloads: HashMap::new(),
             // One shared limiter for the whole process (WR-03).
             rate_limiter: Arc::new(RateLimiter::new()),

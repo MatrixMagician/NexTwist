@@ -122,11 +122,56 @@ pub async fn logout(state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     Ok(())
 }
 
-/// Return the currently logged-in user, or `None` if logged out. Reads the cached
-/// `UserInfo`; the UI uses this to render the logged-in vs logged-out panel on load.
+/// Return the currently logged-in user, or `None` if logged out. The UI uses this to
+/// render the logged-in vs logged-out panel on load.
+///
+/// WR-07: on the FIRST call after launch, if there is no in-memory session we restore one
+/// from the keyring — load the persisted credential and re-validate it as an API key,
+/// caching the resulting `UserInfo` so a stored login survives a restart (previously the
+/// keyring entry was write-only and the user appeared logged out every cold start). This
+/// honours NEXUS-02 (keyring-only, no plaintext): the credential never leaves the keyring
+/// path, only the `UserInfo` is cached. A keyring no-backend / missing-entry / invalid-key
+/// outcome simply leaves the session logged-out here — the explicit login path owns the
+/// destructive no-keyring banner.
 #[tauri::command]
-pub async fn account_info(state: State<'_, Mutex<AppState>>) -> Result<Option<nexus::UserInfo>, String> {
-    let guard = state.lock().await;
+pub async fn account_info(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Option<nexus::UserInfo>, String> {
+    // Fast path: already have a session, or already tried to restore one this run. Grab the
+    // persisted credential to validate ONLY if a restore is warranted — and release the
+    // lock before any network call (never hold the AppState mutex across an await on I/O).
+    let api_key = {
+        let mut guard = state.lock().await;
+        if guard.user.is_some() || guard.session_restore_attempted {
+            return Ok(guard.user.clone());
+        }
+        // Mark attempted up-front so a slow/failed restore doesn't re-fire on every poll.
+        guard.session_restore_attempted = true;
+        // An OAuth session would already have populated `access_token`/`user`; the
+        // works-today restore path is the keyring API key. A no-backend or missing entry
+        // is a non-fatal "stay logged out" here (the login flow surfaces the banner).
+        match keyring::load_refresh_token() {
+            Ok(Some(key)) => key,
+            Ok(None) => return Ok(None),
+            Err(_) => return Ok(None),
+        }
+    };
+
+    // Re-validate the stored key against the live API (headless, mockable). A rejected or
+    // unreachable key leaves the user logged out rather than erroring the panel load.
+    let info = match nexus::validate_api_key(nexus::API_BASE, &api_key).await {
+        Ok(info) => info,
+        Err(_) => return Ok(None),
+    };
+
+    // Cache the restored session. An API-key session has no OAuth access token. Guard
+    // against a concurrent login/logout that ran while we were off-lock validating: only
+    // populate if the session is still empty, and return whatever is current.
+    let mut guard = state.lock().await;
+    if guard.user.is_none() {
+        guard.user = Some(info);
+        guard.access_token = None;
+    }
     Ok(guard.user.clone())
 }
 
