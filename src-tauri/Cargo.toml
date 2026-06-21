@@ -30,6 +30,7 @@ store = { workspace = true }
 steam = { workspace = true }
 extract = { workspace = true }
 deploy = { workspace = true }
+loadorder = { workspace = true }
 
 # Shell runtime.
 tauri = { workspace = true }

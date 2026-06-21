@@ -75,6 +75,18 @@ pub fn game_type_for(appid: u32) -> Option<GameType> {
     }
 }
 
+/// The Steam AppData/Local folder name for a supported AppID — the `<game_name>` segment
+/// [`appdata_local_path`] joins (A3). `"Skyrim Special Edition"` / `"Fallout4"`, matching
+/// libloadorder's `skyrim_se_appdata_folder_name` / `fallout4_appdata_folder_name`. `None`
+/// for an unsupported game (the command layer maps `None` to a clear boundary error).
+pub fn appdata_folder_name(appid: u32) -> Option<&'static str> {
+    match appid {
+        SKYRIM_SE => Some("Skyrim Special Edition"),
+        FALLOUT4 => Some("Fallout4"),
+        _ => None,
+    }
+}
+
 /// Open a libloot [`Game`] for a supported AppID using the Proton-prefix AppData path.
 ///
 /// ALWAYS uses `Game::with_local_path` (never `Game::new`) so the Linux seam works
@@ -233,6 +245,110 @@ pub fn apply_load_order(
     set_order_and_save(&mut game, &order_refs)?;
 
     Ok(game.active_plugins_file_path().clone())
+}
+
+/// A LOOT sort proposal: the suggested order plus any critical warnings (PLUGIN-03, D-12).
+///
+/// `proposed` is the order libloot's `sort_plugins` returns — it is a SUGGESTION the UI
+/// shows for review; NOTHING is written until the user confirms (then [`apply_load_order`]
+/// is called separately). `warnings` are the masterlist's Warn/Error-level general
+/// messages (dirty plugins / missing masters etc., A2) surfaced for the review; an empty
+/// list means libloot reported no critical messages for the loaded set.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct SortProposal {
+    /// The proposed plugin order (libloot `sort_plugins` output). Writes nothing.
+    pub proposed: Vec<String>,
+    /// Critical (Warn/Error) masterlist messages to surface above the proposal.
+    pub warnings: Vec<String>,
+}
+
+/// Propose a LOOT-sorted order WITHOUT writing anything (D-12: propose-then-apply).
+///
+/// Ensures the masterlist is available (fetch/cache/bundled fallback), loads it into
+/// libloot's `Database`, header-loads the on-disk plugins, and runs `sort_plugins`. The
+/// returned [`SortProposal`] also carries the masterlist's critical (Warn/Error) general
+/// messages (A2). Applying the proposal is a SEPARATE, user-confirmed call to
+/// [`apply_load_order`] — this function never persists.
+///
+/// Only plugins whose files exist under the game `Data/` are sorted (libloot header-parses
+/// each named plugin; a stale entry must not abort the sort).
+///
+/// # Errors
+/// * [`LoadOrderError::NoLocalAppData`] / unsupported appid via [`open_game`].
+/// * [`LoadOrderError::Loot`] if masterlist load, plugin load, or sort fails.
+pub fn propose_sort(
+    appid: u32,
+    install_dir: &Path,
+    appdata_local: &Path,
+    app_data: &Path,
+    plugins: &[Plugin],
+) -> Result<SortProposal, LoadOrderError> {
+    let mut game = open_game(appid, install_dir, appdata_local)?;
+    game.load_current_load_order_state()
+        .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
+
+    // Resolve + load the masterlist into the game's Database (fetch/cache/bundled).
+    let masterlist = crate::masterlist::ensure_masterlist(app_data, appid, false)?;
+    {
+        let db = game.database();
+        let mut db = db
+            .write()
+            .map_err(|e| LoadOrderError::Loot(format!("database lock poisoned: {e}")))?;
+        db.load_masterlist(&masterlist)
+            .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
+    }
+
+    // Header-load only the plugins that physically exist in Data/ (libloot parses each).
+    let data_dir = install_dir.join("Data");
+    let on_disk: Vec<&Plugin> = plugins
+        .iter()
+        .filter(|p| data_dir.join(&p.name).is_file())
+        .collect();
+    let paths: Vec<PathBuf> = on_disk.iter().map(|p| data_dir.join(&p.name)).collect();
+    let path_refs: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
+    game.load_plugins(&path_refs)
+        .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
+
+    let names: Vec<&str> = on_disk.iter().map(|p| p.name.as_str()).collect();
+    let proposed = game
+        .sort_plugins(&names)
+        .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
+
+    let warnings = critical_warnings(&game);
+    Ok(SortProposal { proposed, warnings })
+}
+
+/// Extract the masterlist's critical (Warn/Error) general messages for the review (A2).
+///
+/// Reads `Database::general_messages` (masterlist only, conditions evaluated) and keeps
+/// only Warn/Error severities, rendered to plain text. If the database lock is poisoned or
+/// condition evaluation fails, returns an empty list rather than failing the sort — the
+/// proposed order is the load-bearing output; warnings are advisory (A2 fallback).
+fn critical_warnings(game: &Game) -> Vec<String> {
+    use libloot::metadata::MessageType;
+    use libloot::{EvalMode, MergeMode};
+
+    let db_arc = game.database();
+    let db = match db_arc.read() {
+        Ok(db) => db,
+        Err(_) => return Vec::new(),
+    };
+    let messages = match db.general_messages(MergeMode::WithoutUserMetadata, EvalMode::Evaluate) {
+        Ok(m) => m,
+        Err(_) => return Vec::new(),
+    };
+    messages
+        .into_iter()
+        .filter(|m| matches!(m.message_type(), MessageType::Warn | MessageType::Error))
+        .map(|m| {
+            let text = m
+                .content()
+                .first()
+                .map(|c| c.text().to_string())
+                .unwrap_or_default();
+            format!("{}: {}", m.message_type(), text)
+        })
+        .collect()
 }
 
 #[cfg(test)]

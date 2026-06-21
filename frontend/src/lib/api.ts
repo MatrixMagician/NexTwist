@@ -68,6 +68,23 @@ export interface FileConflict {
   winner: number;
 }
 
+/** A plugin's master/light/regular classification (mirrors core::PluginKind). */
+export type PluginKind = "esm" | "esl" | "esp";
+
+/** A plugin entry (mirrors core::Plugin). `order` is the zero-based load position. */
+export interface PluginInfo {
+  name: string;
+  kind: PluginKind;
+  enabled: boolean;
+  order: number;
+}
+
+/** A LOOT sort proposal (mirrors loadorder::SortProposal). `proposed` writes nothing. */
+export interface SortProposal {
+  proposed: string[];
+  warnings: string[];
+}
+
 export const detectGames = (): Promise<DetectedGame[]> => invoke("detect_games");
 
 export const addGame = (appid: number): Promise<Game> => invoke("add_game", { appid });
@@ -98,3 +115,18 @@ export const setModRank = (appid: number, modId: number, rank: number): Promise<
 
 export const deployWinnerSet = (appid: number): Promise<DeployReport> =>
   invoke("deploy_winner_set", { appid });
+
+export const listPlugins = (appid: number): Promise<PluginInfo[]> =>
+  invoke("list_plugins", { appid });
+
+export const setPluginEnabled = (
+  appid: number,
+  name: string,
+  enabled: boolean,
+): Promise<void> => invoke("set_plugin_enabled", { appid, name, enabled });
+
+export const savePluginOrder = (appid: number, order: PluginInfo[]): Promise<string> =>
+  invoke("save_plugin_order", { appid, order });
+
+export const sortWithLoot = (appid: number): Promise<SortProposal> =>
+  invoke("sort_with_loot", { appid });

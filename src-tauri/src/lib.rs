@@ -75,6 +75,10 @@ pub fn run() {
             commands::conflicts::list_conflicts,
             commands::conflicts::set_mod_rank,
             commands::conflicts::deploy_winner_set,
+            commands::plugins::list_plugins,
+            commands::plugins::set_plugin_enabled,
+            commands::plugins::save_plugin_order,
+            commands::plugins::sort_with_loot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NexTwist");

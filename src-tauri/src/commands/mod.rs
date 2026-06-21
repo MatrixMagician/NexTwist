@@ -11,6 +11,7 @@ pub mod conflicts;
 pub mod deploy;
 pub mod games;
 pub mod mods;
+pub mod plugins;
 
 use tauri::State;
 use tokio::sync::Mutex;

@@ -12,6 +12,8 @@
     VerifyReport,
     ManagedMod,
     FileConflict,
+    PluginInfo,
+    SortProposal,
   } from "$lib/api";
 
   // Supported Bethesda AppIDs (display only; the backend enforces the allow-list).
@@ -40,6 +42,13 @@
   let mods = $state<ManagedMod[]>([]);
   let conflicts = $state<FileConflict[]>([]);
   let deployedSig = $state<string | null>(null);
+
+  // Plugin manager state (UI-SPEC §B/§C). `plugins` is the editable, ordered list (the
+  // backend returns it merged scan + per-profile state). `sortProposal` holds a LOOT
+  // proposal awaiting review; it is applied into `plugins` only on explicit confirm (D-12).
+  let plugins = $state<PluginInfo[]>([]);
+  let sortProposal = $state<SortProposal | null>(null);
+  let mastersFirstError = $state<string | null>(null);
 
   let busy = $state(false);
   let error = $state<string | null>(null);
@@ -177,6 +186,111 @@
     }
   }
 
+  // --- Plugin manager (UI-SPEC §B/§C) ---
+
+  // A plugin is in the "masters" group if it is a master (.esm) or ESL-flagged (.esl).
+  const isMaster = (p: PluginInfo) => p.kind === "esm" || p.kind === "esl";
+
+  // The badge text for a plugin's kind.
+  const kindBadge = (k: PluginInfo["kind"]) => k.toUpperCase();
+
+  // True if swapping `plugins[i]` with its neighbor in `dir` would put a regular plugin
+  // before a master (or vice-versa) — a masters-first violation we must PREVENT (§B.2).
+  function violatesMastersFirst(i: number, dir: -1 | 1): boolean {
+    const other = i + dir;
+    if (other < 0 || other >= plugins.length) return true; // out of range: disabled anyway
+    // A move is only allowed within the same group (both masters or both regular).
+    return isMaster(plugins[i]) !== isMaster(plugins[other]);
+  }
+
+  async function loadPlugins() {
+    if (selectedAppid === null) return;
+    sortProposal = null;
+    mastersFirstError = null;
+    const ps = await run("List plugins", () => api.listPlugins(selectedAppid!));
+    if (ps) plugins = ps;
+  }
+
+  // Reorder a plugin by swapping with its neighbor (▲▼ / keyboard). A move that would
+  // violate masters-first is refused with the §B.2 inline warning (controls are also
+  // disabled for these, this is the defense-in-depth path).
+  async function onPluginReorder(i: number, dir: -1 | 1) {
+    const other = i + dir;
+    if (other < 0 || other >= plugins.length) return;
+    if (violatesMastersFirst(i, dir)) {
+      mastersFirstError = "Masters must load before regular plugins.";
+      return;
+    }
+    mastersFirstError = null;
+    const next = [...plugins];
+    [next[i], next[other]] = [next[other], next[i]];
+    plugins = next.map((p, idx) => ({ ...p, order: idx }));
+  }
+
+  async function onPluginToggle(name: string, enabled: boolean) {
+    if (selectedAppid === null) return;
+    const ok = await run("Set plugin enabled", () =>
+      api.setPluginEnabled(selectedAppid!, name, enabled),
+    );
+    if (ok !== undefined) {
+      plugins = plugins.map((p) => (p.name === name ? { ...p, enabled } : p));
+    }
+  }
+
+  async function onSavePluginOrder() {
+    if (selectedAppid === null) return;
+    // Re-index order to the current display order before persisting.
+    const ordered = plugins.map((p, idx) => ({ ...p, order: idx }));
+    const path = await run("Save plugin order", () =>
+      api.savePluginOrder(selectedAppid!, ordered),
+    );
+    if (path) status = `Wrote plugins.txt at ${path}`;
+  }
+
+  async function onSortWithLoot() {
+    if (selectedAppid === null) return;
+    const proposal = await run("Sort with LOOT", () =>
+      api.sortWithLoot(selectedAppid!),
+    );
+    if (proposal) sortProposal = proposal;
+  }
+
+  // Apply a LOOT proposal into the editable list (D-12: only on explicit confirm). The
+  // proposed name order is materialized into `plugins`, preserving each plugin's
+  // kind/enabled; unknown names (shouldn't happen) are dropped, missing ones appended.
+  function onApplySortedOrder() {
+    if (!sortProposal) return;
+    const byName = new Map(plugins.map((p) => [p.name, p]));
+    const applied: PluginInfo[] = [];
+    for (const name of sortProposal.proposed) {
+      const p = byName.get(name);
+      if (p) {
+        applied.push(p);
+        byName.delete(name);
+      }
+    }
+    // Any plugins not named in the proposal keep their relative order at the end.
+    for (const p of plugins) if (byName.has(p.name)) applied.push(p);
+    plugins = applied.map((p, idx) => ({ ...p, order: idx }));
+    sortProposal = null;
+    status = "Applied sorted order — review, then Save plugin order to write it.";
+  }
+
+  function onDiscardSort() {
+    sortProposal = null;
+  }
+
+  // Highlight plugins the proposal would MOVE (their proposed index differs from current).
+  const movedByLoot = $derived.by(() => {
+    if (!sortProposal) return new Set<string>();
+    const moved = new Set<string>();
+    sortProposal.proposed.forEach((name, proposedIdx) => {
+      const currentIdx = plugins.findIndex((p) => p.name === name);
+      if (currentIdx !== -1 && currentIdx !== proposedIdx) moved.add(name);
+    });
+    return moved;
+  });
+
   const warningLabel = (w: string) =>
     w === "CrossDevice"
       ? "Cross-device staging (EXDEV): hardlink/reflink unavailable — using symlink/copy. Stage on the same filesystem for best safety."
@@ -190,7 +304,13 @@
     deployedSig = null;
     mods = [];
     conflicts = [];
-    if (appid !== null) loadConflicts();
+    plugins = [];
+    sortProposal = null;
+    mastersFirstError = null;
+    if (appid !== null) {
+      loadConflicts();
+      loadPlugins();
+    }
   });
 
   // Load any already-managed games on mount.
@@ -426,6 +546,105 @@
         </table>
       {/if}
     </section>
+
+    <section>
+      <h2>5. Plugins &amp; load order — {selectedGame.name}</h2>
+
+      <div class="conflict-toolbar">
+        <button onclick={loadPlugins} disabled={busy}>Refresh</button>
+        <button onclick={onSortWithLoot} disabled={busy || plugins.length === 0}>
+          Sort with LOOT
+        </button>
+        <button class="cta" onclick={onSavePluginOrder} disabled={busy || plugins.length === 0}>
+          Save plugin order
+        </button>
+      </div>
+
+      <!-- LOOT proposal review (UI-SPEC §C): no silent apply (D-12) -->
+      {#if sortProposal}
+        <div class="loot-proposal">
+          {#if sortProposal.warnings.length > 0}
+            <div class="warn">
+              <strong>LOOT warnings</strong>
+              <ul>
+                {#each sortProposal.warnings as w, wi (wi)}<li>{w}</li>{/each}
+              </ul>
+            </div>
+          {/if}
+          <h3>Proposed order <span class="muted">(moved plugins highlighted)</span></h3>
+          <ol class="proposed">
+            {#each sortProposal.proposed as name, pi (name)}
+              <li class:moved={movedByLoot.has(name)}>
+                <span class="rank">{pi + 1}.</span>
+                <span class="mono">{name}</span>
+                {#if movedByLoot.has(name)}<span class="moved-tag">moved</span>{/if}
+              </li>
+            {/each}
+          </ol>
+          <div class="actions">
+            <button class="cta" onclick={onApplySortedOrder} disabled={busy}>
+              Apply sorted order
+            </button>
+            <button onclick={onDiscardSort} disabled={busy}>Discard</button>
+          </div>
+        </div>
+      {/if}
+
+      {#if mastersFirstError}
+        <div class="warn"><strong>⚠</strong> {mastersFirstError}</div>
+      {/if}
+
+      <!-- Plugin list, masters-first grouped (UI-SPEC §B.1/§B.2) -->
+      {#if plugins.length === 0}
+        <div class="empty">
+          <strong>No plugins found</strong>
+          <p class="muted">
+            No .esp/.esm/.esl files in the enabled mods or game Data folder. Install or
+            enable a mod that adds plugins.
+          </p>
+        </div>
+      {:else}
+        <ol class="priority plugins">
+          {#each plugins as p, i (p.name)}
+            {#if i === 0 || isMaster(plugins[i - 1]) !== isMaster(p)}
+              <li class="group-divider" aria-hidden="true">
+                {isMaster(p) ? "Masters (load first)" : "Regular plugins"}
+              </li>
+            {/if}
+            <li class:disabled={!p.enabled}>
+              <span class="reorder">
+                <button
+                  onclick={() => onPluginReorder(i, -1)}
+                  disabled={busy || i === 0 || violatesMastersFirst(i, -1)}
+                  aria-label="Move {p.name} up"
+                  title="Move up">▲</button>
+                <button
+                  onclick={() => onPluginReorder(i, 1)}
+                  disabled={busy || i === plugins.length - 1 || violatesMastersFirst(i, 1)}
+                  aria-label="Move {p.name} down"
+                  title="Move down">▼</button>
+              </span>
+              <label class="plugin-toggle">
+                <input
+                  type="checkbox"
+                  checked={p.enabled}
+                  disabled={busy}
+                  onchange={(e) => onPluginToggle(p.name, e.currentTarget.checked)} />
+              </label>
+              <span class="mono mod-name">{p.name}</span>
+              <span class="badge badge-{p.kind}">{kindBadge(p.kind)}</span>
+            </li>
+          {/each}
+        </ol>
+
+        <!-- plugins.txt preview (UI-SPEC §B.3): read-only asterisk output -->
+        <h3>plugins.txt preview <span class="muted">(asterisk = enabled)</span></h3>
+        <pre class="txt-preview">{plugins
+            .filter((p) => p.kind !== "esm")
+            .map((p) => (p.enabled ? "*" : "") + p.name)
+            .join("\n")}</pre>
+      {/if}
+    </section>
   {/if}
 </main>
 
@@ -513,4 +732,65 @@
   td.providers .loser { color: #777; }
   td.winner .dot { color: #0a66c2; }
   td.winner .winner-name { font-weight: 600; }
+
+  /* --- Plugin manager (UI-SPEC §B/§C) --- */
+  .mono { font-family: ui-monospace, monospace; }
+  ol.priority.plugins li.group-divider {
+    display: block;
+    border: none;
+    background: #f3f3f3;
+    color: #555;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0.2rem 0.5rem;
+    margin: 0.4rem 0 0.2rem;
+    min-height: 0;
+  }
+  .plugin-toggle { margin: 0; display: inline-flex; }
+  .badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.05rem 0.35rem;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    color: #555;
+  }
+  .badge-esm { background: #eef3fb; border-color: #b8cdec; color: #0a4a8a; }
+  .badge-esl { background: #f0eefb; border-color: #c8bce8; color: #5a3a8a; }
+  .badge-esp { background: #f3f3f3; }
+
+  .loot-proposal {
+    border: 1px solid #e6c200;
+    background: #fffdf5;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    margin: 0.5rem 0;
+  }
+  ol.proposed { list-style: none; padding: 0; margin: 0.3rem 0; }
+  ol.proposed li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+  }
+  ol.proposed li.moved { background: #fff8e5; }
+  .moved-tag {
+    font-size: 0.7rem;
+    color: #9a6700;
+    border: 1px solid #e6c200;
+    border-radius: 3px;
+    padding: 0 0.3rem;
+  }
+  pre.txt-preview {
+    background: #f3f3f3;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 0.3rem 0;
+  }
 </style>

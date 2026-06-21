@@ -14,7 +14,7 @@
 use std::fs;
 use std::path::Path;
 
-use loadorder::loot::{appdata_local_path, apply_load_order};
+use loadorder::loot::{appdata_local_path, apply_load_order, propose_sort};
 use loadorder::masterlist::{cache_path, ensure_masterlist};
 use nextwist_core::{Plugin, PluginKind};
 use tempfile::TempDir;
@@ -184,4 +184,54 @@ fn bundled_snapshot_is_present_and_nonempty() {
     let got = ensure_masterlist(dir.path(), SKYRIM_SE, true).unwrap();
     let body = fs::read_to_string(&got).unwrap();
     assert!(!body.is_empty(), "masterlist must be non-empty");
+}
+
+/// PLUGIN-03 (D-12): propose_sort returns a proposed order and WRITES NOTHING — the
+/// prefix Plugins.txt is untouched until a separate apply.
+#[test]
+fn propose_sort_returns_order_without_writing() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
+    write_min_plugin(&data, "Skyrim.esm", true);
+    write_min_plugin(&data, "Mod.esp", false);
+
+    let prefix_root = tmp.path().join("pfx");
+    testkit::fake_proton_prefix(&prefix_root, GAME_FOLDER, None).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, GAME_FOLDER);
+    // app_data dir for the masterlist cache (the bundled CC0 snapshot seeds it offline).
+    let app_data = tmp.path().join("appdata");
+    fs::create_dir_all(&app_data).unwrap();
+
+    let desired = vec![
+        plugin("Skyrim.esm", PluginKind::Esm, true, 0),
+        plugin("Mod.esp", PluginKind::Esp, true, 1),
+    ];
+
+    // Confirm no Plugins.txt exists before the proposal.
+    let plugins_txt = appdata_local.join("Plugins.txt");
+    assert!(!plugins_txt.exists(), "no Plugins.txt before propose");
+
+    let proposal =
+        propose_sort(SKYRIM_SE, &install, &appdata_local, &app_data, &desired).unwrap();
+
+    // A proposed order is returned over the loaded plugins.
+    assert!(
+        proposal.proposed.iter().any(|n| n == "Skyrim.esm"),
+        "Skyrim.esm in proposed: {:?}",
+        proposal.proposed
+    );
+    assert!(
+        proposal.proposed.iter().any(|n| n == "Mod.esp"),
+        "Mod.esp in proposed: {:?}",
+        proposal.proposed
+    );
+    // D-12: propose writes NOTHING — the prefix Plugins.txt must still be absent.
+    assert!(
+        !plugins_txt.exists(),
+        "propose_sort must not write Plugins.txt (propose-then-apply)"
+    );
+    // warnings is a list (may be empty); type contract holds.
+    let _ = &proposal.warnings;
 }
