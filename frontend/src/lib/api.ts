@@ -85,6 +85,24 @@ export interface SortProposal {
   warnings: string[];
 }
 
+/** A profile (mirrors core::Profile). Exactly one profile is active per game. */
+export interface Profile {
+  id: number;
+  appid: number;
+  name: string;
+  active: boolean;
+}
+
+/**
+ * Result of a profile switch (mirrors deploy::SwitchReport): the purge of the previous
+ * deployment, the deploy of the target profile's winner set, and the written plugins.txt.
+ */
+export interface SwitchReport {
+  purged: PurgeReport;
+  deployed: DeployReport;
+  plugins_txt: string;
+}
+
 export const detectGames = (): Promise<DetectedGame[]> => invoke("detect_games");
 
 export const addGame = (appid: number): Promise<Game> => invoke("add_game", { appid });
@@ -130,3 +148,15 @@ export const savePluginOrder = (appid: number, order: PluginInfo[]): Promise<str
 
 export const sortWithLoot = (appid: number): Promise<SortProposal> =>
   invoke("sort_with_loot", { appid });
+
+export const listProfiles = (appid: number): Promise<Profile[]> =>
+  invoke("list_profiles", { appid });
+
+export const createProfile = (appid: number, name: string): Promise<Profile> =>
+  invoke("create_profile", { appid, name });
+
+export const switchProfile = (appid: number, profileId: number): Promise<SwitchReport> =>
+  invoke("switch_profile", { appid, profileId });
+
+export const deleteProfile = (appid: number, profileId: number): Promise<boolean> =>
+  invoke("delete_profile", { appid, profileId });

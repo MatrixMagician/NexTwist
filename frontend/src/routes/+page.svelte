@@ -14,6 +14,8 @@
     FileConflict,
     PluginInfo,
     SortProposal,
+    Profile,
+    SwitchReport,
   } from "$lib/api";
 
   // Supported Bethesda AppIDs (display only; the backend enforces the allow-list).
@@ -49,6 +51,16 @@
   let plugins = $state<PluginInfo[]>([]);
   let sortProposal = $state<SortProposal | null>(null);
   let mastersFirstError = $state<string | null>(null);
+
+  // Profile state (UI-SPEC §D). `profiles` is the per-game selector source; the active
+  // profile is marked with the Accent indicator. Switching and deleting are disk-mutating
+  // and confirmation-gated (D-15): selecting a target opens a modal, and ONLY on confirm
+  // does the safe engine run (purge old → deploy new → write plugins.txt → mark active).
+  let profiles = $state<Profile[]>([]);
+  let newProfileName = $state("");
+  let switchTarget = $state<Profile | null>(null); // pending confirm-to-switch
+  let deleteTarget = $state<Profile | null>(null); // pending confirm-to-delete
+  let switchReport = $state<SwitchReport | null>(null);
 
   let busy = $state(false);
   let error = $state<string | null>(null);
@@ -280,6 +292,82 @@
     sortProposal = null;
   }
 
+  // --- Profiles (UI-SPEC §D) ---
+
+  async function loadProfiles() {
+    if (selectedAppid === null) return;
+    const ps = await run("List profiles", () => api.listProfiles(selectedAppid!));
+    if (ps) profiles = ps;
+  }
+
+  async function onCreateProfile() {
+    if (selectedAppid === null) return;
+    const name = newProfileName.trim();
+    if (!name) {
+      error = "Enter a profile name first.";
+      return;
+    }
+    const created = await run("Create profile", () =>
+      api.createProfile(selectedAppid!, name),
+    );
+    if (created) {
+      newProfileName = "";
+      await loadProfiles();
+    }
+  }
+
+  // Selecting a different profile does NOT mutate disk — it opens the confirmation modal
+  // (UI-SPEC §D.2 / D-15). The actual switch runs only on confirm.
+  function onSelectProfile(p: Profile) {
+    if (p.active) return; // already the deployed profile
+    switchTarget = p;
+  }
+
+  // Confirmed switch: run the safe-engine reconcile (purge old → deploy new → plugins.txt
+  // → mark active), then reload profiles + the per-profile mod/plugin lists (§D.3).
+  async function onConfirmSwitch() {
+    const target = switchTarget;
+    if (selectedAppid === null || !target) return;
+    switchTarget = null;
+    const report = await run("Switch profile", () =>
+      api.switchProfile(selectedAppid!, target.id),
+    );
+    if (report) {
+      switchReport = report;
+      // Per-profile preservation (§D.3): the deployed set changed — reload the lists so the
+      // conflict/plugin views reflect the new profile's set/order, and reset the pending
+      // signature (the on-disk set now matches the freshly-deployed profile).
+      await loadProfiles();
+      await loadConflicts();
+      await loadPlugins();
+      deployedSig = currentSig;
+    }
+  }
+
+  function onCancelSwitch() {
+    switchTarget = null;
+  }
+
+  function onRequestDelete(p: Profile) {
+    deleteTarget = p;
+  }
+
+  // Confirmed delete: removes the profile + its mod/plugin selections only. Staged mod
+  // files are KEPT (D-14, shared staging). Idempotent at the store.
+  async function onConfirmDelete() {
+    const target = deleteTarget;
+    if (selectedAppid === null || !target) return;
+    deleteTarget = null;
+    const ok = await run("Delete profile", () =>
+      api.deleteProfile(selectedAppid!, target.id),
+    );
+    if (ok !== undefined) await loadProfiles();
+  }
+
+  function onCancelDelete() {
+    deleteTarget = null;
+  }
+
   // Highlight plugins the proposal would MOVE (their proposed index differs from current).
   const movedByLoot = $derived.by(() => {
     if (!sortProposal) return new Set<string>();
@@ -307,9 +395,15 @@
     plugins = [];
     sortProposal = null;
     mastersFirstError = null;
+    profiles = [];
+    newProfileName = "";
+    switchTarget = null;
+    deleteTarget = null;
+    switchReport = null;
     if (appid !== null) {
       loadConflicts();
       loadPlugins();
+      loadProfiles();
     }
   });
 
@@ -645,6 +739,107 @@
             .join("\n")}</pre>
       {/if}
     </section>
+
+    <!-- Profiles (UI-SPEC §D): selector + confirmation-gated switch/delete (D-15) -->
+    <section>
+      <h2>6. Profiles — {selectedGame.name}</h2>
+
+      <div class="conflict-toolbar">
+        <input
+          bind:value={newProfileName}
+          placeholder="New profile name"
+          onkeydown={(e) => e.key === "Enter" && onCreateProfile()} />
+        <button class="cta" onclick={onCreateProfile} disabled={busy || !newProfileName.trim()}>
+          Create profile
+        </button>
+      </div>
+
+      {#if profiles.length === 0}
+        <div class="empty">
+          <strong>Default profile</strong>
+          <p class="muted">
+            This game has one profile. Create another to keep separate mod/plugin setups.
+          </p>
+        </div>
+      {:else}
+        <!-- Profile selector (§D.1): active = deployed, marked with the Accent indicator -->
+        <ul class="priority profiles">
+          {#each profiles as p (p.id)}
+            <li class:active={p.active}>
+              {#if p.active}
+                <span class="active-dot" aria-hidden="true">●</span>
+                <span class="prof-name">{p.name}</span>
+                <span class="active-label">active</span>
+              {:else}
+                <span class="active-dot placeholder" aria-hidden="true">○</span>
+                <button class="prof-select" onclick={() => onSelectProfile(p)} disabled={busy}>
+                  {p.name}
+                </button>
+              {/if}
+              <span class="prof-actions">
+                <button
+                  class="danger-link"
+                  onclick={() => onRequestDelete(p)}
+                  disabled={busy}
+                  title="Delete profile">Delete</button>
+              </span>
+            </li>
+          {/each}
+        </ul>
+        <p class="muted prof-hint">
+          Each profile keeps its own enabled-mod set, priority order, and plugin order.
+          Switching reloads those lists.
+        </p>
+      {/if}
+
+      {#if switchReport}
+        <div class="report">
+          <h4>Switch report</h4>
+          <p>
+            Purged {switchReport.purged.removed} file(s) → deployed
+            {switchReport.deployed.deployed} file(s). The game stayed reversible across the
+            switch.
+          </p>
+          <p class="muted">plugins.txt: <code>{switchReport.plugins_txt}</code></p>
+        </div>
+      {/if}
+    </section>
+  {/if}
+
+  <!-- Confirmation-gated profile switch (UI-SPEC §D.2 / Copywriting). Disk is mutated
+       ONLY on confirm; the safe engine runs purge-old → deploy-new. -->
+  {#if switchTarget}
+    <div class="overlay" role="dialog" aria-modal="true" aria-labelledby="switch-title">
+      <div class="modal">
+        <h3 id="switch-title">Switch to "{switchTarget.name}"?</h3>
+        <p>
+          This purges the current deployment and deploys "{switchTarget.name}". Your game
+          stays fully reversible. Continue?
+        </p>
+        <div class="actions">
+          <button class="cta" onclick={onConfirmSwitch} disabled={busy}>Switch</button>
+          <button onclick={onCancelSwitch} disabled={busy}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Destructive delete confirmation (Copywriting): Destructive-red confirm; staged
+       mod files are kept (D-14). -->
+  {#if deleteTarget}
+    <div class="overlay" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+      <div class="modal">
+        <h3 id="delete-title">Delete "{deleteTarget.name}"?</h3>
+        <p>
+          This removes the profile and its mod/plugin selections. Staged mod files are
+          kept. This can't be undone.
+        </p>
+        <div class="actions">
+          <button class="destructive" onclick={onConfirmDelete} disabled={busy}>Delete</button>
+          <button onclick={onCancelDelete} disabled={busy}>Cancel</button>
+        </div>
+      </div>
+    </div>
   {/if}
 </main>
 
@@ -694,7 +889,8 @@
   h3 .muted { font-weight: 400; font-size: 0.85rem; }
 
   ol.priority { list-style: none; padding: 0; margin: 0.4rem 0; }
-  ol.priority li {
+  ol.priority li,
+  ul.priority li {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -793,4 +989,74 @@
     white-space: pre;
     margin: 0.3rem 0;
   }
+
+  /* --- Profiles (UI-SPEC §D) --- */
+  ul.priority.profiles { list-style: none; padding: 0; margin: 0.4rem 0; }
+  ul.priority.profiles li.active { border-color: #0a66c2; background: #f5f9ff; }
+  /* Accent indicator marks the active (deployed) profile (§D.1). */
+  .active-dot { color: #0a66c2; min-width: 1rem; }
+  .active-dot.placeholder { color: #ccc; }
+  .prof-name { font-weight: 600; flex: 1; }
+  .active-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #0a66c2;
+    border: 1px solid #b8cdec;
+    background: #eef3fb;
+    border-radius: 3px;
+    padding: 0 0.35rem;
+  }
+  .prof-select {
+    flex: 1;
+    text-align: left;
+    background: none;
+    border: none;
+    font-weight: 600;
+    color: #0a4a8a;
+    text-decoration: underline;
+    padding: 0;
+    margin: 0;
+  }
+  .prof-actions { margin-left: auto; }
+  .danger-link {
+    background: none;
+    border: none;
+    color: #cf222e;
+    padding: 0;
+    margin: 0;
+    font-size: 0.85rem;
+    text-decoration: underline;
+  }
+  .prof-hint { font-size: 0.85rem; margin: 0.3rem 0 0; }
+
+  /* Destructive (red) confirm button — reserved for delete (Copywriting rule). */
+  button.destructive {
+    background: #cf222e;
+    color: #fff;
+    border: 1px solid #cf222e;
+    font-weight: 600;
+  }
+  button.destructive:hover:not(:disabled) { background: #a40e26; }
+
+  /* Confirmation modal (every disk-mutating profile action is gated — §D.2). */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  .modal {
+    background: #fff;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    max-width: 28rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  }
+  .modal h3 { margin-top: 0; }
+  .modal .actions { margin-bottom: 0; }
 </style>
