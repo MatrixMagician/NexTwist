@@ -257,6 +257,84 @@ impl NexusClient {
             display_name: file.name,
         })
     }
+
+    /// Resolve a pinned `(mod_id, file_id)`'s availability over REST v1 (COLL-02 resolve gate).
+    ///
+    /// Reuses the same proven v1 file-info endpoint as [`mod_file_metadata`] — gated through
+    /// `limiter.until_ready()` FIRST — but classifies the result for the Collection resolve
+    /// report WITHOUT downloading anything:
+    /// * a 200 whose file `category_name` (case-insensitively) is `ARCHIVED` ⇒
+    ///   [`FileAvailability::Archived`];
+    /// * any other 200 ⇒ [`FileAvailability::Available`];
+    /// * a 404 (the file id no longer exists / was removed) ⇒ [`FileAvailability::Unavailable`].
+    ///
+    /// This issues a single METADATA read — never a `download_link` or CDN request — so the
+    /// "zero downloads before the resolve report is accepted" gate (T-04-10) holds structurally.
+    ///
+    /// # Errors
+    /// * [`NexusError::RateLimited`] on HTTP 429.
+    /// * [`NexusError::Http`] for any non-404 transport/status failure (a 404 is a normal
+    ///   `Unavailable` result, not an error).
+    pub async fn file_availability(
+        &self,
+        game_domain: &str,
+        mod_id: u64,
+        file_id: u64,
+    ) -> Result<FileAvailability, NexusError> {
+        self.limiter.until_ready().await;
+
+        let url = format!(
+            "{}/v1/games/{}/mods/{}/files/{}.json",
+            self.base, game_domain, mod_id, file_id
+        );
+
+        let resp = self
+            .authed(self.http.get(&url))
+            .send()
+            .await
+            .map_err(|e| NexusError::Http(e.to_string()))?;
+
+        let status = resp.status();
+        let headers = resp.headers().clone();
+        self.limiter.note_headers(&headers, status == StatusCode::TOO_MANY_REQUESTS);
+
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            return Err(NexusError::RateLimited(RateLimiter::retry_after_secs(&headers)));
+        }
+        // A 404 means the pinned file was removed — a normal `Unavailable` classification,
+        // not a transport error (the resolve report must show it, not abort the batch).
+        if status == StatusCode::NOT_FOUND {
+            return Ok(FileAvailability::Unavailable);
+        }
+        if !status.is_success() {
+            return Err(NexusError::Http(format!("HTTP {}", status.as_u16())));
+        }
+
+        let file: V1FileInfo = resp
+            .json()
+            .await
+            .map_err(|e| NexusError::Http(e.to_string()))?;
+
+        if file.category_name.eq_ignore_ascii_case("archived") {
+            Ok(FileAvailability::Archived)
+        } else {
+            Ok(FileAvailability::Available)
+        }
+    }
+}
+
+/// The availability of a pinned NexusMods file, from a single v1 file-info metadata read.
+///
+/// Drives the Collection resolve report's per-mod status for `nexus` sources (COLL-02). It
+/// is deliberately download-free: it is computed from metadata only, before any download.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileAvailability {
+    /// The pinned file exists and is downloadable.
+    Available,
+    /// The pinned file exists but is archived (still downloadable by Premium, flagged).
+    Archived,
+    /// The pinned file id no longer exists (removed) — a 404 from the file-info endpoint.
+    Unavailable,
 }
 
 /// Minimal percent-encoding for a query-parameter value (RFC 3986 unreserved set kept
@@ -291,4 +369,9 @@ struct V1FileInfo {
     /// The file's version string (e.g. "1.6.3").
     #[serde(default)]
     version: String,
+    /// The file's category label (e.g. "MAIN", "OLD_VERSION", "ARCHIVED"). Used by
+    /// [`NexusClient::file_availability`] to flag an archived pinned file in the Collection
+    /// resolve report. `#[serde(default)]` keeps the parse resilient if Nexus omits it.
+    #[serde(default)]
+    category_name: String,
 }

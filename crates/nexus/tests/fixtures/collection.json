@@ -1,0 +1,143 @@
+{
+  "info": {
+    "author": "ModderOne",
+    "authorUrl": "https://next.nexusmods.com/profile/ModderOne",
+    "name": "Skyrim Essentials",
+    "description": "A curated starter collection for Skyrim Special Edition.",
+    "installInstructions": "Install in order; SKSE must be installed manually.",
+    "domainName": "skyrimspecialedition",
+    "gameVersions": ["1.6.1170"]
+  },
+  "mods": [
+    {
+      "name": "SkyUI",
+      "version": "5.2.0",
+      "optional": false,
+      "domainName": "skyrimspecialedition",
+      "phase": 0,
+      "source": {
+        "type": "nexus",
+        "modId": 12604,
+        "fileId": 120063,
+        "md5": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "fileSize": 1048576,
+        "updatePolicy": "exact",
+        "logicalFilename": "SkyUI_5_2_SE",
+        "tag": "skyui-tag"
+      },
+      "hashes": [
+        { "path": "interface/skyui.swf", "md5": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+      ],
+      "choices": {
+        "type": "fomod",
+        "options": [
+          {
+            "name": "Main Installation",
+            "groups": [
+              {
+                "name": "UI Variant",
+                "choices": [
+                  { "name": "Full UI", "idx": 0 }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "fileOverrides": ["interface/skyui.swf"]
+    },
+    {
+      "name": "Unofficial Skyrim Special Edition Patch",
+      "version": "4.3.1",
+      "optional": false,
+      "domainName": "skyrimspecialedition",
+      "phase": 0,
+      "source": {
+        "type": "nexus",
+        "modId": 266,
+        "fileId": 99999,
+        "md5": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    {
+      "name": "Archived Texture Pack",
+      "version": "1.0.0",
+      "optional": true,
+      "domainName": "skyrimspecialedition",
+      "phase": 1,
+      "source": {
+        "type": "nexus",
+        "modId": 5000,
+        "fileId": 50001
+      }
+    },
+    {
+      "name": "Removed Mod",
+      "version": "0.9.0",
+      "optional": true,
+      "domainName": "skyrimspecialedition",
+      "source": {
+        "type": "nexus",
+        "modId": 6000,
+        "fileId": 60001
+      }
+    },
+    {
+      "name": "Collection Config Patch",
+      "version": "1.0.0",
+      "optional": false,
+      "domainName": "skyrimspecialedition",
+      "phase": 2,
+      "source": {
+        "type": "bundle"
+      },
+      "patches": {
+        "scripts/quest.pex": "patch-blob-base64"
+      }
+    },
+    {
+      "name": "SKSE64",
+      "version": "2.2.6",
+      "optional": false,
+      "domainName": "skyrimspecialedition",
+      "source": {
+        "type": "direct",
+        "url": "https://skse.silverlock.org/beta/skse64_2_02_06.7z",
+        "instructions": "Download SKSE manually and place it in the game root."
+      },
+      "instructions": "SKSE must be installed manually — it is hosted off-Nexus."
+    },
+    {
+      "name": "Browse-Only Dependency",
+      "version": "1.2.3",
+      "optional": true,
+      "domainName": "skyrimspecialedition",
+      "source": {
+        "type": "browse",
+        "url": "https://example.com/some-mod-page"
+      }
+    }
+  ],
+  "modRules": [
+    {
+      "type": "after",
+      "source": { "tag": "skyui-tag", "logicalFileName": "SkyUI_5_2_SE" },
+      "reference": { "logicalFileName": "Unofficial Skyrim Special Edition Patch" }
+    },
+    {
+      "type": "before",
+      "source": { "logicalFileName": "Collection Config Patch" },
+      "reference": { "tag": "skyui-tag" }
+    },
+    {
+      "type": "conflicts",
+      "source": { "logicalFileName": "Archived Texture Pack" },
+      "reference": { "logicalFileName": "SkyUI" }
+    },
+    {
+      "type": "after",
+      "source": { "logicalFileName": "Some Mod That Is Not In This Collection" },
+      "reference": { "logicalFileName": "A Phantom Reference" }
+    }
+  ]
+}

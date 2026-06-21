@@ -23,16 +23,23 @@
 
 pub mod auth;
 pub mod client;
+pub mod collection;
 pub mod download;
 pub mod error;
 pub mod model;
 pub mod ratelimit;
+pub mod resolve;
 
 pub use auth::{
     build_authorize_url, exchange_code, validate_api_key, AuthorizeRequest, API_BASE, TOKEN_BASE,
 };
-pub use client::{NexusAuth, NexusClient, NEXUS_API_BASE};
+pub use client::{FileAvailability, NexusAuth, NexusClient, NEXUS_API_BASE};
+pub use collection::{
+    ChoiceGroup, ChoiceOption, ChoiceStep, Choices, Collection, CollectionInfo, CollectionMod,
+    CollectionModRule, ModReference, ModRuleType, SourceInfo, SourceType,
+};
 pub use download::{download_to, CancelFlag};
 pub use error::NexusError;
 pub use model::{DownloadLink, ModFile, NxmLink, NxmLinkKind, OAuthTokens, UserInfo};
 pub use ratelimit::RateLimiter;
+pub use resolve::{resolve_collection, ModStatus, ResolveReport, ResolvedMod};
