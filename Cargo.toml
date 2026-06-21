@@ -80,6 +80,13 @@ mockito = "1.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# XML parsing for the FOMOD ModuleConfig.xml engine (Phase 4, Plan 01 — crates/fomod).
+# quick-xml 0.40 is the highest-download pure-Rust XML crate (MIT, no native/C dep,
+# rustls/AppImage-friendly, cargo-deny-clean). The `serialize` feature enables serde
+# `Deserialize` so the FOMOD 5.x XSD maps directly to typed Rust structs/enums.
+# CONTEXT-locked + legitimacy-audited 2026-06-21 (RESEARCH Package Legitimacy Audit: OK).
+quick-xml = { version = "0.40", features = ["serialize"] }
+
 # Hashing (content-addressed vanilla store + pristine assertions)
 blake3 = "1.8"
 
@@ -104,6 +111,7 @@ extract = { path = "crates/extract", package = "nextwist-extract" }
 deploy = { path = "crates/deploy", package = "nextwist-deploy" }
 loadorder = { path = "crates/loadorder", package = "nextwist-loadorder" }
 nexus = { path = "crates/nexus", package = "nextwist-nexus" }
+fomod = { path = "crates/fomod", package = "nextwist-fomod" }
 
 # Tauri shell (Plan 06). Pinned to the 2.11 line per CLAUDE.md. The embedded SvelteKit
 # SPA is served via `frontendDist` (no extra features needed); we keep the default

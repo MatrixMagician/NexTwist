@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>Conditional Installs Mod</moduleName>
+  <requiredInstallFiles>
+    <file source="base/core.esp" destination="core.esp"/>
+  </requiredInstallFiles>
+  <installSteps order="Explicit">
+    <installStep name="Pick Patch">
+      <optionalFileGroups order="Explicit">
+        <group name="Patches" type="SelectAny">
+          <plugins order="Explicit">
+            <plugin name="Enable Patch A">
+              <description>Turn on patch A.</description>
+              <conditionFlags>
+                <flag name="patchA">on</flag>
+              </conditionFlags>
+              <typeDescriptor>
+                <type name="Optional"/>
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+  <conditionalFileInstalls>
+    <patterns>
+      <pattern>
+        <dependencies operator="And">
+          <flagDependency flag="patchA" value="on"/>
+        </dependencies>
+        <files>
+          <file source="patches/patchA.esp" destination="patchA.esp"/>
+        </files>
+      </pattern>
+    </patterns>
+  </conditionalFileInstalls>
+</config>

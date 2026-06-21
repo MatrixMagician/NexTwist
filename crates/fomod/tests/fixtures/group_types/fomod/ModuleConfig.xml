@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>All Group Types Mod</moduleName>
+  <installSteps order="Explicit">
+    <installStep name="Every Group Type">
+      <optionalFileGroups order="Explicit">
+        <group name="ExactlyOne" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="EO-A"><typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+          </plugins>
+        </group>
+        <group name="AtMostOne" type="SelectAtMostOne">
+          <plugins order="Explicit">
+            <plugin name="AM-A"><typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+          </plugins>
+        </group>
+        <group name="AtLeastOne" type="SelectAtLeastOne">
+          <plugins order="Explicit">
+            <plugin name="AL-A"><typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+          </plugins>
+        </group>
+        <group name="All" type="SelectAll">
+          <plugins order="Explicit">
+            <plugin name="ALL-A"><typeDescriptor><type name="Required"/></typeDescriptor></plugin>
+          </plugins>
+        </group>
+        <group name="Any" type="SelectAny">
+          <plugins order="Explicit">
+            <plugin name="ANY-A"><typeDescriptor><type name="Optional"/></typeDescriptor></plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>

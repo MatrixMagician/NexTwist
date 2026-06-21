@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>Conditional Plugin Type Mod</moduleName>
+  <installSteps order="Explicit">
+    <installStep name="Prereq">
+      <optionalFileGroups order="Explicit">
+        <group name="Prereq Flags" type="SelectAny">
+          <plugins order="Explicit">
+            <plugin name="Has Prereq">
+              <conditionFlags><flag name="prereq">yes</flag></conditionFlags>
+              <typeDescriptor><type name="Optional"/></typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+    <installStep name="Main">
+      <optionalFileGroups order="Explicit">
+        <group name="Addon" type="SelectAtMostOne">
+          <plugins order="Explicit">
+            <plugin name="Compatibility Addon">
+              <description>Becomes Recommended only when the prereq flag is set.</description>
+              <files>
+                <file source="addon/compat.esp" destination="compat.esp"/>
+              </files>
+              <typeDescriptor>
+                <dependencyType>
+                  <defaultType name="NotUsable"/>
+                  <patterns>
+                    <pattern>
+                      <dependencies operator="And">
+                        <flagDependency flag="prereq" value="yes"/>
+                      </dependencies>
+                      <type name="Recommended"/>
+                    </pattern>
+                  </patterns>
+                </dependencyType>
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>

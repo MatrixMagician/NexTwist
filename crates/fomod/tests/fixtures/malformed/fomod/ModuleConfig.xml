@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>Broken Mod</moduleName>
+  <installSteps order="Explicit">
+    <installStep name="Broken">
+      <optionalFileGroups order="Explicit">
+        <group name="Oops" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Truncated">
+              <description>This document is not well-formed XML.</description>
+              <typeDescriptor>
+                <type name="Optional"/>
+              </typeDescriptor>
+            <!-- missing </plugin>, </plugins>, </group>, ... : truncated below -->

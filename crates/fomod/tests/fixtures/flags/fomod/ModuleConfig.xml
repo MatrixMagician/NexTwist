@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>Flag Driven Mod</moduleName>
+  <installSteps order="Explicit">
+    <installStep name="Choose Variant">
+      <optionalFileGroups order="Explicit">
+        <group name="Variant" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Use Hi-Res">
+              <description>Enable the high-resolution path.</description>
+              <conditionFlags>
+                <flag name="hires">on</flag>
+              </conditionFlags>
+              <typeDescriptor>
+                <type name="Optional"/>
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Use Lo-Res">
+              <description>Enable the low-resolution path.</description>
+              <conditionFlags>
+                <flag name="hires">off</flag>
+              </conditionFlags>
+              <typeDescriptor>
+                <type name="Optional"/>
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+    <installStep name="Hi-Res Options">
+      <visible>
+        <dependencies operator="And">
+          <flagDependency flag="hires" value="on"/>
+        </dependencies>
+      </visible>
+      <optionalFileGroups order="Explicit">
+        <group name="HiRes Extras" type="SelectAny">
+          <plugins order="Explicit">
+            <plugin name="Extra Textures">
+              <description>Adds extra hi-res textures.</description>
+              <files>
+                <file source="hires/extra.dds" destination="textures/extra.dds"/>
+              </files>
+              <typeDescriptor>
+                <type name="Optional"/>
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>

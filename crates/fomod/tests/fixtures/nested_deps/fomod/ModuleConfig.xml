@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>Nested Composite Deps Mod</moduleName>
+  <installSteps order="Explicit">
+    <installStep name="Setup">
+      <optionalFileGroups order="Explicit">
+        <group name="Flags" type="SelectAny">
+          <plugins order="Explicit">
+            <plugin name="Set A">
+              <conditionFlags><flag name="a">1</flag></conditionFlags>
+              <typeDescriptor><type name="Optional"/></typeDescriptor>
+            </plugin>
+            <plugin name="Set B">
+              <conditionFlags><flag name="b">1</flag></conditionFlags>
+              <typeDescriptor><type name="Optional"/></typeDescriptor>
+            </plugin>
+            <plugin name="Set C">
+              <conditionFlags><flag name="c">1</flag></conditionFlags>
+              <typeDescriptor><type name="Optional"/></typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+  <conditionalFileInstalls>
+    <patterns>
+      <pattern>
+        <dependencies operator="Or">
+          <flagDependency flag="a" value="1"/>
+          <dependencies operator="And">
+            <flagDependency flag="b" value="1"/>
+            <flagDependency flag="c" value="1"/>
+          </dependencies>
+        </dependencies>
+        <files>
+          <file source="combo/result.esp" destination="result.esp"/>
+        </files>
+      </pattern>
+    </patterns>
+  </conditionalFileInstalls>
+</config>
