@@ -305,6 +305,86 @@ export const applyFomod = (
 ): Promise<FomodApplyResult> =>
   invoke("apply_fomod", { appid, archive, name, selection });
 
+// --- Collections (COLL-01..05). 1:1 mirrors of commands/collections.rs. The resolve
+//     report is a HARD GATE rendered BEFORE any download; the Premium gate blocks a free
+//     account before any download starts. ---
+
+/** The acquisition source of a Collection mod (mirrors nexus::SourceType, lowercase). */
+export type CollectionSourceType = "nexus" | "bundle" | "direct" | "browse" | "manual";
+
+/** The resolved availability of one Collection mod (mirrors nexus::ModStatus, PascalCase). */
+export type ModStatus = "Available" | "Archived" | "Unavailable" | "Manual";
+
+/** One mod's row in the resolve report (mirrors nexus::ResolvedMod). */
+export interface ResolvedMod {
+  name: string;
+  version: string;
+  source: CollectionSourceType;
+  status: ModStatus;
+}
+
+/** The resolve report — every pinned mod classified with ZERO downloads (mirrors
+ *  nexus::ResolveReport). The "Download Collection" CTA is gated behind accepting this. */
+export interface ResolveReport {
+  mods: ResolvedMod[];
+}
+
+/** One off-Nexus manual step (mirrors commands::collections::ManualStep). Never fetched. */
+export interface ManualStep {
+  name: string;
+  instructions: string | null;
+  url: string | null;
+}
+
+/** The outcome of a bulk Collection download (mirrors commands::collections::
+ *  DownloadCollectionReport). A per-mod failure does NOT abort the batch. */
+export interface DownloadCollectionReport {
+  collection_id: number;
+  downloaded: number;
+  /** `[mod name, reason]` per-mod failures (the batch continued past each). */
+  failed: [string, string][];
+  manual_steps: ManualStep[];
+  /** `[mod name, reason]` mods whose pinned FOMOD choice no longer matches the installer. */
+  stale_choices: [string, string][];
+}
+
+/** Resolve a Collection manifest into the resolve report — the resolve-before-download HARD
+ *  GATE (COLL-02). Issues ONLY metadata reads (zero downloads, zero disk writes). */
+export const resolveCollection = (
+  appid: number,
+  manifestJson: string,
+): Promise<ResolveReport> => invoke("resolve_collection", { appid, manifestJson });
+
+/** Bulk-download a Collection's available mods after the report is accepted (COLL-02/03).
+ *  Enforces the Premium gate FIRST — a free account throws the Premium-required notice and
+ *  starts NO download. Per-mod progress drives off the same `download://progress` events. */
+export const downloadCollection = (args: {
+  appid: number;
+  manifestJson: string;
+  slug: string;
+  revision: number;
+}): Promise<DownloadCollectionReport> =>
+  invoke("download_collection", {
+    appid: args.appid,
+    manifestJson: args.manifestJson,
+    slug: args.slug,
+    revision: args.revision,
+  });
+
+/** Deploy an installed Collection as its dedicated profile via the existing switch_profile
+ *  path (COLL-04). No new deploy primitive. */
+export const deployCollection = (
+  appid: number,
+  collectionId: number,
+): Promise<SwitchReport> => invoke("deploy_collection", { appid, collectionId });
+
+/** Uninstall an installed Collection fully reversibly (COLL-05): purge-to-pristine + drop
+ *  the profile + remove the staged mods, leaving the game byte-for-byte vanilla. */
+export const uninstallCollection = (
+  appid: number,
+  collectionId: number,
+): Promise<PurgeReport> => invoke("uninstall_collection", { appid, collectionId });
+
 export const detectGames = (): Promise<DetectedGame[]> => invoke("detect_games");
 
 export const addGame = (appid: number): Promise<Game> => invoke("add_game", { appid });
