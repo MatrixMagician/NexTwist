@@ -1,10 +1,13 @@
 //! The composite-dependency / flag evaluator + live plugin type-state resolver.
 //!
-//! STUB (Task 1 RED): signatures only. Implemented in Task 2 (GREEN).
+//! `eval` is a pure boolean tree-walk over a [`CompositeDependency`]: it reads the
+//! accumulated flag set and the (optional) installed-file state and returns whether the
+//! dependency holds. It executes NO code — the name `eval` denotes FOMOD condition
+//! evaluation, not interpretation of any expression language.
 
 use std::collections::HashMap;
 
-use crate::model::{CompositeDependency, FileState, PluginType, TypeDescriptor};
+use crate::model::{CompositeDependency, FileState, Operator, PluginType, TypeDescriptor};
 
 /// The accumulated flag set: flag name → current value (set by selected options).
 pub type FlagSet = HashMap<String, String>;
@@ -29,10 +32,38 @@ impl InstalledFiles {
 
 /// Recursively evaluate a [`CompositeDependency`] against `flags` + `files`.
 ///
-/// `And` ⇒ all arms hold; `Or` ⇒ any arm holds. Empty `And` ⇒ true, empty `Or` ⇒ false.
+/// `And` ⇒ all arms hold; `Or` ⇒ any arm holds. Empty `And` ⇒ true, empty `Or` ⇒ false
+/// (the natural identity for each operator). Game/fomm version arms are treated as
+/// satisfied during the headless dry-run (no live game-version oracle here); they exist
+/// in the AST and can be wired to a real version once the apply path supplies one.
 pub fn eval(dep: &CompositeDependency, flags: &FlagSet, files: &InstalledFiles) -> bool {
-    let _ = (dep, flags, files);
-    unimplemented!("eval implemented in Task 2 (GREEN)")
+    // Collect each arm's truth value lazily so And short-circuits on the first false and
+    // Or on the first true.
+    let flag_arms = dep
+        .flag_deps
+        .iter()
+        .map(|f| flags.get(&f.flag).is_some_and(|v| v == &f.value));
+
+    let file_arms = dep
+        .file_deps
+        .iter()
+        .map(|f| files.state(&f.file) == f.state);
+
+    // Version dependencies: no live game version in the pure dry-run ⇒ treated as held.
+    // (Documented behavior; the apply path can supply a real comparator later.)
+    let version_arms = std::iter::repeat_n(true, dep.game_deps.len() + dep.fomm_deps.len());
+
+    let nested_arms = dep.nested.iter().map(|inner| eval(inner, flags, files));
+
+    let mut results = flag_arms
+        .chain(file_arms)
+        .chain(version_arms)
+        .chain(nested_arms);
+
+    match dep.operator {
+        Operator::And => results.all(|r| r),
+        Operator::Or => results.any(|r| r),
+    }
 }
 
 /// Resolve the live plugin type for a [`TypeDescriptor`] given the current `flags`/`files`:
@@ -43,6 +74,26 @@ pub fn plugin_type_state(
     flags: &FlagSet,
     files: &InstalledFiles,
 ) -> PluginType {
-    let _ = (descriptor, flags, files);
-    unimplemented!("plugin_type_state implemented in Task 2 (GREEN)")
+    if let Some(static_type) = &descriptor.static_type {
+        return static_type.name;
+    }
+    if let Some(dt) = &descriptor.dependency_type {
+        if let Some(list) = &dt.patterns {
+            for pattern in &list.patterns {
+                let holds = pattern
+                    .dependencies
+                    .as_ref()
+                    .map(|d| eval(d, flags, files))
+                    // A pattern with no <dependencies> always applies.
+                    .unwrap_or(true);
+                if holds {
+                    return pattern.plugin_type.name;
+                }
+            }
+        }
+        return dt.default_type.name;
+    }
+    // Neither a static nor a dependency type present — default to Optional so a partially
+    // specified descriptor never silently disables an option.
+    PluginType::Optional
 }

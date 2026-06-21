@@ -209,8 +209,10 @@ fn resolve_simple_selected_option_yields_file_install() {
 fn resolve_includes_required_and_conditional() {
     let m = parse_module_config(&fixture("conditional")).unwrap();
     // patchA flag on ⇒ requiredInstallFiles + the conditional patchA file.
-    let mut sel = Selection::default();
-    sel.flags = flags(&[("patchA", "on")]);
+    let sel = Selection {
+        flags: flags(&[("patchA", "on")]),
+        ..Default::default()
+    };
     let plan = resolve(&m, &sel).expect("resolve conditional");
     let dests: Vec<PathBuf> = plan.iter().map(|f| f.dest_rel.clone()).collect();
     assert!(dests.contains(&PathBuf::from("core.esp")), "required core.esp present");
@@ -233,8 +235,10 @@ fn resolve_performs_no_filesystem_write() {
     // set to a fresh empty temp dir and assert the dir stays empty afterwards.
     let tmp = tempfile::tempdir().expect("temp dir");
     let m = parse_module_config(&fixture("conditional")).unwrap();
-    let mut sel = Selection::default();
-    sel.flags = flags(&[("patchA", "on")]);
+    let sel = Selection {
+        flags: flags(&[("patchA", "on")]),
+        ..Default::default()
+    };
 
     let before: Vec<_> = std::fs::read_dir(tmp.path()).unwrap().collect();
     assert!(before.is_empty(), "precondition: temp dir empty");
