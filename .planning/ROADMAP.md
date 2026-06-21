@@ -91,12 +91,21 @@ Plans:
   3. User can one-click install from an nxm:// link on nexusmods.com, routed to the running app via a registered Linux deep-link handler
   4. A downloaded mod is auto-extracted into staging, ready to deploy, while NexTwist respects NexusMods API rate limits (no UI freeze on large downloads)
 
-**Plans**: TBD
+**Plans**: 3 plans
 **UI hint**: yes
 
 Plans:
+**Wave 1**
 
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md — Auth spine slice (NEXUS-01/02): crates/nexus scaffold + error/model + OAuth2-PKCE & API-key auth (mockito) + shell keyring hard-fail-no-plaintext + login/logout commands + AppState + account panel UI
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 03-02-PLAN.md — Premium download-into-staging slice (NEXUS-03/05/06): hybrid REST-v1-download-link / GraphQL-v2-metadata client + governor rate limiter + streaming download w/ progress + V4 provenance migration + store facade + core NexusSource + downloads command (extract→stage→provenance) + downloads-list UI
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 03-03-PLAN.md — Free-user nxm:// handoff slice (NEXUS-04, NXM-01): headless strict nxm:// parser + single-instance-first + deep-link wiring + on_open_url routing (oauth-callback vs download) + free-user key+expires redemption + nxm:// toast / free-user hint / expired-link Warning UI
 
 ### Phase 4: Guided Installers & Collections
 
@@ -144,6 +153,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Safe Local Round-Trip | 7/7 | Complete   | 2026-06-20 |
 | 2. Multi-Mod Management | 5/5 | Complete   | 2026-06-21 |
-| 3. NexusMods Login & Download | 0/TBD | Not started | - |
+| 3. NexusMods Login & Download | 0/3 | Planned | - |
 | 4. Guided Installers & Collections | 0/TBD | Not started | - |
 | 5. AppImage Distribution | 0/TBD | Not started | - |
