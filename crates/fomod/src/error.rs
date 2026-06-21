@@ -59,6 +59,14 @@ pub enum FomodError {
     /// dropped so a pinned/recorded choice that no longer matches is never mis-installed.
     #[error("FOMOD source not found in staged tree: {0}")]
     MissingSource(String),
+
+    /// A submitted selection violates a group's declared selection cardinality
+    /// (`SelectExactlyOne`/`SelectAtLeastOne`/`SelectAtMostOne`). Enforced server-side so a
+    /// crafted IPC selection (the webview is NOT a trust boundary) cannot stage a selection
+    /// the FOMOD author declared invalid (WR-02). Carries a human-readable description of the
+    /// offending group.
+    #[error("invalid FOMOD selection: {0}")]
+    InvalidSelection(String),
 }
 
 impl FomodError {

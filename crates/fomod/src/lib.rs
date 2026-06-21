@@ -41,4 +41,4 @@ pub use model::{
     TypeDescriptor,
 };
 pub use parse::{parse_module_config, resolve_source_path};
-pub use resolve::{resolve, FileInstall, Selection};
+pub use resolve::{resolve, validate_selection, FileInstall, Selection};

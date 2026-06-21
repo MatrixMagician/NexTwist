@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use fomod::{
-    eval, parse_module_config, plugin_type_state, resolve, FlagSet, FomodError, GroupType,
-    InstalledFiles, PluginType, Selection,
+    eval, parse_module_config, plugin_type_state, resolve, validate_selection, FlagSet, FomodError,
+    GroupType, InstalledFiles, PluginType, Selection,
 };
 
 /// Absolute path to a fixture's tree root (the dir that CONTAINS the `fomod/` folder).
@@ -227,6 +227,57 @@ fn resolve_omits_conditional_when_flag_unset() {
     let dests: Vec<PathBuf> = plan.iter().map(|f| f.dest_rel.clone()).collect();
     assert!(dests.contains(&PathBuf::from("core.esp")), "required still present");
     assert!(!dests.contains(&PathBuf::from("patchA.esp")), "conditional absent");
+}
+
+/// WR-02: server-side group cardinality. The `flags` fixture's first step has a
+/// `SelectExactlyOne` group "Variant" with two options. A selection that chooses BOTH must be
+/// rejected with `InvalidSelection` (the webview is not a trust boundary).
+#[test]
+fn validate_selection_rejects_two_in_a_select_exactly_one() {
+    let m = parse_module_config(&fixture("flags")).unwrap();
+    let mut sel = Selection::default();
+    sel.chosen
+        .insert(("Choose Variant".into(), "Variant".into(), "Use Hi-Res".into()));
+    sel.chosen
+        .insert(("Choose Variant".into(), "Variant".into(), "Use Lo-Res".into()));
+    let err = validate_selection(&m, &sel)
+        .expect_err("two options in a SelectExactlyOne group must be rejected");
+    assert!(matches!(err, FomodError::InvalidSelection(_)), "got {err:?}");
+}
+
+/// WR-02: a `SelectExactlyOne` group with NONE chosen is also invalid (under-selection).
+#[test]
+fn validate_selection_rejects_none_in_a_select_exactly_one() {
+    let m = parse_module_config(&fixture("flags")).unwrap();
+    // No option chosen for the (visible) SelectExactlyOne "Variant" group.
+    let sel = Selection::default();
+    let err = validate_selection(&m, &sel)
+        .expect_err("zero options in a SelectExactlyOne group must be rejected");
+    assert!(matches!(err, FomodError::InvalidSelection(_)), "got {err:?}");
+}
+
+/// WR-02: a valid one-option selection in the SelectExactlyOne group passes validation.
+#[test]
+fn validate_selection_accepts_exactly_one() {
+    let m = parse_module_config(&fixture("flags")).unwrap();
+    let mut sel = Selection::default();
+    sel.chosen
+        .insert(("Choose Variant".into(), "Variant".into(), "Use Hi-Res".into()));
+    validate_selection(&m, &sel).expect("exactly one chosen is a valid selection");
+}
+
+/// WR-02: an invisible step's group cardinality is NOT enforced (its selection is irrelevant
+/// because resolve skips the step). The second step is invisible without `hires=on`, so its
+/// SelectAny group never blocks validation regardless of selection — and the first
+/// SelectExactlyOne group still needs exactly one, which we satisfy.
+#[test]
+fn validate_selection_ignores_invisible_step_groups() {
+    let m = parse_module_config(&fixture("flags")).unwrap();
+    let mut sel = Selection::default();
+    sel.chosen
+        .insert(("Choose Variant".into(), "Variant".into(), "Use Lo-Res".into()));
+    // hires is NOT on ⇒ step 2 invisible; its group is skipped by validation.
+    validate_selection(&m, &sel).expect("invisible step groups are not enforced");
 }
 
 /// WR-01: a step whose `<visible>` dependency does NOT hold is skipped entirely — its

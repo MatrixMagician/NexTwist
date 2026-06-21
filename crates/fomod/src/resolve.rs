@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 
 use crate::condition::{eval, plugin_type_state, FlagSet, InstalledFiles};
 use crate::error::FomodError;
-use crate::model::{FileItem, FileList, FomodModule, PluginType};
+use crate::model::{FileItem, FileList, FomodModule, GroupType, PluginType};
 
 /// One concrete file install in the resolved plan.
 ///
@@ -63,6 +63,60 @@ impl Selection {
         self.chosen
             .contains(&(step.to_string(), group.to_string(), option.to_string()))
     }
+}
+
+/// Validate that `selection` honors every VISIBLE group's declared selection cardinality
+/// (WR-02). Pure — reads only the parsed module + the selection.
+///
+/// The webview enforces these constraints for UX, but it is NOT a trust boundary: a crafted
+/// IPC selection could submit a `SelectExactlyOne` group with two options, or a
+/// `SelectAtLeastOne` group with none. The server re-checks so the "fail clearly, never
+/// mis-install" posture holds on the engine, not only in the UI.
+///
+/// Per FOMOD `groupType`:
+/// * `SelectExactlyOne` ⇒ exactly 1 chosen,
+/// * `SelectAtLeastOne` ⇒ ≥ 1 chosen,
+/// * `SelectAtMostOne`  ⇒ ≤ 1 chosen,
+/// * `SelectAll` / `SelectAny` ⇒ no cardinality constraint.
+///
+/// Only groups in a VISIBLE step are checked — an invisible step's groups do not contribute
+/// to the install (see [`resolve`]'s `<visible>` gate), so their selection is irrelevant.
+/// Returns [`FomodError::InvalidSelection`] naming the first offending group.
+pub fn validate_selection(module: &FomodModule, selection: &Selection) -> Result<(), FomodError> {
+    let Some(steps) = &module.steps else {
+        return Ok(());
+    };
+    for step in &steps.steps {
+        // Skip an invisible step's groups (consistent with resolve's visibility gate).
+        if let Some(vis) = &step.visible
+            && !eval(vis, &selection.flags, &selection.files)
+        {
+            continue;
+        }
+        let Some(groups) = &step.groups else { continue };
+        for group in &groups.groups {
+            let Some(plugins) = &group.plugins else { continue };
+            let chosen = plugins
+                .plugins
+                .iter()
+                .filter(|p| selection.is_chosen(&step.name, &group.name, &p.name))
+                .count();
+
+            let ok = match group.group_type {
+                GroupType::SelectExactlyOne => chosen == 1,
+                GroupType::SelectAtLeastOne => chosen >= 1,
+                GroupType::SelectAtMostOne => chosen <= 1,
+                GroupType::SelectAll | GroupType::SelectAny => true,
+            };
+            if !ok {
+                return Err(FomodError::InvalidSelection(format!(
+                    "group '{}' (step '{}') is {:?} but {chosen} option(s) were selected",
+                    group.name, step.name, group.group_type
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Resolve the concrete, ordered file-install plan for `module` under `selection`.

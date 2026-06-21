@@ -29,7 +29,8 @@ use std::path::{Path, PathBuf};
 
 use extract::ArchiveFormat;
 use fomod::{
-    parse_module_config, resolve, FomodModule, GroupType, OrderKind, PluginType, Selection,
+    parse_module_config, resolve, validate_selection, FomodModule, GroupType, OrderKind,
+    PluginType, Selection,
 };
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -271,6 +272,11 @@ pub async fn resolve_fomod(
     let module = parse_module_config(&tree_root).map_err(boundary_err)?;
     let sel = selection.into_selection();
 
+    // Server-side cardinality validation (WR-02): the webview is not a trust boundary, so a
+    // crafted IPC selection that violates a group's SelectExactlyOne/AtLeastOne/AtMostOne
+    // constraint is rejected here before the plan is computed.
+    validate_selection(&module, &sel).map_err(boundary_err)?;
+
     // PURE: fomod::resolve performs zero filesystem writes (Plan-01 invariant).
     let plan = resolve(&module, &sel).map_err(boundary_err)?;
     Ok(classify_plan(&plan))
@@ -299,6 +305,9 @@ pub async fn apply_fomod(
     let (temp, tree_root) = extract_to_temp(&archive).map_err(boundary_err)?;
     let module = parse_module_config(&tree_root).map_err(boundary_err)?;
     let sel = selection.into_selection();
+    // Server-side cardinality validation (WR-02): reject a selection that violates a group's
+    // declared cardinality BEFORE any disk write, regardless of what the UI submitted.
+    validate_selection(&module, &sel).map_err(boundary_err)?;
     let plan = resolve(&module, &sel).map_err(boundary_err)?;
     let preview = classify_plan(&plan);
     if preview.classification == ConflictClass::Blocking {
