@@ -219,7 +219,26 @@ fn collect_profiles(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::ManagedMod;
+    use std::path::PathBuf;
     use tempfile::TempDir;
+
+    /// Insert a real managed mod for a game and return its id (WR-06: `profile_mod.mod_id`
+    /// now FK-references `managed_mod(id)`, so tests must use real mod rows).
+    fn add_test_mod(store: &Store, appid: u32, name: &str) -> i64 {
+        store
+            .add_mod(
+                appid,
+                &ManagedMod {
+                    id: 0,
+                    name: name.into(),
+                    staging_root: PathBuf::from(format!("/staging/{name}")),
+                    enabled: true,
+                    rank: 1,
+                },
+            )
+            .unwrap()
+    }
 
     /// PROF-01: a game can hold multiple profiles, all listed.
     #[test]
@@ -274,22 +293,25 @@ mod tests {
         let store = Store::open(&dir.path().join("d.db")).unwrap();
         let p1 = store.create_profile(1, "P1").unwrap();
         let p2 = store.create_profile(1, "P2").unwrap();
+        // Real mod rows (WR-06 FK): m10 and m20 stand in for the former hardcoded 10/20.
+        let m10 = add_test_mod(&store, 1, "m10");
+        let m20 = add_test_mod(&store, 1, "m20");
 
-        // P1: mod 10 enabled rank 1, mod 20 disabled rank 2.
-        store.set_profile_mod(p1, 10, true, 1).unwrap();
-        store.set_profile_mod(p1, 20, false, 2).unwrap();
-        // P2: only mod 20, enabled, rank 1.
-        store.set_profile_mod(p2, 20, true, 1).unwrap();
+        // P1: m10 enabled rank 1, m20 disabled rank 2.
+        store.set_profile_mod(p1, m10, true, 1).unwrap();
+        store.set_profile_mod(p1, m20, false, 2).unwrap();
+        // P2: only m20, enabled, rank 1.
+        store.set_profile_mod(p2, m20, true, 1).unwrap();
 
         let m1 = store.list_profile_mods(p1).unwrap();
-        assert_eq!(m1, vec![(10, true, 1), (20, false, 2)]);
+        assert_eq!(m1, vec![(m10, true, 1), (m20, false, 2)]);
         let m2 = store.list_profile_mods(p2).unwrap();
-        assert_eq!(m2, vec![(20, true, 1)]);
+        assert_eq!(m2, vec![(m20, true, 1)]);
 
         // Upsert changes one profile without touching the other.
-        store.set_profile_mod(p1, 10, false, 9).unwrap();
-        assert_eq!(store.list_profile_mods(p1).unwrap(), vec![(20, false, 2), (10, false, 9)]);
-        assert_eq!(store.list_profile_mods(p2).unwrap(), vec![(20, true, 1)]);
+        store.set_profile_mod(p1, m10, false, 9).unwrap();
+        assert_eq!(store.list_profile_mods(p1).unwrap(), vec![(m20, false, 2), (m10, false, 9)]);
+        assert_eq!(store.list_profile_mods(p2).unwrap(), vec![(m20, true, 1)]);
     }
 
     #[test]
@@ -297,12 +319,45 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let store = Store::open(&dir.path().join("d.db")).unwrap();
         let p = store.create_profile(1, "Doomed").unwrap();
-        store.set_profile_mod(p, 1, true, 1).unwrap();
+        let m = add_test_mod(&store, 1, "m1");
+        store.set_profile_mod(p, m, true, 1).unwrap();
 
         assert!(store.delete_profile(p).unwrap());
         assert!(!store.delete_profile(p).unwrap());
         assert!(store.list_profiles(1).unwrap().is_empty());
         assert!(store.list_profile_mods(p).unwrap().is_empty());
+    }
+
+    /// WR-06: a membership row referencing a non-existent profile or mod is now REJECTED
+    /// by the foreign keys (it was silently inserted as a dangling row under V2).
+    #[test]
+    fn dangling_membership_rejected_by_fk() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("d.db")).unwrap();
+        let p = store.create_profile(1, "P").unwrap();
+        let m = add_test_mod(&store, 1, "real");
+
+        // Dangling mod_id is rejected.
+        assert!(matches!(store.set_profile_mod(p, 9999, true, 1), Err(StoreError::Db(_))));
+        // Dangling profile_id is rejected.
+        assert!(matches!(store.set_profile_mod(9999, m, true, 1), Err(StoreError::Db(_))));
+        // A fully-valid membership row still works.
+        store.set_profile_mod(p, m, true, 1).unwrap();
+        assert_eq!(store.list_profile_mods(p).unwrap(), vec![(m, true, 1)]);
+    }
+
+    /// WR-06: `ON DELETE CASCADE` sheds a mod's membership rows when the mod is removed.
+    #[test]
+    fn remove_mod_cascades_membership() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("d.db")).unwrap();
+        let p = store.create_profile(1, "P").unwrap();
+        let m = add_test_mod(&store, 1, "doomed");
+        store.set_profile_mod(p, m, true, 1).unwrap();
+        assert_eq!(store.list_profile_mods(p).unwrap().len(), 1);
+
+        assert!(store.remove_mod(m).unwrap());
+        assert!(store.list_profile_mods(p).unwrap().is_empty(), "membership cascaded away");
     }
 
     /// CR-02: deleting the ACTIVE profile is refused (it may have a live deployment and

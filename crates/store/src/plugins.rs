@@ -89,21 +89,28 @@ mod tests {
         }
     }
 
+    /// Create a real profile and return its id (WR-06: `plugin_state.profile_id` now
+    /// FK-references `profile(id)`, so tests must use real profile rows).
+    fn new_profile(store: &Store, name: &str) -> i64 {
+        store.create_profile(1, name).unwrap()
+    }
+
     #[test]
     fn set_list_round_trips_in_order() {
         let dir = TempDir::new().unwrap();
         let store = Store::open(&dir.path().join("d.db")).unwrap();
+        let p = new_profile(&store, "P");
         store
-            .set_plugin_state(1, &plugin("Patch.esp", PluginKind::Esp, 2))
+            .set_plugin_state(p, &plugin("Patch.esp", PluginKind::Esp, 2))
             .unwrap();
         store
-            .set_plugin_state(1, &plugin("Skyrim.esm", PluginKind::Esm, 0))
+            .set_plugin_state(p, &plugin("Skyrim.esm", PluginKind::Esm, 0))
             .unwrap();
         store
-            .set_plugin_state(1, &plugin("Light.esl", PluginKind::Esl, 1))
+            .set_plugin_state(p, &plugin("Light.esl", PluginKind::Esl, 1))
             .unwrap();
 
-        let plugins = store.list_plugin_state(1).unwrap();
+        let plugins = store.list_plugin_state(p).unwrap();
         let names: Vec<&str> = plugins.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, vec!["Skyrim.esm", "Light.esl", "Patch.esp"]);
         assert_eq!(plugins[0].kind, PluginKind::Esm);
@@ -113,14 +120,15 @@ mod tests {
     fn upsert_replaces_state() {
         let dir = TempDir::new().unwrap();
         let store = Store::open(&dir.path().join("d.db")).unwrap();
+        let p = new_profile(&store, "P");
         store
-            .set_plugin_state(1, &plugin("A.esp", PluginKind::Esp, 0))
+            .set_plugin_state(p, &plugin("A.esp", PluginKind::Esp, 0))
             .unwrap();
         let mut updated = plugin("A.esp", PluginKind::Esm, 5);
         updated.enabled = false;
-        store.set_plugin_state(1, &updated).unwrap();
+        store.set_plugin_state(p, &updated).unwrap();
 
-        let plugins = store.list_plugin_state(1).unwrap();
+        let plugins = store.list_plugin_state(p).unwrap();
         assert_eq!(plugins.len(), 1);
         assert_eq!(plugins[0].kind, PluginKind::Esm);
         assert_eq!(plugins[0].order, 5);
@@ -131,29 +139,43 @@ mod tests {
     fn scoped_per_profile() {
         let dir = TempDir::new().unwrap();
         let store = Store::open(&dir.path().join("d.db")).unwrap();
+        let p1 = new_profile(&store, "P1");
+        let p2 = new_profile(&store, "P2");
         store
-            .set_plugin_state(1, &plugin("A.esp", PluginKind::Esp, 0))
+            .set_plugin_state(p1, &plugin("A.esp", PluginKind::Esp, 0))
             .unwrap();
         store
-            .set_plugin_state(2, &plugin("B.esp", PluginKind::Esp, 0))
+            .set_plugin_state(p2, &plugin("B.esp", PluginKind::Esp, 0))
             .unwrap();
-        assert_eq!(store.list_plugin_state(1).unwrap().len(), 1);
-        assert_eq!(store.list_plugin_state(2).unwrap().len(), 1);
+        assert_eq!(store.list_plugin_state(p1).unwrap().len(), 1);
+        assert_eq!(store.list_plugin_state(p2).unwrap().len(), 1);
+    }
+
+    /// WR-06: a plugin_state row for a non-existent profile is rejected by the FK.
+    #[test]
+    fn dangling_profile_rejected_by_fk() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("d.db")).unwrap();
+        let err = store
+            .set_plugin_state(9999, &plugin("X.esp", PluginKind::Esp, 0))
+            .unwrap_err();
+        assert!(matches!(err, StoreError::Db(_)));
     }
 
     #[test]
     fn corrupt_kind_token_surfaces_error() {
         let dir = TempDir::new().unwrap();
         let store = Store::open(&dir.path().join("d.db")).unwrap();
+        let p = new_profile(&store, "P");
         store
             .conn
             .execute(
                 "INSERT INTO plugin_state (profile_id, plugin_name, kind, enabled, order_index)
-                 VALUES (1, 'X.esp', 'bogus', 0, 0)",
-                [],
+                 VALUES (?1, 'X.esp', 'bogus', 0, 0)",
+                params![p],
             )
             .unwrap();
-        let err = store.list_plugin_state(1).unwrap_err();
+        let err = store.list_plugin_state(p).unwrap_err();
         assert!(matches!(err, StoreError::Corrupt(_)));
     }
 }
