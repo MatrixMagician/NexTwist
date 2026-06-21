@@ -136,7 +136,10 @@ export type DownloadState =
   | "downloading"
   | "extracting"
   | "done"
-  | "failed";
+  | "failed"
+  // WR-01/WR-02: a transient, auto-recoverable rate-limit pause (NEXUS-05). NOT a
+  // terminal failure — the row shows a paused state and the list shows the backoff notice.
+  | "ratelimited";
 
 /** The source coordinates needed to (re)start a download. */
 export interface DownloadSource {
@@ -170,7 +173,7 @@ export interface DownloadProgress {
   id: string;
   downloaded: number;
   total: number | null;
-  /** "downloading" | "extracting" | "done" | "failed" | "expired". */
+  /** "downloading" | "extracting" | "done" | "failed" | "expired" | "ratelimited". */
   state: string;
   reason: string | null;
 }

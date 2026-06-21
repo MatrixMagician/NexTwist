@@ -161,10 +161,18 @@ pub(crate) async fn run_download_to_window(
             );
             Ok(res.result)
         }
-        Err(DownloadFailure { reason, is_redeem }) => {
-            // An expired free-user link is surfaced distinctly (UI-SPEC §C.3): the UI
-            // shows the Warning "link expired" notice, not a Failed download row.
-            let state_label = if is_redeem { "expired" } else { "failed" };
+        Err(DownloadFailure { reason, is_redeem, retry_after }) => {
+            // WR-02: a rate-limit is transient and auto-recoverable — surface it as a
+            // distinct "ratelimited" state (which drives the WR-01 UI notice and a paused,
+            // retryable row), NOT a terminal "failed" row. An expired free-user link is
+            // surfaced as "expired" (UI-SPEC §C.3). Everything else is a real "failed".
+            let state_label = if retry_after.is_some() {
+                "ratelimited"
+            } else if is_redeem {
+                "expired"
+            } else {
+                "failed"
+            };
             emit_progress(window, id, 0, None, state_label, Some(reason.clone()));
             Err(reason)
         }
@@ -180,10 +188,14 @@ pub async fn cancel_download(state: State<'_, Mutex<AppState>>, id: String) -> R
     Ok(())
 }
 
-/// A typed download failure carrying whether it was a redeemable (expired-link) error.
+/// A typed download failure carrying whether it was a redeemable (expired-link) error
+/// and, for a rate-limit, the retry-after seconds (WR-02).
 struct DownloadFailure {
     reason: String,
     is_redeem: bool,
+    /// `Some(secs)` when the failure was a `NexusError::RateLimited` — the transient,
+    /// auto-recoverable case the UI shows as a paused "rate limited" row, not a failure.
+    retry_after: Option<u64>,
 }
 
 /// RAII cleanup for the untrusted partial download archive (CR-01).
@@ -238,7 +250,11 @@ async fn run_download(
     let link = links
         .into_iter()
         .next()
-        .ok_or_else(|| DownloadFailure { reason: "no download link returned".into(), is_redeem: false })?;
+        .ok_or_else(|| DownloadFailure {
+            reason: "no download link returned".into(),
+            is_redeem: false,
+            retry_after: None,
+        })?;
 
     // 2. GraphQL v2 metadata (version + display name) for the provenance record + label.
     let meta = client
@@ -255,6 +271,7 @@ async fn run_download(
         .map_err(|e| DownloadFailure {
             reason: format!("could not create staging dir {}: {e}", staging_dir.display()),
             is_redeem: false,
+            retry_after: None,
         })?;
     let archive_path = staging_dir.join(format!(".nextwist-dl-{id}.archive"));
     // CR-01 (BLOCKER): RAII-guard the untrusted partial archive so it is unlinked on
@@ -330,12 +347,13 @@ async fn run_download(
 }
 
 /// Map any headless error into a `DownloadFailure`, flagging the redeemable (expired
-/// free-user link) case so the shell can surface it as the "expired link" notice.
+/// free-user link) case and, for a rate-limit, the retry-after seconds (WR-02).
 fn fail<E: Into<NexusErrorLike>>(e: E) -> DownloadFailure {
     let like = e.into();
     DownloadFailure {
         reason: like.reason,
         is_redeem: like.is_redeem,
+        retry_after: like.retry_after,
     }
 }
 
@@ -343,24 +361,32 @@ fn fail<E: Into<NexusErrorLike>>(e: E) -> DownloadFailure {
 struct NexusErrorLike {
     reason: String,
     is_redeem: bool,
+    /// `Some(secs)` for a `NexusError::RateLimited` (WR-02); `None` otherwise.
+    retry_after: Option<u64>,
 }
 
 impl From<nexus::NexusError> for NexusErrorLike {
     fn from(e: nexus::NexusError) -> Self {
         let is_redeem = matches!(e, nexus::NexusError::Redeem(_));
-        NexusErrorLike { reason: e.to_string(), is_redeem }
+        // WR-02: carry the retry-after seconds so the shell can surface the transient,
+        // auto-recoverable rate-limit state instead of a terminal failure.
+        let retry_after = match &e {
+            nexus::NexusError::RateLimited(secs) => Some(*secs),
+            _ => None,
+        };
+        NexusErrorLike { reason: e.to_string(), is_redeem, retry_after }
     }
 }
 
 impl From<extract::ExtractError> for NexusErrorLike {
     fn from(e: extract::ExtractError) -> Self {
-        NexusErrorLike { reason: e.to_string(), is_redeem: false }
+        NexusErrorLike { reason: e.to_string(), is_redeem: false, retry_after: None }
     }
 }
 
 impl From<nextwist_core::StoreError> for NexusErrorLike {
     fn from(e: nextwist_core::StoreError) -> Self {
-        NexusErrorLike { reason: e.to_string(), is_redeem: false }
+        NexusErrorLike { reason: e.to_string(), is_redeem: false, retry_after: None }
     }
 }
 

@@ -198,11 +198,22 @@
       downloads.splice(idx, 1);
       return;
     }
+    if (p.state === "ratelimited") {
+      // WR-01/WR-02 (NEXUS-05): a transient, auto-recoverable rate-limit pause. Show the
+      // backoff notice and mark the row paused — NOT a terminal failure.
+      rateLimited = true;
+      row.state = "ratelimited";
+      row.reason = p.reason ?? "rate limited; download will resume automatically";
+      downloads[idx] = row;
+      return;
+    }
     if (p.state === "failed") {
       row.state = "failed";
       row.reason = p.reason ?? "unknown error";
     } else if (p.state === "downloading" || p.state === "extracting" || p.state === "done") {
       row.state = p.state;
+      // A healthy tick means the backoff is over — clear the WR-01 notice.
+      rateLimited = false;
     }
     // Re-assign so Svelte 5 reactivity sees the row mutation.
     downloads[idx] = row;
@@ -760,6 +771,9 @@
                 <button onclick={() => onCancelDownload(d.id)}>Cancel</button>
               {:else if d.state === "extracting"}
                 <span class="muted">Extracting…</span>
+              {:else if d.state === "ratelimited"}
+                <!-- WR-01/WR-02: a transient rate-limit pause, not a failure. -->
+                <span class="muted">Paused — respecting NexusMods rate limits…</span>
               {:else if d.state === "done"}
                 <span class="done">✓ Done — added to staging, ready to deploy</span>
               {:else if d.state === "failed"}
