@@ -2428,6 +2428,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "nextwist-core",
+ "nextwist-loadorder",
  "nextwist-steam",
  "nextwist-store",
  "nextwist-testkit",

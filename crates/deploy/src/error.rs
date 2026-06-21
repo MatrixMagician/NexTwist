@@ -41,6 +41,13 @@ pub enum DeployError {
     /// centerpiece test to simulate a kill mid-operation).
     #[error("deploy aborted after {0} file operation(s) (injected)")]
     Aborted(usize),
+
+    /// A profile-switch reconcile step failed outside the deploy/purge primitives —
+    /// e.g. writing the target profile's `plugins.txt` (the libloot reason is wrapped)
+    /// or reading the profile's membership/plugin state. The purge half having already
+    /// completed means the game is pristine (or journal-recoverable), never unreversible.
+    #[error("profile switch error: {0}")]
+    Profile(String),
 }
 
 impl DeployError {

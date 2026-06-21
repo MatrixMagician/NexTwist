@@ -23,6 +23,11 @@ store.workspace = true
 # mixed-case mod paths to the game's real on-disk casing (DEPLOY-08). No cycle: steam
 # does not depend on deploy.
 steam = { path = "../steam", package = "nextwist-steam" }
+# `loadorder` (aliased to avoid any `core` shadowing concern) provides apply_load_order,
+# which profile::switch_profile calls after deploy to write the new profile's plugins.txt
+# at the Proton-prefix AppData location (PROF-02). No cycle: loadorder depends on store +
+# core only, NOT on deploy (deploy -> loadorder is the single edge).
+loadorder = { path = "../loadorder", package = "nextwist-loadorder" }
 reflink-copy.workspace = true
 blake3.workspace = true
 walkdir.workspace = true

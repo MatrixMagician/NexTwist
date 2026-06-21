@@ -31,6 +31,7 @@ pub mod engine;
 pub mod journal;
 pub mod method;
 pub mod probe;
+pub mod profile;
 pub mod verify;
 
 mod error;
@@ -39,6 +40,7 @@ mod path_guard;
 pub use casefold::normalize_to_canonical;
 pub use conflict::{resolve, ModInput, WinnerFile};
 pub use error::DeployError;
+pub use profile::{switch_profile, SwitchReport};
 pub use method::{apply_idempotent, choose_method, DeploymentMethod};
 pub use probe::{probe, Casefold, FsCaps};
 pub use verify::{repair, verify, RepairReport, VerifyReport};
