@@ -225,8 +225,19 @@ pub async fn sort_with_loot(
     let folder = loadorder::appdata_folder_name(appid)
         .ok_or_else(|| format!("game {appid} is not supported"))?;
     let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
-    loadorder::propose_sort(appid, &game.install_dir, &appdata_local, &app_data, &plugins)
-        .map_err(boundary_err)
+    let install_dir = game.install_dir.clone();
+
+    // `propose_sort` does a BLOCKING masterlist HTTP fetch (`reqwest::blocking`, which owns an
+    // inner runtime) plus libloot work. Calling it directly on the async command worker panics
+    // ("Cannot drop a runtime in a context where blocking is not allowed") when the blocking
+    // client's runtime is dropped inside async context. Offload to a blocking thread where
+    // blocking is permitted, then await the result.
+    tauri::async_runtime::spawn_blocking(move || {
+        loadorder::propose_sort(appid, &install_dir, &appdata_local, &app_data, &plugins)
+    })
+    .await
+    .map_err(|e| format!("LOOT sort task failed to complete: {e}"))?
+    .map_err(boundary_err)
 }
 
 #[cfg(test)]
