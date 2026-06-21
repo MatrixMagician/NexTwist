@@ -145,10 +145,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NEXUS-01 | Phase 3 | Complete |
 | NEXUS-02 | Phase 3 | Complete |
 | NEXUS-03 | Phase 3 | Complete |
-| NEXUS-04 | Phase 3 | Pending |
+| NEXUS-04 | Phase 3 | Complete |
 | NEXUS-05 | Phase 3 | Complete |
 | NEXUS-06 | Phase 3 | Complete |
-| NXM-01 | Phase 3 | Pending |
+| NXM-01 | Phase 3 | Complete |
 | FOMOD-01 | Phase 4 | Pending |
 | FOMOD-02 | Phase 4 | Pending |
 | COLL-01 | Phase 4 | Pending |

@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 3
-current_phase_name: NexusMods Login & Download
+current_phase: 4
+current_phase_name: Guided Installers & Collections
 status: verifying
-stopped_at: "Phase 2 (Multi-Mod Management) VERIFIED — UAT 4/4 passed (02-UAT.md complete). UAT-1 in-game plugins.txt confirmed on real Fallout 4 after fixing 3 bugs found on hardware: loadorder early-loader ordering (749b5e3), LOOT-sort async panic (62d12dc), tauri dev-launch config (a0440bd). UAT-2/3/4 passed earlier. Carried forward (separate, ~Phase-4): install archive root-detection — mods with a wrapper folder deploy double-nested (.planning/todos/pending/install-archive-root-detection.md). Next: plan Phase 3 (NexusMods Login & Download)."
-last_updated: "2026-06-21T15:11:24.387Z"
+stopped_at: Phase 2 (Multi-Mod Management) BUILT + auto-verified (21/21 must-haves, code review 2 BLOCKERs fixed, 142 tests green); autonomous run STOPPED at user request. Phase 2 awaiting 4 manual/in-game UAT items (02-UAT.md).
+last_updated: "2026-06-21T16:46:11.773Z"
 last_activity: 2026-06-21
-last_activity_desc: Phase 3 execution started
+last_activity_desc: Phase 3 complete, transitioned to Phase 4
 progress:
   total_phases: 5
   completed_phases: 3
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 
 ## Current Position
 
-Phase: 3 (NexusMods Login & Download) — EXECUTING
-Plan: 3 of 3
+Phase: 4 — Guided Installers & Collections
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-06-21 — Phase 3 execution started
+Last activity: 2026-06-21 — Phase 3 complete, transitioned to Phase 4
 
 Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pending final manual UAT sign-off)
 
@@ -39,7 +39,7 @@ Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pen
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 3
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -47,7 +47,7 @@ Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pen
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 3 | 3 | - | - |
 
 **Recent Trend:**
 
