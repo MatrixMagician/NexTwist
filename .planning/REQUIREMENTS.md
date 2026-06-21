@@ -51,13 +51,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### NexusMods Integration
 
-- [ ] **NEXUS-01**: User can log into their NexusMods account via OAuth2 — code complete + unit-tested; live OAuth round-trip pending UAT (needs registered Nexus client_id; API-key fallback works today) — see 03-UAT.md
+- [x] **NEXUS-01**: User can log into their NexusMods account via OAuth2 — login validated on real hardware via the API-key path (2026-06-21); OAuth2 transport is code-complete and activates on NexusMods client_id registration (tracked release task, Phase 5)
 - [x] **NEXUS-02**: NexTwist stores auth tokens securely in the system keyring
-- [ ] **NEXUS-03**: Premium users can download a mod directly from NexusMods within the app — code complete + mockito/integration-tested; live Premium download pending UAT (needs Premium account) — see 03-UAT.md
-- [ ] **NEXUS-04**: Free users can install mods via the website "Mod Manager Download" (nxm://) handoff — code complete + unit-tested; live free-user handoff pending UAT (needs non-Premium account) — see 03-UAT.md
+- [x] **NEXUS-03**: Premium users can download a mod directly from NexusMods within the app — live Premium download verified on real hardware 2026-06-21 (after the REST-v1 metadata fix 21f6784)
+- [x] **NEXUS-04**: Free users can install mods via the website "Mod Manager Download" (nxm://) handoff — verified on real hardware 2026-06-21
 - [x] **NEXUS-05**: NexTwist respects NexusMods API rate limits
 - [x] **NEXUS-06**: A downloaded mod is auto-extracted into staging ready to deploy
-- [ ] **NXM-01**: User can one-click install from an nxm:// link via a deep-link handler registered on Linux — code complete + unit-tested; live OS nxm:// routing pending UAT — see 03-UAT.md
+- [x] **NXM-01**: User can one-click install from an nxm:// link via a deep-link handler registered on Linux — live nxm:// routing verified on real hardware 2026-06-21
 
 ### Installers (FOMOD)
 

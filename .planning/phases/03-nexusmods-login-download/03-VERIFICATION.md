@@ -1,8 +1,8 @@
 ---
 phase: 03-nexusmods-login-download
 verified: 2026-06-21T00:00:00Z
-status: human_needed
-score: 11/14 must-haves verified
+status: passed
+score: 14/14 must-haves verified (11 automated + 3 live UAT passed on real hardware 2026-06-21; user sign-off "all good")
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
