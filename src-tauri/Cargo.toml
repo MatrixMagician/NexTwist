@@ -36,6 +36,7 @@ steam = { workspace = true }
 extract = { workspace = true }
 deploy = { workspace = true }
 loadorder = { workspace = true }
+nexus = { workspace = true }
 
 # Shell runtime.
 tauri = { workspace = true }
@@ -45,3 +46,15 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+# OS-integration the shell owns (NEXUS-01/02). These live ONLY in the shell — the
+# headless crates/nexus never sees a keyring or deep-link type.
+#   * keyring 3.6 (NOT 4.x — RESEARCH Pitfall 1: 4.0 is a breaking keyring-core rewrite).
+#     `sync-secret-service` targets GNOME Keyring / KWallet; `crypto-rust` is pure-Rust
+#     crypto (no OpenSSL) so the AppImage stays rustls-only.
+#   * tauri-plugin-deep-link / tauri-plugin-single-instance: the `nxm://` MIME handler +
+#     single-instance forwarding. Declared now so the pins are reviewed in one commit;
+#     they are wired into the builder in Plan 03 (single-instance registered FIRST).
+keyring = { version = "3.6", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
+tauri-plugin-deep-link = "2.4"
+tauri-plugin-single-instance = { version = "2.4", features = ["deep-link"] }

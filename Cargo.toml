@@ -56,7 +56,21 @@ esplugin = "6.1"
 # "What NOT to Use"). `blocking` because the loadorder crate is runtime-free (no tokio):
 # the masterlist fetch is a one-shot synchronous call behind a Tauri command, so a
 # blocking client avoids forcing an async runtime into the headless safety crate.
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "blocking"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "blocking", "json", "stream"] }
+
+# NexusMods auth + API client (Phase 3, Plan 01 — crates/nexus). All registry-verified
+# + legitimacy-audited 2026-06-21 (RESEARCH Package Legitimacy Audit: all OK).
+#   * oauth2 5.0 — OAuth2 Authorization-Code + PKCE (S256). default-features = false +
+#     `reqwest` + `rustls-tls` ONLY (never native-tls) keeps the AppImage self-contained.
+#   * governor 0.10 — client-side token-bucket rate limiter (NEXUS-05; wired in Plan 02).
+#   * futures-util 0.3 — StreamExt for reqwest::Response::bytes_stream() (Plan 02 streaming).
+oauth2 = { version = "5.0", default-features = false, features = ["reqwest", "rustls-tls"] }
+governor = "0.10"
+futures-util = "0.3"
+
+# dev-only HTTP mock server for the headless nexus API tests (Plan 01+). No HTTP mock
+# existed in the repo before Phase 3.
+mockito = "1.7"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -85,6 +99,7 @@ steam = { path = "crates/steam", package = "nextwist-steam" }
 extract = { path = "crates/extract", package = "nextwist-extract" }
 deploy = { path = "crates/deploy", package = "nextwist-deploy" }
 loadorder = { path = "crates/loadorder", package = "nextwist-loadorder" }
+nexus = { path = "crates/nexus", package = "nextwist-nexus" }
 
 # Tauri shell (Plan 06). Pinned to the 2.11 line per CLAUDE.md. The embedded SvelteKit
 # SPA is served via `frontendDist` (no extra features needed); we keep the default

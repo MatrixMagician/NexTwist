@@ -1,0 +1,42 @@
+[package]
+name = "nextwist-nexus"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "NexTwist headless NexusMods API client: OAuth2+PKCE auth, REST v1 / GraphQL v2 metadata, download-link generation, streaming download, and governor rate limiting. Tauri-free and keyring-free — the shell owns all OS-integration (keyring, deep-link, OAuth-redirect capture) and passes token values into this client"
+
+[lib]
+name = "nexus"
+path = "src/lib.rs"
+
+# Aliased as `nextwist_core` (NOT `core`): a dependency literally named `core`
+# shadows the std `::core` crate, which breaks `thiserror`'s derive (it expands to
+# `::core::fmt`). `nexus` derives `thiserror` locally, so it must not shadow it.
+# `store` is safe under its workspace alias because we only call its methods (its
+# StoreError is re-exported through nextwist_core).
+#
+# HARD INVARIANT (NEXUS-01/02): this crate has NO tauri, keyring, or tauri-plugin-*
+# dependency. Keyring + deep-link + OAuth-redirect capture live in the src-tauri shell.
+# reqwest stays default-features = false + rustls (never native-tls/default-tls).
+[dependencies]
+nextwist_core = { path = "../core", package = "nextwist-core" }
+store.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+oauth2.workspace = true
+governor.workspace = true
+futures-util.workspace = true
+
+[dev-dependencies]
+nextwist_core = { path = "../core", package = "nextwist-core" }
+mockito.workspace = true
+tempfile.workspace = true
+# The async auth tests (#[tokio::test]) drive exchange_code/validate_api_key against a
+# local mockito server. tokio is dev-only here — the crate itself is runtime-agnostic
+# and runs on whichever runtime the shell provides.
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
