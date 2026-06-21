@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use deploy::{conflict, deploy_winners, purge, ModInput, WinnerFile};
+use deploy::{conflict, deploy_winners, purge, redeploy_winners, ModInput, WinnerFile};
 use nextwist_core::Game;
 use store::Store;
 use tempfile::TempDir;
@@ -204,5 +204,85 @@ fn rank_change_redeploy_stays_pristine() {
         assert!(purged.orphans.is_empty(), "no orphans after redeploy purge: {:?}", purged.orphans);
         let after = snapshot_tree(&fx.install).unwrap();
         assert_trees_identical(&pristine, &after);
+    }
+}
+
+/// CR-01 REGRESSION: the LIVE re-deploy path (`redeploy_winners`, used by the
+/// `deploy_winner_set` command) must itself purge-to-pristine before each fresh deploy.
+/// This test deploys winner set A, then redeploys a CHANGED set (rank flip + a mod
+/// disabled so a path leaves the set) WITHOUT any manual purge between the deploys, then
+/// purges and asserts byte-for-byte pristine. A bare `deploy_winners` re-deploy would
+/// orphan the dropped path and corrupt the `pre_existing` flag, leaving the game
+/// non-pristine — this guards against re-introducing that bug.
+#[test]
+fn redeploy_winners_reconciles_without_manual_purge() {
+    let fx = Fixture::new();
+    let pristine = lay_vanilla(&fx);
+    let game = fx.game();
+
+    // mod A overrides the VANILLA Data/Skyrim.esm (so pre_existing bookkeeping matters)
+    // and provides shared.esp + a unique only_a.esp; mod B provides shared.esp + only_b.esp.
+    let mod_a = fx.stage_mod(
+        "A",
+        &[
+            ("Data/Skyrim.esm", b"A-MASTER-OVERRIDE"),
+            ("Data/shared.esp", b"A-SHARED"),
+            ("Data/only_a.esp", b"A-ONLY"),
+        ],
+    );
+    let mod_b = fx.stage_mod(
+        "B",
+        &[("Data/shared.esp", b"B-SHARED"), ("Data/only_b.esp", b"B-ONLY")],
+    );
+
+    // First reconcile: BOTH mods enabled, A wins (rank 1). A's Skyrim.esm override is
+    // deployed over the vanilla master (which is backed up as pre_existing).
+    {
+        let (winners, _) = conflict::resolve(&[
+            ModInput { mod_id: 1, staging_root: mod_a.clone(), rank: 1 },
+            ModInput { mod_id: 2, staging_root: mod_b.clone(), rank: 2 },
+        ])
+        .unwrap();
+        let store = fx.open_store();
+        let (_purged, deployed) = redeploy_winners(&store, &game, &winners).unwrap();
+        // 4 unique paths: Skyrim.esm, shared.esp, only_a.esp, only_b.esp.
+        assert_eq!(deployed.deployed, 4);
+        assert_eq!(fs::read(fx.install.join("Data/Skyrim.esm")).unwrap(), b"A-MASTER-OVERRIDE");
+        assert_eq!(fs::read(fx.install.join("Data/shared.esp")).unwrap(), b"A-SHARED");
+    }
+
+    // Second reconcile, NO manual purge between: mod A is DISABLED (drops Skyrim.esm,
+    // only_a.esp, and its shared.esp claim), only mod B remains. A bare re-deploy would
+    // leave A's Skyrim.esm override on disk over the (now mis-attributed) vanilla master
+    // and orphan only_a.esp. `redeploy_winners` purges to pristine first, so only B's
+    // files end up deployed and the vanilla Skyrim.esm is restored before B's deploy.
+    {
+        let (winners, _) = conflict::resolve(&[ModInput {
+            mod_id: 2,
+            staging_root: mod_b.clone(),
+            rank: 1,
+        }])
+        .unwrap();
+        let store = fx.open_store();
+        let (purged, deployed) = redeploy_winners(&store, &game, &winners).unwrap();
+        // The reconcile purged the 4 prior files (one a vanilla restore) then deployed B's 2.
+        assert_eq!(purged.removed, 4, "the prior winner set is purged before redeploy");
+        assert_eq!(purged.restored, 1, "the vanilla Skyrim.esm is restored");
+        assert_eq!(deployed.deployed, 2, "only mod B's files are now deployed");
+        // The vanilla master is back; A's dropped files are gone, not orphaned.
+        assert_eq!(fs::read(fx.install.join("Data/Skyrim.esm")).unwrap(), b"VANILLA-MASTER");
+        assert!(!fx.install.join("Data/only_a.esp").exists(), "A's unique file is not orphaned");
+        assert_eq!(fs::read(fx.install.join("Data/shared.esp")).unwrap(), b"B-SHARED");
+    }
+
+    // Final purge -> byte-for-byte pristine, proving the repeated live reconcile never
+    // corrupted the pristine-restore path.
+    {
+        let store = fx.open_store();
+        let purged = purge(&store, &game).unwrap();
+        assert!(purged.orphans.is_empty(), "no orphans after live reconcile: {:?}", purged.orphans);
+        let after = snapshot_tree(&fx.install).unwrap();
+        assert_trees_identical(&pristine, &after);
+        assert!(store.list_deployed_files(game.appid).unwrap().is_empty());
     }
 }

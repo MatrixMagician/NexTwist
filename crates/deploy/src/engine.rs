@@ -271,6 +271,41 @@ pub fn deploy_winners(
     Ok(report)
 }
 
+/// Reconcile a game's on-disk deployment to a fresh conflict-winner set (CONF-03): a full
+/// **purge-to-pristine** of the CURRENT deployment followed by a **fresh deploy** of
+/// `winners`, in one journaled sequence — exactly the discipline [`crate::switch_profile`]
+/// uses for a profile switch (Pitfall 4: always purge between deployments, never a
+/// diff-deploy).
+///
+/// ## Why the bare [`deploy_winners`] is unsafe as a re-deploy
+///
+/// `deploy_winners` is a one-shot apply that records each file via `INSERT OR REPLACE`
+/// (manifest). Calling it a SECOND time after the winner set changed (a rank flip that
+/// drops a path, or a mod being disabled/removed) leaves the previously-deployed-but-now-
+/// dropped files orphaned on disk AND mis-attributes the `pre_existing` vanilla-backup
+/// flag on a re-touched path (the second deploy's `backup_vanilla_if_absent` is a no-op,
+/// so the replaced manifest row records `pre_existing = false` even though a vanilla
+/// original IS backed up — purge would then NOT restore the vanilla file). Either defeats
+/// byte-for-byte pristine restore.
+///
+/// Purging first returns the game to pristine (restoring every vanilla original and
+/// clearing the manifest), so the subsequent `deploy_winners` always starts from a clean
+/// slate and records correct `pre_existing` provenance. Both halves are the existing
+/// journaled, idempotent primitives, so a crash mid-reconcile is replayed by
+/// [`recover_on_launch`] to a consistent state.
+pub fn redeploy_winners(
+    store: &Store,
+    game: &Game,
+    winners: &[WinnerFile],
+) -> Result<(PurgeReport, DeployReport), DeployError> {
+    // 1. Back to byte-for-byte pristine first (Pitfall 4) — restores every vanilla
+    //    original and clears the manifest so the fresh deploy records correct provenance.
+    let purged = purge(store, game)?;
+    // 2. Fresh deploy of the new winner set through the unchanged safe engine.
+    let deployed = deploy_winners(store, game, winners)?;
+    Ok((purged, deployed))
+}
+
 /// The shared per-file deploy primitive used by both [`deploy`] (single-root) and
 /// [`deploy_winners`] (multi-root). Performs the full safe sequence for ONE file:
 /// casing-normalize the relpath, guard containment, hash, journal `pending`,

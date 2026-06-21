@@ -68,9 +68,18 @@ pub async fn set_mod_rank(
     state.lock().await.store.set_mod_rank(mod_id, rank).map_err(boundary_err)
 }
 
-/// Resolve the enabled-mod winner set and deploy it through the safe engine (CONF-03):
-/// the deterministic, deduped (one owner per path) winners are applied via
-/// `deploy::deploy_winners`.
+/// Resolve the enabled-mod winner set and reconcile the deployment through the safe
+/// engine (CONF-03): the deterministic, deduped (one owner per path) winners are applied
+/// via `deploy::redeploy_winners`, which PURGES the current deployment back to pristine
+/// before deploying the fresh set.
+///
+/// A bare `deploy_winners` here would be a re-deploy bug: invoked a second time after the
+/// winner set changes (a rank flip that drops a path, or a mod being disabled/removed), it
+/// would orphan the now-dropped files on disk and corrupt the `pre_existing` vanilla-backup
+/// flag — defeating byte-for-byte pristine restore. Routing through `redeploy_winners`
+/// mirrors `switch_profile`'s purge-then-deploy reconcile, so repeated deploys stay fully
+/// reversible (Pitfall 4). The purge half of the report is discarded; the UI consumes the
+/// fresh deploy report.
 #[tauri::command]
 pub async fn deploy_winner_set(
     state: State<'_, Mutex<AppState>>,
@@ -79,5 +88,7 @@ pub async fn deploy_winner_set(
     let game = require_game(&state, appid).await?;
     let inputs = enabled_mod_inputs(&state, appid).await?;
     let (winners, _conflicts) = conflict::resolve(&inputs).map_err(boundary_err)?;
-    deploy::deploy_winners(&state.lock().await.store, &game, &winners).map_err(boundary_err)
+    let (_purged, report) =
+        deploy::redeploy_winners(&state.lock().await.store, &game, &winners).map_err(boundary_err)?;
+    Ok(report)
 }
