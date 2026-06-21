@@ -76,17 +76,38 @@ impl RateLimiter {
     ///
     /// Returns once a request may be issued. When a backoff deadline is in the future
     /// (set by [`note_headers`]), this sleeps until it first, then waits for the bucket.
+    ///
+    /// WR-03: with one shared limiter fronting parallel requests, the deadline may be
+    /// re-armed (extended) by a concurrent [`note_headers`] while we sleep. So we loop:
+    /// after each sleep we re-read the deadline and only proceed once it has elapsed,
+    /// and we clear it only if no later deadline was armed meanwhile — never blowing away
+    /// a freshly-recorded future backoff.
     pub async fn until_ready(&self) {
-        // 1. Reactive backoff: sleep until the recorded deadline, if any.
-        let wait = {
-            let guard = self.backoff_until.lock().expect("backoff lock");
-            guard.and_then(|deadline| deadline.checked_duration_since(Instant::now()))
-        };
-        if let Some(d) = wait {
-            tracing::info!(backoff_secs = d.as_secs(), "rate-limit backoff before next request");
-            tokio::time::sleep(d).await;
-            // Deadline consumed.
-            *self.backoff_until.lock().expect("backoff lock") = None;
+        // 1. Reactive backoff: sleep until the recorded deadline, re-checking after each
+        //    sleep in case a concurrent response extended it.
+        loop {
+            let wait = {
+                let guard = self.backoff_until.lock().expect("backoff lock");
+                guard.and_then(|deadline| deadline.checked_duration_since(Instant::now()))
+            };
+            match wait {
+                Some(d) => {
+                    tracing::info!(
+                        backoff_secs = d.as_secs(),
+                        "rate-limit backoff before next request"
+                    );
+                    tokio::time::sleep(d).await;
+                    // Loop: a concurrent note_headers may have pushed the deadline later.
+                }
+                None => {
+                    // No future deadline. Clear an elapsed one (best-effort) and proceed.
+                    let mut guard = self.backoff_until.lock().expect("backoff lock");
+                    if matches!(*guard, Some(deadline) if deadline <= Instant::now()) {
+                        *guard = None;
+                    }
+                    break;
+                }
+            }
         }
 
         // 2. Proactive bucket: wait for a token.
@@ -107,8 +128,14 @@ impl RateLimiter {
     ///
     /// If `status_429` is true, OR the hourly/daily remaining is at/below
     /// [`LOW_REMAINING_THRESHOLD`], schedule a backoff until the matching `-Reset`
-    /// (in seconds-from-now), falling back to [`DEFAULT_BACKOFF`]. A response with
-    /// healthy remaining budget CLEARS any prior backoff.
+    /// (in seconds-from-now), falling back to [`DEFAULT_BACKOFF`].
+    ///
+    /// WR-03: a healthy response only clears an *already-elapsed* backoff deadline — it
+    /// must NEVER clear a deadline that is still in the future. Because one shared limiter
+    /// fronts all parallel NexusMods requests, a healthy header on a concurrent in-flight
+    /// request (e.g. a cheaper/cached endpoint) would otherwise wipe a freshly-armed 429
+    /// backoff from another request, walking straight into a self-inflicted ban. We only
+    /// drop a stale (past) deadline so a future backoff survives concurrent healthy ticks.
     pub fn note_headers(&self, headers: &HeaderMap, status_429: bool) {
         let hourly_remaining = parse_u64(headers, H_HOURLY_REMAINING);
         let daily_remaining = parse_u64(headers, H_DAILY_REMAINING);
@@ -123,15 +150,26 @@ impl RateLimiter {
                 .map(Duration::from_secs)
                 .unwrap_or(DEFAULT_BACKOFF);
             let deadline = Instant::now() + reset_secs;
-            *self.backoff_until.lock().expect("backoff lock") = Some(deadline);
+            let mut guard = self.backoff_until.lock().expect("backoff lock");
+            // Extend, never shorten: keep the later of any existing future deadline and the
+            // newly-derived one so a concurrent weaker signal can't cut a stronger backoff.
+            *guard = Some(match *guard {
+                Some(existing) if existing > deadline => existing,
+                _ => deadline,
+            });
             tracing::warn!(
                 backoff_secs = reset_secs.as_secs(),
                 status_429,
                 "recording rate-limit backoff from X-RL-* headers"
             );
         } else if hourly_remaining.is_some() || daily_remaining.is_some() {
-            // Budget is healthy and the server reported it — clear any stale backoff.
-            *self.backoff_until.lock().expect("backoff lock") = None;
+            // Budget is healthy and the server reported it. Only clear a backoff that has
+            // ALREADY elapsed — a still-future deadline (armed by a concurrent 429/low
+            // response) must survive (WR-03).
+            let mut guard = self.backoff_until.lock().expect("backoff lock");
+            if matches!(*guard, Some(deadline) if deadline <= Instant::now()) {
+                *guard = None;
+            }
         }
     }
 
@@ -200,13 +238,41 @@ mod tests {
         assert_eq!(RateLimiter::retry_after_secs(&headers), 90);
     }
 
-    /// Healthy remaining budget clears any prior backoff.
+    /// WR-03: a healthy response must NOT clear a still-FUTURE backoff deadline. With one
+    /// shared limiter fronting parallel requests, a concurrent healthy header (a cheaper
+    /// endpoint) would otherwise wipe a freshly-armed 429 backoff and walk into a ban.
     #[test]
-    fn healthy_remaining_clears_backoff() {
+    fn healthy_remaining_does_not_clear_future_backoff() {
         let rl = RateLimiter::new();
         rl.note_headers(&hm(&[("x-rl-hourly-remaining", "0"), ("x-rl-hourly-reset", "60")]), false);
         assert!(rl.is_backing_off());
+        // A concurrent healthy response arrives while the 60s backoff is still in the
+        // future: it must be IGNORED, not allowed to clear the armed deadline.
         rl.note_headers(&hm(&[("x-rl-hourly-remaining", "99")]), false);
-        assert!(!rl.is_backing_off(), "a healthy response must clear the backoff");
+        assert!(rl.is_backing_off(), "a future backoff must survive a healthy response");
+    }
+
+    /// WR-03: an ALREADY-elapsed backoff is cleared by a healthy response (a deadline of
+    /// 0s is in the past by the time we re-check), so a stale deadline doesn't linger.
+    #[test]
+    fn healthy_remaining_clears_elapsed_backoff() {
+        let rl = RateLimiter::new();
+        // Reset of 0 → the deadline is effectively now/past immediately.
+        rl.note_headers(&hm(&[("x-rl-hourly-remaining", "0"), ("x-rl-hourly-reset", "0")]), false);
+        // is_backing_off compares strictly `> now`, so a 0s deadline already reads false.
+        assert!(!rl.is_backing_off(), "a 0s deadline is already elapsed");
+        rl.note_headers(&hm(&[("x-rl-hourly-remaining", "99")]), false);
+        assert!(!rl.is_backing_off(), "an elapsed backoff is cleared by a healthy response");
+    }
+
+    /// WR-03: a stronger (later) backoff is never shortened by a weaker concurrent signal.
+    #[test]
+    fn later_backoff_is_not_shortened_by_earlier_one() {
+        let rl = RateLimiter::new();
+        rl.note_headers(&hm(&[("x-rl-hourly-reset", "300")]), true); // arm a long 300s backoff
+        assert!(rl.is_backing_off());
+        // A concurrent low-remaining response with a SHORTER reset must not cut it down.
+        rl.note_headers(&hm(&[("x-rl-hourly-remaining", "1"), ("x-rl-hourly-reset", "10")]), false);
+        assert!(rl.is_backing_off(), "the longer backoff must remain armed");
     }
 }

@@ -16,6 +16,8 @@
 //! "download failed". A 429 maps to [`NexusError::RateLimited`] with a reset-derived
 //! retry-after. SECRET DISCIPLINE (V7): no URI, token, or key is ever logged.
 
+use std::sync::Arc;
+
 use reqwest::StatusCode;
 use serde::Deserialize;
 
@@ -41,24 +43,46 @@ pub enum NexusAuth {
 
 /// The async NexusMods API client: a hardened reqwest client + a `governor` rate limiter
 /// + an injectable base URL + the session auth.
+///
+/// WR-03: the `limiter` is an `Arc<RateLimiter>` so a single process-wide limiter can be
+/// shared across every per-download client. With a per-client limiter, N concurrent
+/// downloads each got a full fresh hourly bucket and an independent backoff deadline, so
+/// the "never self-inflict a ban" guarantee did not hold across parallel downloads. The
+/// shell constructs one limiter in `AppState` and threads it in via [`Self::with_limiter`].
 pub struct NexusClient {
     http: reqwest::Client,
     base: String,
     auth: NexusAuth,
-    limiter: RateLimiter,
+    limiter: Arc<RateLimiter>,
 }
 
 impl NexusClient {
-    /// Build a client against the real NexusMods host with the given session auth.
+    /// Build a client against the real NexusMods host with the given session auth and a
+    /// **fresh** (un-shared) rate limiter. Prefer [`Self::with_limiter`] in the shell so
+    /// the limiter is shared process-wide (WR-03); this constructor remains for tests and
+    /// one-off callers that do not need cross-request coordination.
     pub fn new(auth: NexusAuth) -> Result<Self, NexusError> {
         Self::with_base(NEXUS_API_BASE, auth)
     }
 
-    /// Build a client against an explicit base URL (production host or a mockito URL).
+    /// Build a client against an explicit base URL with a fresh limiter (mockito tests).
     ///
-    /// The reqwest client disables redirect-following (SSRF guard) and uses the
-    /// workspace's rustls-only feature set (no native-tls).
+    /// The reqwest client disables redirect-following (open-redirect hardening) and uses
+    /// the workspace's rustls-only feature set (no native-tls).
     pub fn with_base(base: &str, auth: NexusAuth) -> Result<Self, NexusError> {
+        Self::with_limiter(base, auth, Arc::new(RateLimiter::new()))
+    }
+
+    /// Build a client that uses a **shared** process-wide rate limiter (WR-03).
+    ///
+    /// All NexusMods requests issued by clients built with the same `limiter` `Arc`
+    /// coordinate one token bucket and one backoff deadline, so parallel downloads cannot
+    /// each carve out a fresh hourly budget or clobber each other's 429 backoff.
+    pub fn with_limiter(
+        base: &str,
+        auth: NexusAuth,
+        limiter: Arc<RateLimiter>,
+    ) -> Result<Self, NexusError> {
         let http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -67,7 +91,7 @@ impl NexusClient {
             http,
             base: base.trim_end_matches('/').to_string(),
             auth,
-            limiter: RateLimiter::new(),
+            limiter,
         })
     }
 

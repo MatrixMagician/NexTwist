@@ -138,6 +138,51 @@ async fn rate_limit_429_maps_to_rate_limited_and_arms_backoff() {
     }
 }
 
+/// WR-03: a 429 on a client built from a SHARED `Arc<RateLimiter>` arms a backoff that a
+/// SECOND client built from the same `Arc` observes — proving the limiter is process-wide
+/// and parallel downloads coordinate one budget + one backoff (not a fresh one each).
+#[tokio::test]
+async fn shared_limiter_backoff_is_visible_across_clients() {
+    use std::sync::Arc;
+
+    let mut server = mockito::Server::new_async().await;
+    let _m = server
+        .mock(
+            "GET",
+            "/v1/games/skyrimspecialedition/mods/1/files/2/download_link.json",
+        )
+        .with_status(429)
+        .with_header("x-rl-hourly-remaining", "0")
+        .with_header("x-rl-hourly-reset", "120") // long enough to still be armed on re-check
+        .create_async()
+        .await;
+
+    let limiter = Arc::new(nexus::RateLimiter::new());
+    assert!(!limiter.is_backing_off(), "fresh limiter is not backing off");
+
+    // Client A shares the limiter and trips a 429.
+    let client_a =
+        NexusClient::with_limiter(&server.url(), NexusAuth::ApiKey("k".into()), limiter.clone())
+            .unwrap();
+    let _ = client_a
+        .download_link("skyrimspecialedition", 1, 2, None, None)
+        .await
+        .expect_err("429 must error");
+
+    // The SHARED limiter is now armed — a second client built from the same Arc sees it.
+    assert!(
+        limiter.is_backing_off(),
+        "WR-03: a 429 on one client must arm the shared limiter for all clients"
+    );
+    let _client_b =
+        NexusClient::with_limiter(&server.url(), NexusAuth::Bearer("t".into()), limiter.clone())
+            .unwrap();
+    assert!(
+        limiter.is_backing_off(),
+        "WR-03: client B coordinates the same backoff deadline"
+    );
+}
+
 /// Test 3b: a 200 with a LOW `X-RL-Hourly-Remaining` arms a backoff; the limiter then
 /// gates the next request (asserted by the standalone ratelimit unit tests; here we
 /// confirm the client wires the header through and the response still parses).

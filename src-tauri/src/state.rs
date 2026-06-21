@@ -6,8 +6,9 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use nexus::CancelFlag;
+use nexus::{CancelFlag, RateLimiter};
 use store::Store;
 
 use crate::auth::PendingOAuth;
@@ -42,6 +43,12 @@ pub struct AppState {
     /// `cancel_download` command trips the matching flag; the streaming loop in
     /// `crates/nexus` checks it once per chunk and aborts (NEXUS-03 Cancel affordance).
     pub downloads: HashMap<String, CancelFlag>,
+    /// The ONE process-wide NexusMods rate limiter (WR-03). Every per-download
+    /// `NexusClient` is built with a clone of this `Arc` so the proactive token bucket and
+    /// the reactive `X-RL-*` backoff deadline are shared across ALL parallel requests — N
+    /// concurrent downloads can no longer each carve out a fresh hourly budget or clobber
+    /// each other's 429 backoff.
+    pub rate_limiter: Arc<RateLimiter>,
 }
 
 impl AppState {
@@ -59,6 +66,8 @@ impl AppState {
             pending_oauth: None,
             user: None,
             downloads: HashMap::new(),
+            // One shared limiter for the whole process (WR-03).
+            rate_limiter: Arc::new(RateLimiter::new()),
         })
     }
 }
