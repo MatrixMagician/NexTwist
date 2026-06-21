@@ -56,12 +56,47 @@ pub fn run() {
     let _ = tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).try_init();
 
     tauri::Builder::default()
+        // OS-integration plugins (NXM-01). ORDER IS LOAD-BEARING: tauri-plugin-single-instance
+        // MUST be registered BEFORE tauri-plugin-deep-link (RESEARCH Anti-Pattern) — on Linux,
+        // with single-instance's `deep-link` feature, a second `nxm://` invocation while the app
+        // is open is forwarded to the live instance and routed to `on_open_url` automatically
+        // (never a duplicate window). Registering deep-link first would lose the forwarded URL.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            // A second instance was launched (e.g. a browser `nxm://` click while we're open).
+            // The forwarded URL reaches `on_open_url` via the deep-link feature; here we just
+            // raise/focus the existing main window so the user sees the live instance react.
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
             let data_dir = resolve_data_dir(app);
             let app_state = AppState::init(data_dir)?;
             // Crash-recovery BEFORE the UI is served (DEPLOY-06).
             recover_all_on_launch(&app_state);
             app.manage(tokio::sync::Mutex::new(app_state));
+
+            // Register the `nxm://` scheme + capture handler (NXM-01). On Linux this needs
+            // `xdg-mime` + `update-desktop-database` on PATH for dev/installed-runtime
+            // registration; the AppImage `.desktop` MIME registration is a Phase-5 concern
+            // (RESEARCH Pitfall 4). Failures here are non-fatal — the app still opens.
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register_all() {
+                    tracing::warn!(error = %e, "nxm:// deep-link registration failed (xdg-mime/update-desktop-database missing?)");
+                }
+                // Route every incoming `nxm://` URL through the thin shell router. ALL parsing
+                // is in the headless `nexus::NxmLink::parse`; this closure only forwards. The
+                // url is NEVER logged here (it may carry a key/expires/code — V7).
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        commands::nexus::handle_nxm_url(&handle, url.as_str());
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

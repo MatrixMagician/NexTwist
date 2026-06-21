@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default capability: lets the main window call NexTwist's own commands.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:event:default", "deep-link:default"]
 }

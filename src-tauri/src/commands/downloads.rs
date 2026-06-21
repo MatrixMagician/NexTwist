@@ -69,35 +69,70 @@ pub async fn start_download(
     key: Option<String>,
     expires: Option<String>,
 ) -> Result<DownloadResult, String> {
-    let game = require_game(&state, appid).await?;
+    // Delegate to the shared core so the in-app (Premium) path and the `nxm://` free-user
+    // redemption run the EXACT same stream→extract→stage flow (no parallel download path).
+    run_download_to_window(
+        &state,
+        &window,
+        &id,
+        appid,
+        &game_domain,
+        nexus_mod_id,
+        file_id,
+        key,
+        expires,
+    )
+    .await
+}
+
+/// Drive a full download keyed by raw coordinates, emitting progress to `window`.
+///
+/// This is the shared core both the IPC [`start_download`] command and the `nxm://`
+/// deep-link router (`commands::nexus::handle_nxm_url`) call — so the free-user redemption
+/// reuses the EXACT Plan-02 stream→extract→stage path (no parallel download flow). It
+/// resolves the session auth itself (OAuth bearer or the keyring API key), registers a
+/// cancel flag, runs the flow, and emits the terminal `download://progress` event (`done`,
+/// `failed`, or `expired`). Returns the staged result, or the failure reason string.
+///
+/// `key`/`expires` are `None` for a Premium direct download and `Some` for a free-user
+/// `nxm://` redemption.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn run_download_to_window(
+    state: &State<'_, Mutex<AppState>>,
+    window: &tauri::Window,
+    id: &str,
+    appid: u32,
+    game_domain: &str,
+    nexus_mod_id: u64,
+    file_id: u64,
+    key: Option<String>,
+    expires: Option<String>,
+) -> Result<DownloadResult, String> {
+    let game = require_game(state, appid).await?;
 
     // Resolve session auth + register a cancel flag — lock held only briefly.
     let (auth, cancel) = {
         let mut guard = state.lock().await;
         let auth = match guard.access_token.clone() {
-            // OAuth session → bearer token.
             Some(tok) => NexusAuth::Bearer(tok),
-            // API-key session → load the key from the keyring (never held in AppState).
             None => {
-                let key = crate::keyring::load_refresh_token()
+                let api_key = crate::keyring::load_refresh_token()
                     .map_err(boundary_err)?
                     .ok_or_else(|| "not logged in: no NexusMods session".to_string())?;
-                NexusAuth::ApiKey(key)
+                NexusAuth::ApiKey(api_key)
             }
         };
         let cancel = CancelFlag::new();
-        guard.downloads.insert(id.clone(), cancel.clone());
+        guard.downloads.insert(id.to_string(), cancel.clone());
         (auth, cancel)
     };
 
-    // Run the full flow; on any error, clean up the cancel-flag registration + emit a
-    // "failed" (or "expired link") event, then surface the error string.
     let result = run_download(
-        &state,
-        &window,
-        &id,
+        state,
+        window,
+        id,
         &game,
-        &game_domain,
+        game_domain,
         nexus_mod_id,
         file_id,
         key.as_deref(),
@@ -107,14 +142,13 @@ pub async fn start_download(
     )
     .await;
 
-    // Deregister the cancel flag regardless of outcome.
-    state.lock().await.downloads.remove(&id);
+    state.lock().await.downloads.remove(id);
 
     match result {
         Ok(res) => {
             emit_progress(
-                &window,
-                &id,
+                window,
+                id,
                 res.staging_size_hint,
                 res.staging_size_hint_total,
                 "done",
@@ -126,7 +160,7 @@ pub async fn start_download(
             // An expired free-user link is surfaced distinctly (UI-SPEC §C.3): the UI
             // shows the Warning "link expired" notice, not a Failed download row.
             let state_label = if is_redeem { "expired" } else { "failed" };
-            emit_progress(&window, &id, 0, None, state_label, Some(reason.clone()));
+            emit_progress(window, id, 0, None, state_label, Some(reason.clone()));
             Err(reason)
         }
     }
