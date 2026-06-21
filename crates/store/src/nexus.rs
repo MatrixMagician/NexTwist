@@ -18,15 +18,22 @@ impl Store {
     /// Idempotent on `mod_id` (UNIQUE): re-recording provenance for the same mod UPDATEs
     /// the existing row (e.g. a re-download at a newer version) rather than erroring.
     pub fn add_nexus_source(&self, src: &NexusSource) -> Result<i64, StoreError> {
-        self.conn
-            .execute(
+        // WR-05: collapse the upsert to a SINGLE statement with `RETURNING id`. The prior
+        // two-statement form (INSERT…ON CONFLICT, then a separate SELECT) was not atomic —
+        // a concurrent writer could interleave and return a stale/wrong id (or the row
+        // could be gone, erroring the SELECT). `RETURNING` yields the affected row's id
+        // for BOTH the INSERT and the DO UPDATE branch in one round-trip.
+        let id: i64 = self
+            .conn
+            .query_row(
                 "INSERT INTO nexus_source (mod_id, nexus_mod_id, file_id, version, display_name)
                  VALUES (?1, ?2, ?3, ?4, ?5)
                  ON CONFLICT (mod_id) DO UPDATE SET
                      nexus_mod_id = excluded.nexus_mod_id,
                      file_id      = excluded.file_id,
                      version      = excluded.version,
-                     display_name = excluded.display_name",
+                     display_name = excluded.display_name
+                 RETURNING id",
                 params![
                     src.mod_id,
                     src.nexus_mod_id as i64,
@@ -34,16 +41,6 @@ impl Store {
                     src.version,
                     src.display_name,
                 ],
-            )
-            .map_err(|e| StoreError::Db(e.to_string()))?;
-
-        // last_insert_rowid is the inserted id on INSERT; on an UPDATE branch, look the
-        // row up explicitly so the caller always gets the stable nexus_source id.
-        let id: i64 = self
-            .conn
-            .query_row(
-                "SELECT id FROM nexus_source WHERE mod_id = ?1",
-                params![src.mod_id],
                 |r| r.get(0),
             )
             .map_err(|e| StoreError::Db(e.to_string()))?;
