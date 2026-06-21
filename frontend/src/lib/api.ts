@@ -196,6 +196,115 @@ export interface NxmExpired {
   reason: string;
 }
 
+// --- FOMOD guided installer (FOMOD-01/FOMOD-02). 1:1 mirrors of commands/fomod.rs. ---
+
+/** The 5 FOMOD selection-group types (mirrors fomod::GroupType, PascalCase over IPC). */
+export type GroupType =
+  | "SelectExactlyOne"
+  | "SelectAtMostOne"
+  | "SelectAtLeastOne"
+  | "SelectAll"
+  | "SelectAny";
+
+/** The 5-state FOMOD option type (mirrors fomod::PluginType, PascalCase over IPC). */
+export type PluginType =
+  | "Required"
+  | "Optional"
+  | "Recommended"
+  | "NotUsable"
+  | "CouldBeUsable";
+
+/** One selectable option (mirrors commands::fomod::OptionProjection). */
+export interface FomodOption {
+  name: string;
+  description: string;
+  /** Archive-relative image path, if the author supplied one (bounded ≤96px in the UI). */
+  image: string | null;
+  /** The authored default/static type-state; the live type after choices comes from resolve. */
+  default_type: PluginType;
+  /** `[flag, value]` pairs this option sets when selected; the wizard accumulates these
+   *  into the flag set it passes to resolveFomod so the engine re-evaluates conditions live. */
+  flags: [string, string][];
+}
+
+/** One option group within a step (mirrors commands::fomod::GroupProjection). */
+export interface FomodGroup {
+  name: string;
+  group_type: GroupType;
+  options: FomodOption[];
+}
+
+/** One wizard install step (mirrors commands::fomod::StepProjection). */
+export interface FomodStep {
+  name: string;
+  /** Whether this step carries a `<visible>` condition (it may be skipped live). */
+  conditional: boolean;
+  groups: FomodGroup[];
+}
+
+/** The parsed FOMOD module projected for the wizard (mirrors commands::fomod::FomodProjection). */
+export interface FomodProjection {
+  module_name: string;
+  steps: FomodStep[];
+}
+
+/** The user's wizard choices crossing the IPC boundary (mirrors commands::fomod::SelectionDto).
+ *  `chosen` is a list of `[step, group, option]` identities; `flags` a list of `[name, value]`. */
+export interface FomodSelection {
+  chosen: [string, string, string][];
+  flags: [string, string][];
+}
+
+/** The dry-run conflict classification (mirrors commands::fomod::ConflictClass). */
+export type ConflictClass = "none" | "resolvable" | "blocking";
+
+/** One row of the resolved dry-run plan (mirrors commands::fomod::PlanEntry). */
+export interface FomodPlanEntry {
+  src: string;
+  dest: string;
+  priority: number;
+}
+
+/** The dry-run preview shown BEFORE any staging write (mirrors commands::fomod::ResolvePreview). */
+export interface FomodResolvePreview {
+  plan: FomodPlanEntry[];
+  classification: ConflictClass;
+  /** Destinations contested by equal-priority sources (the blocking set). */
+  blocking: string[];
+}
+
+/** The result of a confirmed apply (mirrors commands::fomod::ApplyResult). */
+export interface FomodApplyResult {
+  mod_id: number;
+  name: string;
+  staging_root: string;
+  files: number;
+}
+
+/** Parse a mod archive's `fomod/ModuleConfig.xml` into the wizard projection.
+ *  Rejects (throws the verbatim reason) for a non-FOMOD / malformed archive. */
+export const parseFomod = (appid: number, archive: string): Promise<FomodProjection> =>
+  invoke("parse_fomod", { appid, archive });
+
+/** The PURE dry-run resolve: turn a selection into the file-install plan + conflict
+ *  classification WITHOUT writing anything (the FOMOD-02 dry-run-before-apply gate). */
+export const resolveFomod = (
+  appid: number,
+  archive: string,
+  selection: FomodSelection,
+): Promise<FomodResolvePreview> =>
+  invoke("resolve_fomod", { appid, archive, selection });
+
+/** Apply a confirmed (non-blocking) FOMOD install: stage the validated archive and record
+ *  it as an ordinary ManagedMod. Throws on a blocking selection (server-side gate). */
+export const applyFomod = (
+  appid: number,
+  archive: string,
+  name: string,
+  selection: FomodSelection,
+): Promise<FomodApplyResult> =>
+  invoke("apply_fomod", { appid, archive, name, selection });
+
 export const detectGames = (): Promise<DetectedGame[]> => invoke("detect_games");
 
 export const addGame = (appid: number): Promise<Game> => invoke("add_game", { appid });

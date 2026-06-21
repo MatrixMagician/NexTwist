@@ -91,6 +91,10 @@ pub struct OptionProjection {
     /// The authored default/static type-state (Required/Optional/Recommended/NotUsable/
     /// CouldBeUsable). The LIVE type-state after choices is recomputed by `resolve_fomod`.
     pub default_type: PluginTypeDto,
+    /// The `(flag, value)` pairs this option sets when selected (`<conditionFlags>`). The
+    /// wizard accumulates these into the flag set it passes back to `resolve_fomod`, so the
+    /// engine re-evaluates `conditionalFileInstalls` (and type-states) live on each choice.
+    pub flags: Vec<[String; 2]>,
 }
 
 /// Serializable mirror of [`fomod::GroupType`].
@@ -392,11 +396,22 @@ fn project_module(module: &FomodModule) -> FomodProjection {
                         let mut pl: Vec<_> = plugin_list.plugins.iter().collect();
                         sort_by_order(&mut pl, plugin_list.order, |p| &p.name);
                         for plugin in pl {
+                            let flags = plugin
+                                .condition_flags
+                                .as_ref()
+                                .map(|cf| {
+                                    cf.flags
+                                        .iter()
+                                        .map(|f| [f.name.clone(), f.value.clone()])
+                                        .collect()
+                                })
+                                .unwrap_or_default();
                             options.push(OptionProjection {
                                 name: plugin.name.clone(),
                                 description: plugin.description.clone(),
                                 image: plugin.image.as_ref().map(|i| i.path.clone()),
                                 default_type: default_type_of(plugin).into(),
+                                flags,
                             });
                         }
                     }
