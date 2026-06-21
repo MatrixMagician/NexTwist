@@ -36,6 +36,7 @@
 use std::path::{Path, PathBuf};
 
 use libloot::{Game, GameType};
+use nextwist_core::{Plugin, PluginKind};
 
 use crate::error::LoadOrderError;
 
@@ -123,6 +124,115 @@ pub fn set_order_and_save(game: &mut Game, order: &[&str]) -> Result<(), LoadOrd
     game.set_load_order(order)
         .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
     Ok(())
+}
+
+/// True if a plugin kind is part of the master group (sorts ahead of regular `.esp`).
+fn is_master_group(kind: PluginKind) -> bool {
+    matches!(kind, PluginKind::Esm | PluginKind::Esl)
+}
+
+/// Order a desired plugin set masters-first (`.esm`/ESL before `.esp`), preserving each
+/// plugin's relative `order` within its group. libloot ALSO enforces masters-first
+/// internally on `set_load_order` (D-08), so this is belt-and-suspenders that also gives a
+/// deterministic, masters-first order argument; we never rely on this as the sole guard.
+///
+/// Returns the plugin NAMES in the masters-first order.
+pub fn masters_first_order(plugins: &[Plugin]) -> Vec<String> {
+    let mut sorted: Vec<&Plugin> = plugins.iter().collect();
+    sorted.sort_by(|a, b| {
+        let a_master = is_master_group(a.kind);
+        let b_master = is_master_group(b.kind);
+        // Masters group first, then by the plugin's own order, then by name for stability.
+        b_master
+            .cmp(&a_master)
+            .then(a.order.cmp(&b.order))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    sorted.into_iter().map(|p| p.name.clone()).collect()
+}
+
+/// Render the asterisk-format active-plugins file body for a desired plugin set.
+///
+/// SkyrimSE/Fallout4 use the asterisk method: an ENABLED plugin is written with a leading
+/// `*`; a disabled plugin is written WITHOUT the asterisk (libloot's format keeps the line
+/// so the relative order is recorded but the plugin is inactive). The lines are in
+/// masters-first order to match what libloot persists.
+///
+/// This is the ONLY place NexTwist materializes active flags, and only as a SEED that
+/// libloot then re-reads/re-writes — we are NOT hand-rolling the canonical format, we are
+/// feeding libloot its own input (the Plan-02 spike proved this round-trips).
+fn asterisk_plugins_txt(plugins: &[Plugin]) -> String {
+    // Preserve a name -> enabled lookup, then walk the masters-first order.
+    let order = masters_first_order(plugins);
+    let mut body = String::new();
+    for name in &order {
+        let enabled = plugins
+            .iter()
+            .find(|p| &p.name == name)
+            .map(|p| p.enabled)
+            .unwrap_or(false);
+        if enabled {
+            body.push('*');
+        }
+        body.push_str(name);
+        body.push('\n');
+    }
+    body
+}
+
+/// Apply a desired plugin enable/order set: write the asterisk-format Plugins.txt at
+/// libloot's `active_plugins_file_path` inside the Proton prefix and persist the
+/// masters-first load order via libloot. Returns the written Plugins.txt path.
+///
+/// Sequence (the Plan-02-verified seam — there is no active-plugin setter in libloot
+/// 0.29.5, so active state enters via the Plugins.txt libloot loads):
+///   1. `open_game` (with_local_path; creates the AppData dir — Pitfall 2),
+///   2. SEED the asterisk Plugins.txt from the desired `plugins` (enabled → `*Name`),
+///   3. `load_current_load_order_state` (libloot reads the seeded active flags),
+///   4. `set_load_order` over the masters-first names (libloot enforces masters-first and
+///      persists internally — there is NO separate `Game::save`).
+///
+/// `plugins` whose files do not physically exist under the game `Data/` are dropped from
+/// the order before calling libloot, because libloot/libloadorder header-parse every named
+/// plugin and error on a missing file (Plan-02 spike limitation). Only on-disk plugins are
+/// ordered; this keeps a stale store entry from aborting the whole write.
+///
+/// # Errors
+/// * [`LoadOrderError::NoLocalAppData`] for an unresolved prefix / unsupported appid.
+/// * [`LoadOrderError::Io`] if the seed Plugins.txt cannot be written.
+/// * [`LoadOrderError::Loot`] if libloot fails to load or persist the order.
+pub fn apply_load_order(
+    appid: u32,
+    install_dir: &Path,
+    appdata_local: &Path,
+    plugins: &[Plugin],
+) -> Result<PathBuf, LoadOrderError> {
+    let mut game = open_game(appid, install_dir, appdata_local)?;
+
+    // libloot/libloadorder header-parse every named plugin and error on a missing file,
+    // so only order plugins that actually exist on disk (in Data/ or as the active file's
+    // resolved data path). A stale store row for a removed mod must not abort the write.
+    let data_dir = install_dir.join("Data");
+    let on_disk: Vec<Plugin> = plugins
+        .iter()
+        .filter(|p| data_dir.join(&p.name).is_file())
+        .cloned()
+        .collect();
+
+    // Seed the asterisk active-plugins file libloot will read (active state seam).
+    let active_file = game.active_plugins_file_path().clone();
+    if let Some(parent) = active_file.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| LoadOrderError::io(parent, e))?;
+    }
+    std::fs::write(&active_file, asterisk_plugins_txt(&on_disk))
+        .map_err(|e| LoadOrderError::io(&active_file, e))?;
+
+    // Load the seeded active state, then set + persist the masters-first order.
+    let order = masters_first_order(&on_disk);
+    let order_refs: Vec<&str> = order.iter().map(String::as_str).collect();
+    set_order_and_save(&mut game, &order_refs)?;
+
+    Ok(game.active_plugins_file_path().clone())
 }
 
 #[cfg(test)]

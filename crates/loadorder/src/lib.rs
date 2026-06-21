@@ -15,7 +15,10 @@
 
 pub mod error;
 pub mod loot;
+pub mod masterlist;
 pub mod scan;
 
 pub use error::LoadOrderError;
+pub use loot::{apply_load_order, masters_first_order};
+pub use masterlist::ensure_masterlist;
 pub use scan::{esplugin_game_id, scan_plugins, scan_plugins_for};

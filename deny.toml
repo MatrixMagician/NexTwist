@@ -40,6 +40,11 @@ allow = [
     "ISC",
     "MPL-2.0",
     "CC0-1.0",
+    # CA root-certificate bundle (webpki-root-certs, via reqwest's rustls-platform-verifier,
+    # added Plan 04 for the masterlist HTTPS fetch). CDLA-Permissive-2.0 is a permissive
+    # data license (Mozilla's CA certs, the same root set browsers ship) — GPL-compatible
+    # and fine to ship in the AppImage.
+    "CDLA-Permissive-2.0",
     # bzip2 decompression (libbz2-rs-sys, via zip/sevenz-rust2). The bzip2 license is a
     # permissive BSD-style, GPL-compatible, free license — fine to ship in the AppImage.
     "bzip2-1.0.6",

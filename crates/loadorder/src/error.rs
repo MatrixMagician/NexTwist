@@ -41,6 +41,17 @@ pub enum LoadOrderError {
     /// `with_local_path`; this guards against an empty/unresolved prefix root.
     #[error("no local AppData path resolved for the Proton prefix: {0}")]
     NoLocalAppData(PathBuf),
+
+    /// A masterlist HTTP fetch failed (network/TLS/HTTP-status). NON-fatal at the
+    /// callsite: the masterlist layer falls back to a bundled CC0 snapshot, so this
+    /// surfaces only when BOTH the network and the bundled fallback are unavailable.
+    #[error("masterlist fetch failed: {0}")]
+    Network(String),
+
+    /// An unsupported game has no LOOT masterlist slug (the allow-list rejected the
+    /// AppID before any fetch was attempted).
+    #[error("unsupported game for masterlist (appid {0})")]
+    UnsupportedGame(u32),
 }
 
 impl LoadOrderError {
