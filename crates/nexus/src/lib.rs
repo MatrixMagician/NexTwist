@@ -15,9 +15,11 @@
 //! `crates/loadorder`'s masterlist fetch, converted from blocking to async (the two
 //! clients never share a call path; this crate runs on the shell's tokio runtime).
 //!
-//! Plan 01 (this slice) lands `error`, `model`, and `auth` (OAuth2-PKCE + API-key).
-//! `client`, `download`, and `ratelimit` are declared here but carry stub bodies until
-//! Plan 02 layers the download flow on top of this auth spine.
+//! Plan 01 landed `error`, `model`, and `auth` (OAuth2-PKCE + API-key). Plan 02 (this
+//! slice) layers the download flow on top of that auth spine: `client` (hybrid REST v1
+//! download-link + GraphQL v2 metadata), `ratelimit` (the `governor` limiter + reactive
+//! `X-RL-*` backoff), and `download` (streaming download with a Tauri-free progress
+//! callback).
 
 pub mod auth;
 pub mod client;
@@ -29,5 +31,7 @@ pub mod ratelimit;
 pub use auth::{
     build_authorize_url, exchange_code, validate_api_key, AuthorizeRequest, API_BASE, TOKEN_BASE,
 };
+pub use client::{NexusAuth, NexusClient, NEXUS_API_BASE};
 pub use error::NexusError;
-pub use model::{OAuthTokens, UserInfo};
+pub use model::{DownloadLink, ModFile, OAuthTokens, UserInfo};
+pub use ratelimit::RateLimiter;

@@ -31,6 +31,11 @@ tracing.workspace = true
 oauth2.workspace = true
 governor.workspace = true
 futures-util.workspace = true
+# tokio is needed (non-dev) for the streaming download's async file I/O
+# (`tokio::fs::File` + `AsyncWriteExt`). The crate stays runtime-agnostic otherwise —
+# it never starts a runtime; it runs on whichever runtime the shell provides. Only the
+# `fs` feature is needed here (the macros/rt features stay dev-only for the tests).
+tokio = { workspace = true, features = ["fs", "io-util", "time"] }
 
 [dev-dependencies]
 nextwist_core = { path = "../core", package = "nextwist-core" }

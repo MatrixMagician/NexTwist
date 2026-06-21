@@ -42,9 +42,59 @@ pub struct OAuthTokens {
     pub refresh: Option<String>,
 }
 
+/// One CDN download link entry, as returned by REST v1 `download_link.json`.
+///
+/// The endpoint returns an array `[{ "name": …, "short_name": …, "URI": … }, …]`. We
+/// keep the first entry's `uri` to stream from. NexusMods serialises the field as the
+/// upper-case `URI`, so the serde rename is load-bearing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DownloadLink {
+    /// Human-readable CDN name (e.g. "Nexus CDN").
+    pub name: String,
+    /// Short CDN name (e.g. "Nexus").
+    pub short_name: String,
+    /// The actual HTTPS CDN URI to stream the file from. NEVER logged.
+    #[serde(rename = "URI")]
+    pub uri: String,
+}
+
+/// Mod-file metadata read over GraphQL v2 (version + display name).
+///
+/// v2 is the modern read path for metadata (RESEARCH Pitfall 2); the download link
+/// itself still comes from REST v1. These two fields are what the provenance record
+/// and the downloads-list row label need.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModFile {
+    /// The file's version string (e.g. "1.6.3").
+    pub version: String,
+    /// The file's display name shown in the downloads list.
+    pub display_name: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn download_link_parses_nexus_uri_field() {
+        // NexusMods serialises the URI as the upper-case `URI`; the rename must catch it.
+        let json = r#"[{"name":"Nexus CDN","short_name":"Nexus","URI":"https://cdn.example/file.zip"}]"#;
+        let links: Vec<DownloadLink> = serde_json::from_str(json).unwrap();
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].uri, "https://cdn.example/file.zip");
+        assert_eq!(links[0].short_name, "Nexus");
+    }
+
+    #[test]
+    fn mod_file_serde_round_trips() {
+        let f = ModFile {
+            version: "1.6.3".into(),
+            display_name: "Skyrim Script Extender".into(),
+        };
+        let json = serde_json::to_string(&f).unwrap();
+        let back: ModFile = serde_json::from_str(&json).unwrap();
+        assert_eq!(f, back);
+    }
 
     #[test]
     fn user_info_serde_round_trips() {
