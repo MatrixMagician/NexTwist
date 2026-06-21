@@ -120,12 +120,22 @@ Plans:
   3. NexTwist automatically applies the Collection's FOMOD choices, load order, and rules
   4. User can deploy an installed Collection so the modded game launches, and can later cleanly uninstall the Collection with full reversibility
 
-**Plans**: TBD
+**Plans**: 4 plans
 **UI hint**: yes
 
 Plans:
+**Wave 1**
 
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md — Headless `crates/fomod` engine (parse→condition→resolve, dry-run) + close the carried archive-root-detection gap in `crates/extract` (FOMOD-01/02)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 04-02-PLAN.md — FOMOD wizard slice: thin `commands/fomod.rs` adapters + the guided step-by-step wizard with live conditional re-eval + dry-run conflict-preview gate + apply-to-staging (FOMOD-01/02)
+- [ ] 04-03-PLAN.md — Collection acquisition foundation: V5 store migration + `store/collections.rs` facade + new `core` types + `nexus/collection.rs` parser + `nexus/resolve.rs` availability resolver (resolve-before-download gate, zero downloads) (COLL-01/02)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 04-04-PLAN.md — Collection lifecycle slice: headless FOMOD-choice replay + `commands/collections.rs` (resolve/download/deploy/uninstall, Premium-only, reuse run_download_to_window + switch_profile + purge) + Collections UI + install→uninstall pristine round-trip test (COLL-02/03/04/05)
 
 ### Phase 5: AppImage Distribution
 
@@ -154,5 +164,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Safe Local Round-Trip | 7/7 | Complete   | 2026-06-20 |
 | 2. Multi-Mod Management | 5/5 | Complete   | 2026-06-21 |
 | 3. NexusMods Login & Download | 3/3 | Complete    | 2026-06-21 |
-| 4. Guided Installers & Collections | 0/TBD | Not started | - |
+| 4. Guided Installers & Collections | 0/4 | Planned | - |
 | 5. AppImage Distribution | 0/TBD | Not started | - |
