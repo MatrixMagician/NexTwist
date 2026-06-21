@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 4
-current_phase_name: Guided Installers & Collections
+current_phase: 04
+current_phase_name: guided-installers-collections
 status: executing
 stopped_at: Phase 2 (Multi-Mod Management) BUILT + auto-verified (21/21 must-haves, code review 2 BLOCKERs fixed, 142 tests green); autonomous run STOPPED at user request. Phase 2 awaiting 4 manual/in-game UAT items (02-UAT.md).
-last_updated: "2026-06-21T17:26:25.789Z"
+last_updated: "2026-06-21T17:29:06.856Z"
 last_activity: 2026-06-21
-last_activity_desc: Phase 3 complete, transitioned to Phase 4
+last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 15
+  total_plans: 19
   completed_plans: 15
   percent: 60
 ---
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-20)
 
 **Core value:** Mods install and uninstall safely — non-destructive, fully reversible, conflict-aware deployment into Proton/Wine games on Linux.
-**Current focus:** Phase 3 — NexusMods Login & Download
+**Current focus:** Phase 04 — guided-installers-collections
 
 ## Current Position
 
-Phase: 4 — Guided Installers & Collections
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-21 — Phase 3 complete, transitioned to Phase 4
+Phase: 04 (guided-installers-collections) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 04
+Last activity: 2026-06-21 — Phase 04 execution started
 
 Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pending final manual UAT sign-off)
 
