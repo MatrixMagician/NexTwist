@@ -21,7 +21,9 @@
 use std::fs;
 use std::path::Path;
 
-use loadorder::loot::{appdata_local_path, game_type_for, open_game, set_order_and_save};
+use loadorder::loot::{
+    appdata_local_path, game_type_for, load_canonical_order, open_game, set_order_and_save,
+};
 use loadorder::LoadOrderError;
 use tempfile::TempDir;
 
@@ -112,9 +114,11 @@ fn set_order_round_trip_writes_asterisk_plugins_txt_under_the_fixture_appdata() 
     // libloot 0.29.5's public Game API exposes order (set_load_order) and active-query
     // (is_plugin_active) but NO active-plugin setter, so active state enters via the
     // plugins.txt libloot loads (in real NexTwist this file is generated from the DB
-    // plugin_state). load_current_load_order_state() reads this active flag, and
-    // set_load_order preserves the active state of already-loaded plugins, so save()
-    // re-writes the asterisk entry. (Documented as the spike's API finding.)
+    // plugin_state). load_canonical_order() (load_current_load_order_state + read the
+    // resolved order) reads this active flag, and set_load_order preserves the active state
+    // of already-loaded plugins, so save() re-writes the asterisk entry. (Documented as the
+    // spike's API finding; the load + set split mirrors apply_load_order, debug
+    // `loadorder-active-write`.)
     let prefix_root = tmp.path().join("pfx");
     testkit::fake_proton_prefix(&prefix_root, GAME_FOLDER, Some("*MyMod.esp\n")).unwrap();
     let appdata_local = appdata_local_path(&prefix_root, GAME_FOLDER);
@@ -122,8 +126,10 @@ fn set_order_round_trip_writes_asterisk_plugins_txt_under_the_fixture_appdata() 
     let mut game = open_game(SKYRIM_SE, &install, &appdata_local)
         .expect("open_game must succeed against the fixture prefix (A1/A3)");
 
-    // Masters-first order (libloot enforces masters-first INTERNALLY; this order
-    // already satisfies it). set_order_and_save loads current state then persists.
+    // Load the seeded active state (reads the asterisk flag), then persist the order.
+    // Masters-first order (libloot enforces masters-first INTERNALLY; this order already
+    // satisfies it).
+    load_canonical_order(&mut game).expect("load_canonical_order must read the seeded state");
     set_order_and_save(&mut game, &["Skyrim.esm", "MyMod.esp"])
         .expect("set_order_and_save must persist the load order");
 

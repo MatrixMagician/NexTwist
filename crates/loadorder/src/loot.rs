@@ -16,22 +16,33 @@
 //!   (libloot does NOT append the game-folder name again when given a local path).
 //! * `Game::load_current_load_order_state(&mut self) -> Result<(), LoadOrderStateError>`
 //!   — reads the existing Plugins.txt / load-order state (tolerates an absent file).
+//! * `Game::load_order(&self) -> Vec<&str>` — libloot's resolved order after a load. Its
+//!   leading run of *early-loading* / *implicitly-active* plugins (game master + the game's
+//!   hardcoded DLC list + Creation-Club `*.ccc` plugins) is placed at REQUIRED fixed
+//!   positions; NexTwist must defer to it, not hand-roll that prefix (debug
+//!   `loadorder-active-write`, RC1).
 //! * `Game::set_load_order(&mut self, &[&str]) -> Result<(), LoadOrderError>` — sets
 //!   AND persists the order (it calls `save()` internally; there is NO separate
-//!   `Game::save`). Masters-first is enforced INTERNALLY by libloot (D-08).
+//!   `Game::save`). Masters-first is enforced INTERNALLY by libloot (D-08), BUT the order
+//!   passed MUST keep libloot's fixed early-loader prefix or it rejects with
+//!   `"load order interaction failed"`.
 //! * `Game::active_plugins_file_path(&self) -> &PathBuf` — the exact Plugins.txt path
 //!   libloot reads/writes; for SkyrimSE it is `<local_path>/Plugins.txt`, asterisk
 //!   format (`*Active.esp`).
 //! * `Game::is_plugin_active(&self, &str) -> bool`.
 //! * `GameType::{SkyrimSE, Fallout4}`.
 //!
-//! Spike limitation (recorded for Plan 04): the public `Game` API exposes load-order
-//! and an active-state *query*, but no active-state *setter*. A plugin's active flag
-//! enters through the Plugins.txt that libloot loads (in NexTwist, generated from the
-//! DB `plugin_state`); `set_load_order` preserves the active state of already-loaded
-//! plugins. libloot/libloadorder also open and header-parse every named plugin
-//! (esplugin `header_only`), so every plugin in a load order must physically exist in
-//! the game `Data/` dir with at least a valid 24-byte TES4 header.
+//! Active-state seam: the public `Game` API exposes load-order and an active-state *query*,
+//! but no active-state *setter*. A plugin's active flag enters through the Plugins.txt that
+//! libloot loads (in NexTwist, generated from the DB `plugin_state`); `set_load_order`
+//! preserves the active state of already-loaded plugins (libloadorder clones the loaded
+//! `Plugin`, keeping its active flag — verified against live FO4 data). NOTE: *early-loading*
+//! plugins (game master + hardcoded DLC + CCC) are NEVER written to Plugins.txt by libloot's
+//! `save()` — they are implicitly active — so a load order made ENTIRELY of such plugins
+//! correctly produces an EMPTY Plugins.txt; only regular `.esp` / non-CCC `.esl` mods appear
+//! as `*Name`. libloot/libloadorder also open and header-parse every named plugin (esplugin
+//! `header_only`), so every plugin in a load order must physically exist in the game `Data/`
+//! dir with at least a valid 24-byte TES4 header.
 
 use std::path::{Path, PathBuf};
 
@@ -121,21 +132,81 @@ pub fn open_game(
         .map_err(|e| LoadOrderError::Loot(e.to_string()))
 }
 
-/// Load the current load-order state, set the given order, and persist it.
+/// Load the current load-order state and return libloot's canonical resolved order.
 ///
-/// `set_load_order` writes the asterisk-format Plugins.txt at
-/// [`Game::active_plugins_file_path`] (it saves internally — there is no separate
-/// `save`). Masters-first is enforced INSIDE libloot; do not hand-roll it (D-08).
+/// After reading the seeded Plugins.txt, libloot/libloadorder place every
+/// *early-loading* / *implicitly-active* plugin (the game master plus the game's
+/// hardcoded DLC list and the Creation-Club `*.ccc` plugins) at its REQUIRED fixed
+/// position, ahead of everything else, and append the remaining installed plugins.
+/// This returned order is therefore the only sequence libloot will accept for the
+/// early-loader prefix; hand-rolling it (e.g. an alphabetical master sort) reorders
+/// those fixed plugins and makes `set_load_order` reject with
+/// `"load order interaction failed"` (debug `loadorder-active-write`, RC1).
 ///
 /// # Errors
-/// [`LoadOrderError::Loot`] if libloot fails to read the existing state or to
-/// set/persist the new order.
-pub fn set_order_and_save(game: &mut Game, order: &[&str]) -> Result<(), LoadOrderError> {
+/// [`LoadOrderError::Loot`] if libloot fails to read the existing state.
+pub fn load_canonical_order(game: &mut Game) -> Result<Vec<String>, LoadOrderError> {
     game.load_current_load_order_state()
         .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
+    Ok(game.load_order().iter().map(|s| (*s).to_string()).collect())
+}
+
+/// Set the given order and persist it (libloot saves internally — no separate `save`).
+///
+/// Masters-first is enforced INSIDE libloot (D-08). The `order` MUST keep libloot's
+/// own fixed early-loader prefix (see [`load_canonical_order`]); only the trailing
+/// non-early-loader plugins may be reordered, or libloot rejects the order.
+///
+/// # Errors
+/// [`LoadOrderError::Loot`] if libloot fails to set/persist the new order.
+pub fn set_order_and_save(game: &mut Game, order: &[&str]) -> Result<(), LoadOrderError> {
     game.set_load_order(order)
         .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
     Ok(())
+}
+
+/// Reconcile libloot's canonical order with the user's desired order for movable plugins.
+///
+/// `canonical` is libloot's post-load order: its *early-loader* plugins (game master +
+/// hardcoded DLC + Creation-Club `*.ccc` plugins) sit at REQUIRED fixed positions that
+/// libloadorder validates; reordering them is rejected (`"load order interaction failed"`,
+/// RC1). Those plugins are all in the master group (`.esm` / `.esl`) and NexTwist must
+/// defer their relative order to libloot.
+///
+/// `user_movable` is the user's desired order for the plugins they actually control —
+/// regular `.esp` plugins (and any other non-master-group plugin). These are NOT
+/// early-loaders, so libloot lets them be reordered freely (subject to master deps it also
+/// validates). We keep every master-group plugin at its canonical position and emit the
+/// `user_movable` plugins, in the user's order, in the canonical slots those plugins
+/// occupied. Plugins not present in `canonical` (libloot did not load them) are ignored.
+///
+/// This guarantees the early-loader prefix is byte-for-byte libloot's own order (always
+/// accepted) while honouring the user's relative order for the regular mods.
+fn reconcile_order(canonical: &[String], user_movable: &[String]) -> Vec<String> {
+    let canonical_set: std::collections::HashSet<&str> =
+        canonical.iter().map(String::as_str).collect();
+    let movable_set: std::collections::HashSet<&str> =
+        user_movable.iter().map(String::as_str).collect();
+
+    // The movable plugins in the USER's order, restricted to plugins libloot actually loaded.
+    let mut movable_iter = user_movable
+        .iter()
+        .filter(|m| canonical_set.contains(m.as_str()))
+        .cloned();
+
+    // Walk canonical: master-group / non-movable plugins keep their slot; each movable slot
+    // is filled from the user-ordered movable sequence (slot count == movable count).
+    let mut out: Vec<String> = Vec::with_capacity(canonical.len());
+    for name in canonical {
+        if movable_set.contains(name.as_str()) {
+            if let Some(next) = movable_iter.next() {
+                out.push(next);
+            }
+        } else {
+            out.push(name.clone());
+        }
+    }
+    out
 }
 
 /// True if a plugin kind is part of the master group (sorts ahead of regular `.esp`).
@@ -193,21 +264,35 @@ fn asterisk_plugins_txt(plugins: &[Plugin]) -> String {
 }
 
 /// Apply a desired plugin enable/order set: write the asterisk-format Plugins.txt at
-/// libloot's `active_plugins_file_path` inside the Proton prefix and persist the
-/// masters-first load order via libloot. Returns the written Plugins.txt path.
+/// libloot's `active_plugins_file_path` inside the Proton prefix and persist the load
+/// order via libloot. Returns the written Plugins.txt path.
 ///
-/// Sequence (the Plan-02-verified seam — there is no active-plugin setter in libloot
-/// 0.29.5, so active state enters via the Plugins.txt libloot loads):
+/// Sequence (the verified seam — there is no active-plugin setter in libloot 0.29.5, so
+/// active state enters via the Plugins.txt libloot loads, and the order must respect
+/// libloot's own fixed early-loader sequence — debug `loadorder-active-write`):
 ///   1. `open_game` (with_local_path; creates the AppData dir — Pitfall 2),
 ///   2. SEED the asterisk Plugins.txt from the desired `plugins` (enabled → `*Name`),
-///   3. `load_current_load_order_state` (libloot reads the seeded active flags),
-///   4. `set_load_order` over the masters-first names (libloot enforces masters-first and
-///      persists internally — there is NO separate `Game::save`).
+///   3. `load_canonical_order` (`load_current_load_order_state` + read libloot's resolved
+///      order — early-loaders / implicitly-active plugins are placed at their REQUIRED
+///      fixed positions: game master, then the game's hardcoded DLC list, then CCC),
+///   4. [`reconcile_order`]: keep that fixed early-loader prefix verbatim and splice the
+///      user's desired order in for the plugins the user actually controls,
+///   5. `set_order_and_save` (libloot also enforces masters-first internally, D-08, and
+///      persists — there is NO separate `Game::save`).
 ///
-/// `plugins` whose files do not physically exist under the game `Data/` are dropped from
-/// the order before calling libloot, because libloot/libloadorder header-parse every named
-/// plugin and error on a missing file (Plan-02 spike limitation). Only on-disk plugins are
-/// ordered; this keeps a stale store entry from aborting the whole write.
+/// Why NOT a hand-rolled masters-first sort: with every store `order_index == 0` the old
+/// alphabetical master sort reordered Fallout 4's hardcoded DLC list (e.g. `DLCCoast`
+/// before `DLCRobot`), which libloadorder rejects (`"load order interaction failed"`).
+/// Deferring the early-loader order to libloot fixes that at the root (RC1). The asterisk
+/// seam itself was never broken: an all-DLC/CCC set legitimately writes an EMPTY Plugins.txt
+/// (those plugins are implicitly active and intentionally omitted from the file), while a
+/// regular `.esp` / non-CCC `.esl` mod's active flag persists as `*Name` (RC2 was a
+/// misdiagnosis — verified against live FO4 data).
+///
+/// `plugins` whose files do not physically exist under the game `Data/` are dropped before
+/// calling libloot, because libloot/libloadorder header-parse every named plugin and error
+/// on a missing file. Only on-disk plugins are ordered; this keeps a stale store entry from
+/// aborting the whole write.
 ///
 /// # Errors
 /// * [`LoadOrderError::NoLocalAppData`] for an unresolved prefix / unsupported appid.
@@ -239,8 +324,18 @@ pub fn apply_load_order(
     std::fs::write(&active_file, asterisk_plugins_txt(&on_disk))
         .map_err(|e| LoadOrderError::io(&active_file, e))?;
 
-    // Load the seeded active state, then set + persist the masters-first order.
-    let order = masters_first_order(&on_disk);
+    // Load the seeded active state and read libloot's canonical order (early-loaders at
+    // their required fixed positions). The user only controls the relative order of the
+    // NON-master-group plugins (regular `.esp` mods); master-group plugins (`.esm`/`.esl`,
+    // which include the game master + hardcoded DLC + CCC early-loaders) defer to libloot.
+    // NEVER hand-roll the early-loader order (RC1).
+    let canonical = load_canonical_order(&mut game)?;
+    let user_movable: Vec<String> = on_disk
+        .iter()
+        .filter(|p| !is_master_group(p.kind))
+        .map(|p| p.name.clone())
+        .collect();
+    let order = reconcile_order(&canonical, &user_movable);
     let order_refs: Vec<&str> = order.iter().map(String::as_str).collect();
     set_order_and_save(&mut game, &order_refs)?;
 

@@ -21,6 +21,8 @@ use tempfile::TempDir;
 
 const SKYRIM_SE: u32 = 489830;
 const GAME_FOLDER: &str = "Skyrim Special Edition";
+const FALLOUT4: u32 = 377160;
+const FO4_FOLDER: &str = "Fallout4";
 
 /// Minimal esplugin-parseable plugin file (a bare 24-byte TES4 header record).
 fn write_min_plugin(data_dir: &Path, name: &str, master: bool) {
@@ -234,4 +236,90 @@ fn propose_sort_returns_order_without_writing() {
     );
     // warnings is a list (may be empty); type contract holds.
     let _ = &proposal.warnings;
+}
+
+/// RC1 regression (debug `loadorder-active-write`): a REAL-DATA-STYLE Fallout 4 set with
+/// MULTIPLE DLC masters supplied in NON-hardcoded (alphabetical) order — exactly the shape
+/// the synthetic single-plugin fixtures missed.
+///
+/// Fallout 4's hardcoded early-loader DLC order is `Fallout4.esm, DLCRobot.esm,
+/// DLCworkshop01.esm, DLCCoast.esm, ...`. NexTwist's store rows all carry `order == 0` when
+/// the user has not manually reordered, so the old alphabetical master sort produced
+/// `DLCCoast` before `DLCRobot`, which libloadorder REJECTS with "load order interaction
+/// failed". This test passes that exact alphabetical order in and asserts:
+///   1. `apply_load_order` SUCCEEDS (no "load order interaction failed"),
+///   2. the persisted order is libloot's hardcoded DLC order, game-master first
+///      (`Fallout4.esm` before every DLC; `DLCRobot.esm` before `DLCCoast.esm`),
+///   3. a regular enabled `.esp` survives as an ACTIVE `*Name` line in Plugins.txt,
+///   4. a regular disabled `.esp` stays ordered but WITHOUT an asterisk.
+///
+/// Early-loading DLC `.esm` are implicitly active and intentionally OMITTED from
+/// Plugins.txt by libloot, so the file legitimately lists only the regular mods.
+#[test]
+fn fo4_multi_master_game_master_first_active_survives() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
+    // Game master + three hardcoded DLC masters (in NON-hardcoded order on disk) + two
+    // regular mods (one enabled, one disabled).
+    write_min_plugin(&data, "Fallout4.esm", true);
+    write_min_plugin(&data, "DLCCoast.esm", true);
+    write_min_plugin(&data, "DLCRobot.esm", true);
+    write_min_plugin(&data, "DLCworkshop01.esm", true);
+    write_min_plugin(&data, "EnabledMod.esp", false);
+    write_min_plugin(&data, "DisabledMod.esp", false);
+
+    let prefix_root = tmp.path().join("pfx");
+    testkit::fake_proton_prefix(&prefix_root, FO4_FOLDER, None).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, FO4_FOLDER);
+
+    // Desired set with every order_index == 0 (the real DB shape that triggered RC1) and
+    // the DLCs listed ALPHABETICALLY — the order the old code would have sent to libloot.
+    let desired = vec![
+        plugin("DLCCoast.esm", PluginKind::Esm, true, 0),
+        plugin("DLCRobot.esm", PluginKind::Esm, true, 0),
+        plugin("DLCworkshop01.esm", PluginKind::Esm, true, 0),
+        plugin("Fallout4.esm", PluginKind::Esm, true, 0),
+        plugin("DisabledMod.esp", PluginKind::Esp, false, 0),
+        plugin("EnabledMod.esp", PluginKind::Esp, true, 0),
+    ];
+
+    // MUST NOT error (the RC1 failure mode).
+    let written = apply_load_order(FALLOUT4, &install, &appdata_local, &desired)
+        .expect("apply_load_order must not fail on a multi-DLC FO4 set (RC1)");
+
+    // Re-open and read the persisted order to assert game-master-first + hardcoded DLC order.
+    let mut game = loadorder::loot::open_game(FALLOUT4, &install, &appdata_local).unwrap();
+    game.load_current_load_order_state().unwrap();
+    let order: Vec<&str> = game.load_order();
+    let pos = |n: &str| order.iter().position(|x| *x == n);
+
+    let fo4 = pos("Fallout4.esm").expect("Fallout4.esm present");
+    let robot = pos("DLCRobot.esm").expect("DLCRobot.esm present");
+    let coast = pos("DLCCoast.esm").expect("DLCCoast.esm present");
+    let ws01 = pos("DLCworkshop01.esm").expect("DLCworkshop01.esm present");
+
+    assert!(fo4 < robot && fo4 < coast && fo4 < ws01, "Fallout4.esm must be first: {order:?}");
+    // Hardcoded FO4 order is Fallout4, DLCRobot, DLCworkshop01, DLCCoast — NOT alphabetical.
+    assert!(robot < coast, "DLCRobot.esm must precede DLCCoast.esm (hardcoded order): {order:?}");
+    assert!(ws01 < coast, "DLCworkshop01.esm must precede DLCCoast.esm (hardcoded order): {order:?}");
+
+    // Active state: DLC masters are implicitly active; mods follow the seed.
+    assert!(game.is_plugin_active("Fallout4.esm"), "game master active");
+    assert!(game.is_plugin_active("DLCRobot.esm"), "DLC master active");
+    assert!(game.is_plugin_active("EnabledMod.esp"), "enabled mod active");
+    assert!(!game.is_plugin_active("DisabledMod.esp"), "disabled mod inactive");
+
+    // Plugins.txt: regular mods only (DLC .esm are early-loaders, omitted by libloot).
+    let body = fs::read_to_string(&written).unwrap();
+    assert!(body.contains("*EnabledMod.esp"), "enabled mod is asterisk-active:\n{body}");
+    assert!(
+        body.contains("DisabledMod.esp") && !body.contains("*DisabledMod.esp"),
+        "disabled mod present without asterisk:\n{body}"
+    );
+    assert!(
+        !body.contains("Fallout4.esm") && !body.contains("DLCRobot.esm"),
+        "early-loading masters are implicitly active and NOT written to Plugins.txt:\n{body}"
+    );
 }
