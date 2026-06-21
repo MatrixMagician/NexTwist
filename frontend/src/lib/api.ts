@@ -3,6 +3,7 @@
 // commands (defined in src-tauri/src/commands/*.rs) and mirrors their report types.
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** A Steam game found by auto-detection (mirrors steam::DetectedGame). */
 export interface DetectedGame {
@@ -113,6 +114,67 @@ export interface UserInfo {
   is_premium: boolean;
 }
 
+/** Persisted NexusMods provenance for a downloaded mod (mirrors core::NexusSource). */
+export interface NexusSource {
+  mod_id: number;
+  nexus_mod_id: number;
+  file_id: number;
+  version: string;
+  display_name: string;
+}
+
+/** The result of a completed download (mirrors commands::downloads::DownloadResult). */
+export interface DownloadResult {
+  mod_id: number;
+  display_name: string;
+  staging_root: string;
+}
+
+/** One row in the downloads list (UI-SPEC §B). Built/updated from progress events. */
+export type DownloadState =
+  | "queued"
+  | "downloading"
+  | "extracting"
+  | "done"
+  | "failed";
+
+/** The source coordinates needed to (re)start a download. */
+export interface DownloadSource {
+  appid: number;
+  gameDomain: string;
+  nexusModId: number;
+  fileId: number;
+  key?: string | null;
+  expires?: string | null;
+}
+
+export interface DownloadItem {
+  /** UI-assigned id; echoed back on every progress event. */
+  id: string;
+  /** Display name shown in the row (monospace). */
+  name: string;
+  /** Bytes downloaded so far. */
+  downloaded: number;
+  /** Total bytes (Content-Length) if known. */
+  total: number | null;
+  /** Current row state. */
+  state: DownloadState;
+  /** Verbatim failure reason when `state === "failed"`. */
+  reason?: string;
+  /** The source coordinates, so a Failed row's Retry can re-start the same download. */
+  source: DownloadSource;
+}
+
+/** The `download://progress` event payload (mirrors commands::downloads::ProgressEvent). */
+export interface DownloadProgress {
+  id: string;
+  downloaded: number;
+  total: number | null;
+  /** "downloading" | "extracting" | "done" | "failed" | "expired". */
+  state: string;
+  reason: string | null;
+}
+
 export const detectGames = (): Promise<DetectedGame[]> => invoke("detect_games");
 
 export const addGame = (appid: number): Promise<Game> => invoke("add_game", { appid });
@@ -185,3 +247,43 @@ export const logout = (): Promise<void> => invoke("logout");
 
 /** The currently logged-in user, or null if logged out. */
 export const accountInfo = (): Promise<UserInfo | null> => invoke("account_info");
+
+// --- NexusMods downloads (NEXUS-03/05/06). Streams server-side; the UI drives entirely
+//     off async `download://progress` events so it never freezes. ---
+
+/**
+ * Start an in-app download of a NexusMods file and stage it as an ordinary ManagedMod.
+ * `key`/`expires` are omitted for a Premium direct download and supplied for a free-user
+ * `nxm://` redemption. Resolves with the staged mod once extraction + provenance persist.
+ */
+export const startDownload = (args: {
+  id: string;
+  appid: number;
+  gameDomain: string;
+  nexusModId: number;
+  fileId: number;
+  key?: string | null;
+  expires?: string | null;
+}): Promise<DownloadResult> =>
+  invoke("start_download", {
+    id: args.id,
+    appid: args.appid,
+    gameDomain: args.gameDomain,
+    nexusModId: args.nexusModId,
+    fileId: args.fileId,
+    key: args.key ?? null,
+    expires: args.expires ?? null,
+  });
+
+/** Cancel an in-flight download by id (idempotent). */
+export const cancelDownload = (id: string): Promise<void> =>
+  invoke("cancel_download", { id });
+
+/**
+ * Subscribe to per-item download progress events. Returns the Tauri unlisten fn. This is
+ * the one event-bridge primitive (the rest of api.ts is request/response invoke).
+ */
+export const onDownloadProgress = (
+  handler: (p: DownloadProgress) => void,
+): Promise<UnlistenFn> =>
+  listen<DownloadProgress>("download://progress", (e) => handler(e.payload));

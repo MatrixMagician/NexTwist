@@ -2809,6 +2809,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "keyring",
+ "mockito",
  "nextwist-core",
  "nextwist-deploy",
  "nextwist-extract",
@@ -2828,6 +2829,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "webbrowser",
+ "zip",
 ]
 
 [[package]]

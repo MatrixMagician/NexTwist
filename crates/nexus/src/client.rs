@@ -71,6 +71,25 @@ impl NexusClient {
         })
     }
 
+    /// Stream a CDN URI to `dest` using this client's hardened inner reqwest client,
+    /// reporting progress through a Tauri-free callback. Delegates to
+    /// [`crate::download::download_to`] so the rustls/redirect policy is applied once.
+    ///
+    /// The shell calls this instead of constructing its own HTTP client, keeping reqwest
+    /// out of the `src-tauri` dependency set (the headless crate owns all HTTP).
+    pub async fn download<F>(
+        &self,
+        uri: &str,
+        dest: &std::path::Path,
+        cancel: &crate::download::CancelFlag,
+        on_progress: F,
+    ) -> Result<u64, NexusError>
+    where
+        F: Fn(u64, Option<u64>),
+    {
+        crate::download::download_to(&self.http, uri, dest, cancel, on_progress).await
+    }
+
     /// Attach the session auth header to a request builder.
     fn authed(&self, rb: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
         match &self.auth {

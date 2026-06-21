@@ -9,6 +9,7 @@
 
 pub mod conflicts;
 pub mod deploy;
+pub mod downloads;
 pub mod games;
 pub mod mods;
 pub mod nexus;

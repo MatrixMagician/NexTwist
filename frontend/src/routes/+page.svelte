@@ -17,6 +17,8 @@
     Profile,
     SwitchReport,
     UserInfo,
+    DownloadItem,
+    DownloadProgress,
   } from "$lib/api";
 
   // Supported Bethesda AppIDs (display only; the backend enforces the allow-list).
@@ -73,6 +75,14 @@
   let apiKeyInput = $state("");
   let confirmLogout = $state(false);
   const loggedIn = $derived(userInfo !== null);
+
+  // Downloads list state (UI-SPEC §B). `downloads` is the per-item list, driven entirely
+  // by async `download://progress` events so the UI never freezes (criterion #4).
+  // `rateLimited` toggles the Warning notice above the list when the client backs off.
+  // `expiredLink` carries the §C.3 "link expired" Warning (not a Failed download row).
+  let downloads = $state<DownloadItem[]>([]);
+  let rateLimited = $state(false);
+  let expiredLink = $state<string | null>(null);
 
   let busy = $state(false);
   let error = $state<string | null>(null);
@@ -167,6 +177,92 @@
       userInfo = null;
       confirmLogout = false;
     }
+  }
+
+  // --- NexusMods downloads (UI-SPEC §B). Everything is event-driven. ---
+
+  /** Apply a `download://progress` event to the matching row (UI-SPEC §B states). */
+  function applyProgress(p: DownloadProgress) {
+    const idx = downloads.findIndex((d) => d.id === p.id);
+    if (idx === -1) return;
+    const row = downloads[idx];
+    row.downloaded = p.downloaded;
+    row.total = p.total;
+    if (p.state === "expired") {
+      // §C.3: an expired free-user link is a Warning notice, NOT a Failed row.
+      expiredLink = p.reason ?? "This download link has expired.";
+      downloads.splice(idx, 1);
+      return;
+    }
+    if (p.state === "failed") {
+      row.state = "failed";
+      row.reason = p.reason ?? "unknown error";
+    } else if (p.state === "downloading" || p.state === "extracting" || p.state === "done") {
+      row.state = p.state;
+    }
+    // Re-assign so Svelte 5 reactivity sees the row mutation.
+    downloads[idx] = row;
+  }
+
+  /** Begin a download: push a Downloading row, then call the backend (which streams). */
+  async function onStartDownload(args: {
+    appid: number;
+    gameDomain: string;
+    nexusModId: number;
+    fileId: number;
+    name: string;
+    key?: string | null;
+    expires?: string | null;
+  }) {
+    const id = crypto.randomUUID();
+    expiredLink = null;
+    const source = {
+      appid: args.appid,
+      gameDomain: args.gameDomain,
+      nexusModId: args.nexusModId,
+      fileId: args.fileId,
+      key: args.key ?? null,
+      expires: args.expires ?? null,
+    };
+    downloads = [
+      ...downloads,
+      { id, name: args.name, downloaded: 0, total: null, state: "downloading", source },
+    ];
+    try {
+      await api.startDownload({
+        id,
+        appid: args.appid,
+        gameDomain: args.gameDomain,
+        nexusModId: args.nexusModId,
+        fileId: args.fileId,
+        key: args.key ?? null,
+        expires: args.expires ?? null,
+      });
+      // Refresh the mod list so the staged Nexus mod appears as an ordinary ManagedMod.
+      if (selectedAppid !== null) loadConflicts();
+    } catch (e) {
+      // The progress listener typically marks the row failed/expired; this is a fallback.
+      const idx = downloads.findIndex((d) => d.id === id);
+      if (idx !== -1) {
+        downloads[idx] = { ...downloads[idx], state: "failed", reason: String(e) };
+      }
+    }
+  }
+
+  async function onCancelDownload(id: string) {
+    await api.cancelDownload(id);
+  }
+
+  /** Human percent for a row, or null when the total is unknown. */
+  function pct(d: DownloadItem): number | null {
+    return d.total && d.total > 0 ? Math.floor((d.downloaded / d.total) * 100) : null;
+  }
+
+  function fmtBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   }
 
   async function onDetect() {
@@ -476,6 +572,10 @@
   // Load any already-managed games + the current account on mount.
   refreshManaged();
   loadAccount();
+
+  // Subscribe to download progress events (UI-SPEC §B): the list is updated entirely off
+  // these async events so the UI never freezes during a multi-GB download.
+  api.onDownloadProgress(applyProgress);
 </script>
 
 <main>
@@ -541,6 +641,89 @@
           <button onclick={onLoginApiKey} disabled={busy}>Save key</button>
         </div>
       {/if}
+    {/if}
+  </section>
+
+  <!-- Downloads list (UI-SPEC §B): per-item progress, five row states, rate-limit notice,
+       empty state. Driven entirely by async download://progress events. -->
+  <section class="downloads">
+    <h2>Downloads</h2>
+
+    {#if loggedIn && userInfo && !userInfo.is_premium}
+      <p class="muted free-hint">
+        Free account: start downloads from the NexusMods website "Mod Manager Download"
+        button.
+      </p>
+    {/if}
+
+    {#if rateLimited}
+      <div class="rate-notice" role="status">
+        Pausing to respect NexusMods rate limits — downloads will resume automatically.
+      </div>
+    {/if}
+
+    {#if expiredLink}
+      <div class="rate-notice" role="status">
+        This download link has expired. Re-open it from the NexusMods website.
+        <button class="link-btn" onclick={() => (expiredLink = null)}>Dismiss</button>
+      </div>
+    {/if}
+
+    {#if downloads.length === 0}
+      <div class="empty">
+        <strong>No downloads yet</strong>
+        <p class="muted">
+          Use the Log in panel, then start a download from NexusMods. Free accounts: use
+          the website "Mod Manager Download" button.
+        </p>
+      </div>
+    {:else}
+      <ul class="download-list">
+        {#each downloads as d (d.id)}
+          <li class="download-row" class:failed={d.state === "failed"}>
+            <code class="dl-name">{d.name}</code>
+            <div class="bar-track">
+              <div
+                class="bar-fill"
+                class:indeterminate={d.state === "extracting"}
+                style={`width: ${d.state === "extracting" || d.state === "done" ? 100 : (pct(d) ?? 0)}%`}
+              ></div>
+            </div>
+            <div class="dl-meta">
+              {#if d.state === "queued"}
+                <span class="muted">Queued</span>
+              {:else if d.state === "downloading"}
+                <span class="muted">
+                  {pct(d) !== null ? `${pct(d)}% · ` : ""}{fmtBytes(d.downloaded)}{d.total
+                    ? ` / ${fmtBytes(d.total)}`
+                    : ""}
+                </span>
+                <button onclick={() => onCancelDownload(d.id)}>Cancel</button>
+              {:else if d.state === "extracting"}
+                <span class="muted">Extracting…</span>
+              {:else if d.state === "done"}
+                <span class="done">✓ Done — added to staging, ready to deploy</span>
+              {:else if d.state === "failed"}
+                <span class="err">Download failed: {d.reason}.</span>
+                <button
+                  onclick={() =>
+                    onStartDownload({
+                      appid: d.source.appid,
+                      gameDomain: d.source.gameDomain,
+                      nexusModId: d.source.nexusModId,
+                      fileId: d.source.fileId,
+                      name: d.name,
+                      key: d.source.key,
+                      expires: d.source.expires,
+                    })}
+                >
+                  Retry
+                </button>
+              {/if}
+            </div>
+          </li>
+        {/each}
+      </ul>
     {/if}
   </section>
 
@@ -1027,6 +1210,50 @@
     padding: 0.75rem 1rem;
   }
   .keyring-banner p { color: #333; margin: 0.4rem 0 0; }
+
+  /* --- Downloads list (UI-SPEC §B) --- */
+  .downloads .free-hint { margin: 0 0 0.5rem; }
+  .rate-notice {
+    color: #9a6700;
+    background: #fff8e5;
+    border: 1px solid #e6c200;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin: 0 0 0.75rem;
+    font-size: 0.875rem;
+  }
+  .downloads .empty {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 1rem;
+    background: #f3f3f3;
+  }
+  .downloads .empty p { margin: 0.4rem 0 0; }
+  ul.download-list { list-style: none; padding: 0; margin: 0.4rem 0; }
+  .download-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+    min-height: 40px; /* UI-SPEC download-row density */
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    margin-bottom: 0.4rem;
+  }
+  .download-row.failed { border-color: #cf222e; }
+  .dl-name {
+    font-family: ui-monospace, monospace;
+    background: #f3f3f3;
+    border-radius: 3px;
+    padding: 0 0.25rem;
+    word-break: break-all;
+  }
+  .bar-track { height: 8px; background: #f3f3f3; border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; background: #0a66c2; transition: width 0.15s linear; }
+  .bar-fill.indeterminate { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .dl-meta { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; }
+  .dl-meta .done { color: #1a7f37; }
 
   /* --- Conflict view (UI-SPEC §A) --- */
   .pending p { margin: 0.25rem 0 0; }

@@ -24,6 +24,12 @@ tauri-build = { workspace = true }
 # Headless unit tests for the thin command adapters (no webview): WR-05 plugins.txt
 # write-before-persist ordering uses a temp DB + fake prefix.
 tempfile = { workspace = true }
+# NEXUS-06 end-to-end test (download -> extract -> stage -> provenance) without a webview:
+# a mockito CDN serves a real .zip fixture that flows through the SAME extract terminus
+# the local-archive install path uses, then the store persists the mod + provenance.
+mockito = { workspace = true }
+zip = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "fs"] }
 
 [dependencies]
 # Headless safety core — the command adapters delegate to these and add ZERO logic.

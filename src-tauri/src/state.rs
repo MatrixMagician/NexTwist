@@ -4,8 +4,10 @@
 //! (the headless safety core owns everything else). Keeping the state this thin is the
 //! point: business logic lives in the headless crates, never here (Anti-Pattern 4).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
+use nexus::CancelFlag;
 use store::Store;
 
 use crate::auth::PendingOAuth;
@@ -36,6 +38,10 @@ pub struct AppState {
     pub pending_oauth: Option<PendingOAuth>,
     /// The currently logged-in user, cached for the account panel.
     pub user: Option<nexus::UserInfo>,
+    /// In-flight downloads' cancellation flags, keyed by the UI download id. A
+    /// `cancel_download` command trips the matching flag; the streaming loop in
+    /// `crates/nexus` checks it once per chunk and aborts (NEXUS-03 Cancel affordance).
+    pub downloads: HashMap<String, CancelFlag>,
 }
 
 impl AppState {
@@ -52,6 +58,7 @@ impl AppState {
             access_token: None,
             pending_oauth: None,
             user: None,
+            downloads: HashMap::new(),
         })
     }
 }

@@ -89,6 +89,8 @@ pub fn run() {
             commands::nexus::login_oauth_start,
             commands::nexus::logout,
             commands::nexus::account_info,
+            commands::downloads::start_download,
+            commands::downloads::cancel_download,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NexTwist");
