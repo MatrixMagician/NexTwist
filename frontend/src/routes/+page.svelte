@@ -292,8 +292,18 @@
           downloaded: 0,
           total: null,
           state: "downloading",
-          // The deep-link row's coordinates live server-side; the UI only mirrors progress.
-          source: { appid: 0, gameDomain: "", nexusModId: 0, fileId: 0 },
+          // BUG 2 fix: store the non-secret coordinates the arrival carries so a Retry of
+          // this nxm-originated row can re-issue the download. `appid: 0` is a sentinel the
+          // backend resolves from `gameDomain` (it owns the domain→appid map). `key`/
+          // `expires` are deliberately absent — a single-use free link can't be replayed, so
+          // a free-user retry surfaces the §C.3 expired-link Warning instead of a silent
+          // failure; a premium retry (no key needed) re-downloads cleanly.
+          source: {
+            appid: 0,
+            gameDomain: a.game_domain,
+            nexusModId: a.mod_id,
+            fileId: a.file_id,
+          },
         },
       ];
     }

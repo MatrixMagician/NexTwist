@@ -12,7 +12,7 @@ use tauri::{Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::auth;
-use crate::commands::boundary_err;
+use crate::commands::{appid_for_domain, boundary_err};
 use crate::keyring;
 use crate::state::{AppState, OAUTH_REDIRECT};
 
@@ -21,28 +21,26 @@ use crate::state::{AppState, OAUTH_REDIRECT};
 /// never collide on the cancel-flag key or the temp archive path.
 static NXM_DOWNLOAD_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Map a NexusMods game domain (the `nxm://` host) to a managed Steam AppID.
-///
-/// The `nxm://` link carries the game *domain* (e.g. `skyrimspecialedition`), but the
-/// download flow needs the Steam AppID to resolve the managed game's staging dir. This is
-/// the small, fixed v1 Bethesda allow-list (mirrors the frontend `SUPPORTED` list); a
-/// domain outside it is rejected rather than guessed. Kept here (not in the headless crate)
-/// because it is a shell-side registry concern, not pure client logic.
-fn appid_for_domain(domain: &str) -> Option<u32> {
-    match domain {
-        "skyrimspecialedition" => Some(489830),
-        "fallout4" => Some(377160),
-        _ => None,
-    }
-}
-
 /// The `nxm://` arrival toast payload (UI-SPEC §C.1). Emitted on `nxm://arrival` so the UI
-/// can show the non-blocking "Download started from NexusMods" Success toast. Carries NO
-/// secret — only the UI download id + display domain (never the key/expires/code).
+/// can show the non-blocking "Download started from NexusMods" Success toast and seed a row.
+///
+/// Carries NO secret — only the UI download id plus the **non-secret** download coordinates
+/// (`game_domain`, `mod_id`, `file_id`). The `key`/`expires` redemption secrets are NEVER
+/// emitted (V7 secret-free event contract). Those coordinates let the frontend row's Retry
+/// re-issue a *premium* download via `start_download`; a free-user retry has no key and
+/// surfaces the §C.3 "link expired — re-open from NexusMods" Warning instead (correct: a
+/// single-use free link cannot be silently replayed).
 #[derive(Debug, Clone, Serialize)]
 struct NxmArrival {
     /// The UI download id of the new row this arrival started.
     id: String,
+    /// The NexusMods game domain (non-secret; e.g. `skyrimspecialedition`). Lets a Retry
+    /// of this row recover the managed AppID (the backend maps domain→appid).
+    game_domain: String,
+    /// The numeric mod id (non-secret).
+    mod_id: u64,
+    /// The numeric file id (non-secret).
+    file_id: u64,
 }
 
 /// The `nxm://` expired/invalid-link payload (UI-SPEC §C.3). Emitted on `nxm://expired`
@@ -224,8 +222,18 @@ fn route_download(app: &tauri::AppHandle, link: NxmLink) {
     let nonce = NXM_DOWNLOAD_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let id = format!("nxm-{}-{}-{}", link.mod_id, link.file_id, nonce);
 
-    // Confirm the arrival immediately (UI-SPEC §C.1) — the row then streams via events.
-    let _ = app.emit("nxm://arrival", NxmArrival { id: id.clone() });
+    // Confirm the arrival immediately (UI-SPEC §C.1) — the row then streams via events. The
+    // payload carries the non-secret coordinates (domain/mod/file) so a later Retry of this
+    // row can re-issue a premium download; the key/expires secrets are NEVER emitted.
+    let _ = app.emit(
+        "nxm://arrival",
+        NxmArrival {
+            id: id.clone(),
+            game_domain: link.game_domain.clone(),
+            mod_id: link.mod_id,
+            file_id: link.file_id,
+        },
+    );
 
     let app = app.clone();
     tauri::async_runtime::spawn(async move {

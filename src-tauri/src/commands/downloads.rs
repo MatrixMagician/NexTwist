@@ -21,7 +21,7 @@ use serde::Serialize;
 use tauri::{Emitter, State};
 use tokio::sync::Mutex;
 
-use crate::commands::{boundary_err, require_game};
+use crate::commands::{appid_for_domain, boundary_err, require_game};
 use crate::state::AppState;
 
 /// The per-item progress payload emitted on `download://progress`. Mirrors the
@@ -108,6 +108,22 @@ pub(crate) async fn run_download_to_window(
     key: Option<String>,
     expires: Option<String>,
 ) -> Result<DownloadResult, String> {
+    // BUG 2 fix: a Retry of an `nxm://`-originated row reaches the IPC `start_download`
+    // command with `appid == 0`, because the backend created that row entirely server-side
+    // (`route_download` resolved the AppID from the domain) and the secret-free arrival
+    // event never carried an AppID back to the frontend. Recover the AppID from the
+    // (non-secret) `game_domain` using the SAME allow-list `route_download` uses, so a
+    // Retry resolves the managed game instead of failing with "game 0 is not managed".
+    // A genuine premium download always supplies a real AppID, so this only kicks in for
+    // the `appid == 0` sentinel.
+    let appid = if appid == 0 {
+        appid_for_domain(game_domain).ok_or_else(|| {
+            format!("cannot retry: '{game_domain}' is not a game NexTwist manages")
+        })?
+    } else {
+        appid
+    };
+
     let game = require_game(state, appid).await?;
 
     // Resolve session auth + the shared rate limiter + register a cancel flag — lock held

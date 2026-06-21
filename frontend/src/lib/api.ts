@@ -179,9 +179,15 @@ export interface DownloadProgress {
 }
 
 /** The `nxm://arrival` event payload (mirrors commands::nexus::NxmArrival). Secret-free:
- *  it carries only the UI download id of the new row the arrival started. */
+ *  the UI download id plus the non-secret download coordinates (domain/mod/file) so a
+ *  Retry of this row can re-issue a premium download. The key/expires redemption secrets
+ *  are NEVER emitted. */
 export interface NxmArrival {
   id: string;
+  /** snake_case crosses the IPC boundary (matches the Rust Serialize field). */
+  game_domain: string;
+  mod_id: number;
+  file_id: number;
 }
 
 /** The `nxm://expired` event payload (mirrors commands::nexus::NxmExpired). Secret-free:
