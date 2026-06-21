@@ -53,10 +53,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **NEXUS-01**: User can log into their NexusMods account via OAuth2
 - [x] **NEXUS-02**: NexTwist stores auth tokens securely in the system keyring
-- [ ] **NEXUS-03**: Premium users can download a mod directly from NexusMods within the app
+- [x] **NEXUS-03**: Premium users can download a mod directly from NexusMods within the app
 - [ ] **NEXUS-04**: Free users can install mods via the website "Mod Manager Download" (nxm://) handoff
-- [ ] **NEXUS-05**: NexTwist respects NexusMods API rate limits
-- [ ] **NEXUS-06**: A downloaded mod is auto-extracted into staging ready to deploy
+- [x] **NEXUS-05**: NexTwist respects NexusMods API rate limits
+- [x] **NEXUS-06**: A downloaded mod is auto-extracted into staging ready to deploy
 - [ ] **NXM-01**: User can one-click install from an nxm:// link via a deep-link handler registered on Linux
 
 ### Installers (FOMOD)
@@ -144,10 +144,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROF-03 | Phase 2 | Complete |
 | NEXUS-01 | Phase 3 | Complete |
 | NEXUS-02 | Phase 3 | Complete |
-| NEXUS-03 | Phase 3 | Pending |
+| NEXUS-03 | Phase 3 | Complete |
 | NEXUS-04 | Phase 3 | Pending |
-| NEXUS-05 | Phase 3 | Pending |
-| NEXUS-06 | Phase 3 | Pending |
+| NEXUS-05 | Phase 3 | Complete |
+| NEXUS-06 | Phase 3 | Complete |
 | NXM-01 | Phase 3 | Pending |
 | FOMOD-01 | Phase 4 | Pending |
 | FOMOD-02 | Phase 4 | Pending |
