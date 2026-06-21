@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 2
-current_phase_name: Multi-Mod Management
-status: verified
-stopped_at: Phase 2 (Multi-Mod Management) VERIFIED — UAT 4/4 passed (02-UAT.md complete). UAT-1 in-game plugins.txt confirmed on real Fallout 4 after fixing 3 bugs found on hardware: loadorder early-loader ordering (749b5e3), LOOT-sort async panic (62d12dc), tauri dev-launch config (a0440bd). UAT-2/3/4 passed earlier. Carried forward (separate, ~Phase-4): install archive root-detection — mods with a wrapper folder deploy double-nested (.planning/todos/pending/install-archive-root-detection.md). Next: plan Phase 3 (NexusMods Login & Download).
-last_updated: "2026-06-21T13:00:00.000Z"
+current_phase: 3
+current_phase_name: NexusMods Login & Download
+status: executing
+stopped_at: "Phase 2 (Multi-Mod Management) VERIFIED — UAT 4/4 passed (02-UAT.md complete). UAT-1 in-game plugins.txt confirmed on real Fallout 4 after fixing 3 bugs found on hardware: loadorder early-loader ordering (749b5e3), LOOT-sort async panic (62d12dc), tauri dev-launch config (a0440bd). UAT-2/3/4 passed earlier. Carried forward (separate, ~Phase-4): install archive root-detection — mods with a wrapper folder deploy double-nested (.planning/todos/pending/install-archive-root-detection.md). Next: plan Phase 3 (NexusMods Login & Download)."
+last_updated: "2026-06-21T14:29:51.920Z"
 last_activity: 2026-06-21
-last_activity_desc: Phase 2 UAT verified on real hardware; 3 fixes committed
+last_activity_desc: Phase 3 execution started
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 12
-  completed_plans: 12
+  total_plans: 15
+  completed_plans: 13
   percent: 40
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-20)
 
 **Core value:** Mods install and uninstall safely — non-destructive, fully reversible, conflict-aware deployment into Proton/Wine games on Linux.
-**Current focus:** Phase 2 — Multi-Mod Management
+**Current focus:** Phase 3 — NexusMods Login & Download
 
 ## Current Position
 
-Phase: 2 (Multi-Mod Management) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-06-20 — Phase 2 execution started
+Phase: 3 (NexusMods Login & Download) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-06-21 — Phase 3 execution started
 
 Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pending final manual UAT sign-off)
 
@@ -67,6 +67,7 @@ Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pen
 | Phase 02 P03 | 27 | 3 tasks | 10 files |
 | Phase 02 P04 | 15 | 3 tasks | 18 files |
 | Phase 02 P05 | 18 | 2 tasks | 11 files |
+| Phase 03 P01 | 20min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Conflict resolver = pure fold emitting one winner per target_rel (UNIQUE-safe); reused by Plan 02-05 profile switch deploy half (02-03)
 - [Phase 02]: Plan 02-05: profile switch wiring = deploy->loadorder direct call (apply_load_order inside switch_profile); acyclic, loadorder depends only on store+core
 - [Phase 02]: Plan 02-05: SwitchReport = {purged, deployed, plugins_txt}; switch = purge(old)->deploy_winners(new)->apply_load_order->set_active, never diff-deploy (D-15)
+- [Phase ?]: oauth2 5.0 binds to reqwest 0.12; workspace on 0.13 — token POST issued via the workspace reqwest 0.13 client (oauth2 still owns S256 PKCE + CSRF); added reqwest form feature
+- [Phase ?]: Chose webbrowser over tauri-plugin-opener for the OAuth browser launch (no plugin/capability wiring; deferred to Plan 03)
+- [Phase ?]: API-key paste is the works-today login (NEXUS-01) until an OAuth client_id is registered; OAuth code path implemented + mockito-verified, live round-trip deferred
 
 ### Pending Todos
 
@@ -113,6 +117,7 @@ None yet.
 - [Phase 1]: Safety-critical engine (crash-safe journaling, EXDEV probe, vanilla-backup, casefold) flagged for deeper research at plan time — see research/SUMMARY.md Research Flags.
 - [Phase 3]: NexusMods API in flux (v1 REST → GraphQL v2); verify per-endpoint and confirm free-user nxm:// flow with a real non-Premium account. Register app under Nexus Acceptable Use Policy early.
 - [Phase 4]: FOMOD ModuleConfig.xml conditional logic + Collections manifest/bundle/patch format is the largest single feature with known recurring bugs — dry-run resolve before touching disk.
+- Live NexusMods OAuth round-trip (NEXUS-01) gated on a registered OAuth client_id + nxm://oauth/callback redirect + real account — Task 4 human-verify deferred; API-key fallback unblocks Phase 3
 
 ## Deferred Items
 
@@ -124,7 +129,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-21T07:49:41.805Z
+Last session: 2026-06-21T14:29:20.092Z
 Stopped at: Phase 2 (Multi-Mod Management) BUILT + auto-verified (21/21 must-haves, code review 2 BLOCKERs fixed, 142 tests green); autonomous run STOPPED at user request. Phase 2 awaiting 4 manual/in-game UAT items (02-UAT.md).
 Resume file: .planning/phases/02-multi-mod-management/02-UAT.md
 Resume command: `/gsd-autonomous --from 2` to continue the milestone (UAT-1/UAT-2 done + GAP-01 fixed). Optionally finish UAT-3/UAT-4 first.

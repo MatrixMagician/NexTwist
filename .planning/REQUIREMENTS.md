@@ -51,8 +51,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### NexusMods Integration
 
-- [ ] **NEXUS-01**: User can log into their NexusMods account via OAuth2
-- [ ] **NEXUS-02**: NexTwist stores auth tokens securely in the system keyring
+- [x] **NEXUS-01**: User can log into their NexusMods account via OAuth2
+- [x] **NEXUS-02**: NexTwist stores auth tokens securely in the system keyring
 - [ ] **NEXUS-03**: Premium users can download a mod directly from NexusMods within the app
 - [ ] **NEXUS-04**: Free users can install mods via the website "Mod Manager Download" (nxm://) handoff
 - [ ] **NEXUS-05**: NexTwist respects NexusMods API rate limits
@@ -142,8 +142,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROF-01 | Phase 2 | Complete |
 | PROF-02 | Phase 2 | Complete |
 | PROF-03 | Phase 2 | Complete |
-| NEXUS-01 | Phase 3 | Pending |
-| NEXUS-02 | Phase 3 | Pending |
+| NEXUS-01 | Phase 3 | Complete |
+| NEXUS-02 | Phase 3 | Complete |
 | NEXUS-03 | Phase 3 | Pending |
 | NEXUS-04 | Phase 3 | Pending |
 | NEXUS-05 | Phase 3 | Pending |
