@@ -6,7 +6,7 @@
 //! Exactly one profile is active per game. No `rusqlite` type leaks publicly.
 
 use core::{Profile, StoreError};
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 
 use crate::db::Store;
 
@@ -131,7 +131,32 @@ impl Store {
     }
 
     /// Delete a profile and its membership rows. Idempotent: a missing id returns `false`.
+    ///
+    /// REFUSES to delete the currently-active profile (CR-02 safety invariant): the active
+    /// profile may have a live on-disk deployment, and deleting it here would orphan those
+    /// files (the profile flow no longer triggers a purge) AND leave the game with zero
+    /// active profiles, violating "exactly one active per game". The caller must switch to
+    /// another profile first — `switch_profile` purges the outgoing deployment to pristine
+    /// — and only then delete the now-inactive profile.
     pub fn delete_profile(&self, profile_id: i64) -> Result<bool, StoreError> {
+        // Reject deleting an active profile; the caller must switch away (which purges
+        // the deployment to pristine) before this profile can be safely removed.
+        let is_active: bool = self
+            .conn
+            .query_row(
+                "SELECT active FROM profile WHERE id = ?1",
+                params![profile_id],
+                |r| r.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(|e| StoreError::Db(e.to_string()))?
+            .map(|a| a != 0)
+            .unwrap_or(false);
+        if is_active {
+            return Err(StoreError::Db(
+                "cannot delete the active profile; switch to another profile first".into(),
+            ));
+        }
         let tx = self
             .conn
             .unchecked_transaction()
@@ -260,5 +285,33 @@ mod tests {
         assert!(!store.delete_profile(p).unwrap());
         assert!(store.list_profiles(1).unwrap().is_empty());
         assert!(store.list_profile_mods(p).unwrap().is_empty());
+    }
+
+    /// CR-02: deleting the ACTIVE profile is refused (it may have a live deployment and
+    /// would leave the game with zero active profiles). The caller must switch away first.
+    #[test]
+    fn delete_active_profile_is_refused() {
+        let dir = TempDir::new().unwrap();
+        let store = Store::open(&dir.path().join("d.db")).unwrap();
+        let a = store.create_profile(1, "A").unwrap();
+        let b = store.create_profile(1, "B").unwrap();
+        store.set_active_profile(1, a).unwrap();
+
+        // The active profile cannot be deleted.
+        let err = store.delete_profile(a).unwrap_err();
+        assert!(matches!(err, StoreError::Db(_)));
+        // It is still present and still active — the invariant holds.
+        assert_eq!(store.active_profile(1).unwrap().unwrap().id, a);
+        assert_eq!(store.list_profiles(1).unwrap().len(), 2);
+
+        // An inactive profile is still deletable.
+        assert!(store.delete_profile(b).unwrap());
+
+        // After switching away, the (now inactive) former-active profile can be deleted.
+        let c = store.create_profile(1, "C").unwrap();
+        store.set_active_profile(1, c).unwrap();
+        assert!(store.delete_profile(a).unwrap());
+        // Exactly one active profile remains.
+        assert_eq!(store.active_profile(1).unwrap().unwrap().id, c);
     }
 }

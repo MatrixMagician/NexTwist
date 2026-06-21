@@ -61,6 +61,12 @@ pub async fn switch_profile(
 /// Delete a profile and its mod/plugin selections (PROF-01). Staged mod files are KEPT
 /// (D-14: only the profile + its references are removed). Idempotent: a missing id
 /// returns `false`.
+///
+/// REFUSES to delete the currently-active profile (CR-02): the store returns a clear
+/// error ("cannot delete the active profile; switch to another profile first") which is
+/// surfaced verbatim to the UI so it can gate the Delete button and prompt a switch. This
+/// preserves the safety invariant that the active profile's live deployment is never
+/// orphaned and the game always has exactly one active profile.
 #[tauri::command]
 pub async fn delete_profile(
     state: State<'_, Mutex<AppState>>,
