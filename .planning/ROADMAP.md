@@ -14,7 +14,7 @@ NexTwist is built safety-first: the differentiating, irreplaceable value — non
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Safe Local Round-Trip** - Detect a Bethesda Proton game, install a LOCAL archive, deploy non-destructively, purge to pristine (completed 2026-06-20)
-- [ ] **Phase 2: Multi-Mod Management** - Many mods with conflict resolution, load order, plugin ordering, and per-game profiles
+- [x] **Phase 2: Multi-Mod Management** - Many mods with conflict resolution, load order, plugin ordering, and per-game profiles (completed 2026-06-21)
 - [ ] **Phase 3: NexusMods Login & Download** - OAuth login, secure tokens, in-app + nxm:// one-click downloads into staging
 - [ ] **Phase 4: Guided Installers & Collections** - FOMOD wizard installs and end-to-end NexusMods Collection install/deploy/uninstall
 - [ ] **Phase 5: AppImage Distribution** - License-clean, single-file Linux AppImage with registered nxm:// handler
@@ -60,7 +60,7 @@ Plans:
   3. User can auto-sort plugins via LOOT
   4. User can create multiple independent profiles per game, switch the active profile to change which mods/plugins/order are deployed, and each profile preserves its own enabled-mod set and load order
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans complete
 **UI hint**: yes
 
 Plans:
@@ -76,7 +76,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-05-PLAN.md — Profile slice (PROF-01/02/03): switch_profile reconcile (purge→deploy→plugins.txt) + profile Tauri commands + confirmation-gated Profile selector + cross-switch round-trip-pristine test
+- [x] 02-05-PLAN.md — Profile slice (PROF-01/02/03): switch_profile reconcile (purge→deploy→plugins.txt) + profile Tauri commands + confirmation-gated Profile selector + cross-switch round-trip-pristine test
 
 ### Phase 3: NexusMods Login & Download
 
@@ -143,7 +143,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Safe Local Round-Trip | 7/7 | Complete   | 2026-06-20 |
-| 2. Multi-Mod Management | 4/5 | In Progress|  |
+| 2. Multi-Mod Management | 5/5 | Complete   | 2026-06-21 |
 | 3. NexusMods Login & Download | 0/TBD | Not started | - |
 | 4. Guided Installers & Collections | 0/TBD | Not started | - |
 | 5. AppImage Distribution | 0/TBD | Not started | - |

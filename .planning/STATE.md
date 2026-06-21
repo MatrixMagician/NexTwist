@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 2
 current_phase_name: Multi-Mod Management
-status: executing
+status: verifying
 stopped_at: Phase 2 UI-SPEC approved
-last_updated: "2026-06-21T00:14:33.219Z"
+last_updated: "2026-06-21T00:25:56.242Z"
 last_activity: 2026-06-20
 last_activity_desc: Phase 2 execution started
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 12
-  completed_plans: 11
-  percent: 20
+  completed_plans: 12
+  percent: 40
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 
 Phase: 2 (Multi-Mod Management) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-20 — Phase 2 execution started
 
 Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pending final manual UAT sign-off)
@@ -66,6 +66,7 @@ Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pen
 | Phase 02 P02 | 22 | 3 tasks | 9 files |
 | Phase 02 P03 | 27 | 3 tasks | 10 files |
 | Phase 02 P04 | 15 | 3 tasks | 18 files |
+| Phase 02 P05 | 18 | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,8 @@ Recent decisions affecting current work:
 - [Phase ?]: deny.toml allows bare GPL-3.0 (libloadorder/esplugin declare it, not -or-later); compatible in the GPL-3.0-or-later AppImage
 - [Phase ?]: Conflict multi-root contract = Option A: new WinnerFile + deploy_winners; StagedFiles/deploy unchanged (02-03)
 - [Phase ?]: Conflict resolver = pure fold emitting one winner per target_rel (UNIQUE-safe); reused by Plan 02-05 profile switch deploy half (02-03)
+- [Phase 02]: Plan 02-05: profile switch wiring = deploy->loadorder direct call (apply_load_order inside switch_profile); acyclic, loadorder depends only on store+core
+- [Phase 02]: Plan 02-05: SwitchReport = {purged, deployed, plugins_txt}; switch = purge(old)->deploy_winners(new)->apply_load_order->set_active, never diff-deploy (D-15)
 
 ### Pending Todos
 
@@ -121,7 +124,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-21T00:14:23.966Z
+Last session: 2026-06-21T00:25:24.560Z
 Stopped at: Phase 2 UI-SPEC approved
 Resume file: .planning/phases/02-multi-mod-management/02-UI-SPEC.md
 Resume command: `/gsd-autonomous --from 2` to continue the milestone (UAT-1/UAT-2 done + GAP-01 fixed). Optionally finish UAT-3/UAT-4 first.

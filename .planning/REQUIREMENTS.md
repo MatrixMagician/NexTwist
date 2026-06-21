@@ -46,7 +46,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Profiles
 
 - [x] **PROF-01**: User can create multiple independent mod profiles per game
-- [ ] **PROF-02**: User can switch the active profile, changing which mods/plugins/order are deployed
+- [x] **PROF-02**: User can switch the active profile, changing which mods/plugins/order are deployed
 - [x] **PROF-03**: Each profile preserves its own enabled-mod set and load order
 
 ### NexusMods Integration
@@ -140,7 +140,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PLUGIN-02 | Phase 2 | Complete |
 | PLUGIN-03 | Phase 2 | Complete |
 | PROF-01 | Phase 2 | Complete |
-| PROF-02 | Phase 2 | Pending |
+| PROF-02 | Phase 2 | Complete |
 | PROF-03 | Phase 2 | Complete |
 | NEXUS-01 | Phase 3 | Pending |
 | NEXUS-02 | Phase 3 | Pending |
