@@ -156,9 +156,30 @@ fn write_cache(cache: &Path, body: &str) -> Result<(), LoadOrderError> {
 }
 
 /// The real HTTPS fetch: a one-shot blocking rustls request to the pinned URL.
+///
+/// Redirects are DISABLED (WR-01 / T-02-10): `reqwest`'s default client follows up to 10
+/// redirects with no host restriction, so a 30x (or a MITM injecting one at the CDN edge)
+/// could send the client to an arbitrary host whose body would then be cached and fed to
+/// the libloot masterlist parser — defeating the host pinning, which would otherwise only
+/// be enforced on the first hop. With `Policy::none()` the bytes can only come from the
+/// pinned `raw.githubusercontent.com` URL. As defence-in-depth we also re-assert the
+/// final response host matches the pinned host.
 fn real_fetch(url: &str) -> Result<String, String> {
-    let resp = reqwest::blocking::get(url).map_err(|e| e.to_string())?;
+    let client = reqwest::blocking::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client.get(url).send().map_err(|e| e.to_string())?;
     let resp = resp.error_for_status().map_err(|e| e.to_string())?;
+    // Defence-in-depth: the bytes we are about to cache + parse must come from the pinned
+    // host. `MASTERLIST_HOST` carries the `https://` scheme, so compare against its host part.
+    let pinned_host = MASTERLIST_HOST.trim_start_matches("https://");
+    if resp.url().host_str() != Some(pinned_host) {
+        return Err(format!(
+            "masterlist fetch resolved to an unpinned host: {:?}",
+            resp.url().host_str()
+        ));
+    }
     resp.text().map_err(|e| e.to_string())
 }
 
