@@ -35,6 +35,9 @@ export interface DeployReport {
   backed_up: number;
   methods: [string, string][];
   fs_warnings: FsWarning[];
+  /** Resolved targets whose source file was missing at deploy time (WR-04): NOT deployed
+   *  and surfaced so the UI can warn the deployment is incomplete. */
+  skipped: string[];
 }
 
 /** Result of a purge (mirrors deploy::PurgeReport). */

@@ -79,6 +79,12 @@ pub struct DeployReport {
     /// Unsafe-filesystem warnings (cross-device / non-casefolded) surfaced for the UI
     /// to show the user before relying on this deployment (ENV-04 warning half).
     pub fs_warnings: Vec<FsWarning>,
+    /// Resolved targets whose source file was missing at deploy time and were therefore
+    /// NOT deployed (WR-04). The resolver walked these moments earlier, so a miss is
+    /// unexpected (a race / external delete) and is surfaced to the UI rather than
+    /// silently dropped — `deployed` counts only files actually placed, and the user can
+    /// see exactly which expected files are absent from the deployment.
+    pub skipped: Vec<PathBuf>,
 }
 
 /// What [`purge`] removed/restored, plus any orphans it refused to blindly delete.
@@ -153,6 +159,7 @@ fn deploy_inner(
         backed_up: 0,
         methods: Vec::new(),
         fs_warnings: Vec::new(),
+        skipped: Vec::new(),
     };
 
     // An empty mod is a valid no-op deploy. Returning early also avoids probing a
@@ -222,6 +229,7 @@ pub fn deploy_winners(
         backed_up: 0,
         methods: Vec::new(),
         fs_warnings: Vec::new(),
+        skipped: Vec::new(),
     };
 
     if winners.is_empty() {
@@ -239,6 +247,9 @@ pub fn deploy_winners(
         if !src.is_file() {
             // A winner whose source vanished is skipped defensively (the resolver read
             // it moments ago; a race here just means one fewer file, never corruption).
+            // WR-04: record it so the report is honest about the incomplete deployment
+            // rather than silently omitting it from `deployed`.
+            report.skipped.push(w.rel.clone());
             continue;
         }
         // Probe per winner against its OWN staging root (winners come from different
