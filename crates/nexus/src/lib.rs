@@ -26,6 +26,8 @@ pub mod error;
 pub mod model;
 pub mod ratelimit;
 
-pub use auth::{build_authorize_url, exchange_code, validate_api_key, AuthorizeRequest};
+pub use auth::{
+    build_authorize_url, exchange_code, validate_api_key, AuthorizeRequest, API_BASE, TOKEN_BASE,
+};
 pub use error::NexusError;
 pub use model::{OAuthTokens, UserInfo};

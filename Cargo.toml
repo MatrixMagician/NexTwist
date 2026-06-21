@@ -56,12 +56,16 @@ esplugin = "6.1"
 # "What NOT to Use"). `blocking` because the loadorder crate is runtime-free (no tokio):
 # the masterlist fetch is a one-shot synchronous call behind a Tauri command, so a
 # blocking client avoids forcing an async runtime into the headless safety crate.
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "blocking", "json", "stream"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "blocking", "json", "stream", "form"] }
 
 # NexusMods auth + API client (Phase 3, Plan 01 — crates/nexus). All registry-verified
 # + legitimacy-audited 2026-06-21 (RESEARCH Package Legitimacy Audit: all OK).
 #   * oauth2 5.0 — OAuth2 Authorization-Code + PKCE (S256). default-features = false +
 #     `reqwest` + `rustls-tls` ONLY (never native-tls) keeps the AppImage self-contained.
+#     NOTE: oauth2 5.0.0 binds its async executor to reqwest 0.12; the workspace is on
+#     reqwest 0.13, so the token POST is issued with the workspace's own hardened
+#     reqwest 0.13 client (the `form` feature added to the pin above provides the
+#     x-www-form-urlencoded body). oauth2 still owns S256 PKCE + CSRF state.
 #   * governor 0.10 — client-side token-bucket rate limiter (NEXUS-05; wired in Plan 02).
 #   * futures-util 0.3 — StreamExt for reqwest::Response::bytes_stream() (Plan 02 streaming).
 oauth2 = { version = "5.0", default-features = false, features = ["reqwest", "rustls-tls"] }
