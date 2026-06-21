@@ -175,6 +175,18 @@ export interface DownloadProgress {
   reason: string | null;
 }
 
+/** The `nxm://arrival` event payload (mirrors commands::nexus::NxmArrival). Secret-free:
+ *  it carries only the UI download id of the new row the arrival started. */
+export interface NxmArrival {
+  id: string;
+}
+
+/** The `nxm://expired` event payload (mirrors commands::nexus::NxmExpired). Secret-free:
+ *  a human-readable reason for the Warning notice (never the link/key/code). */
+export interface NxmExpired {
+  reason: string;
+}
+
 export const detectGames = (): Promise<DetectedGame[]> => invoke("detect_games");
 
 export const addGame = (appid: number): Promise<Game> => invoke("add_game", { appid });
@@ -287,3 +299,23 @@ export const onDownloadProgress = (
   handler: (p: DownloadProgress) => void,
 ): Promise<UnlistenFn> =>
   listen<DownloadProgress>("download://progress", (e) => handler(e.payload));
+
+/**
+ * Subscribe to `nxm://` deep-link arrivals (NXM-01). The shell emits this when a website
+ * "Mod Manager Download" link is routed to the running app (a new downloads row begins).
+ * The UI shows the non-blocking "Download started from NexusMods" toast.
+ */
+export const onNxmArrival = (
+  handler: (a: NxmArrival) => void,
+): Promise<UnlistenFn> =>
+  listen<NxmArrival>("nxm://arrival", (e) => handler(e.payload));
+
+/**
+ * Subscribe to expired/invalid `nxm://` link notices (UI-SPEC §C.3). The shell emits this
+ * for a malformed/expired/unredeemable link so the UI shows the Warning notice instead of
+ * a stuck Failed download row.
+ */
+export const onNxmExpired = (
+  handler: (x: NxmExpired) => void,
+): Promise<UnlistenFn> =>
+  listen<NxmExpired>("nxm://expired", (e) => handler(e.payload));

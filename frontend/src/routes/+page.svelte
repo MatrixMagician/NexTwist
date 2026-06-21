@@ -83,6 +83,10 @@
   let downloads = $state<DownloadItem[]>([]);
   let rateLimited = $state(false);
   let expiredLink = $state<string | null>(null);
+  // `nxmToast` carries the §C.1 "Download started from NexusMods" Success toast, shown
+  // (non-blocking, auto-dismissing) when an nxm:// deep-link arrival fires.
+  let nxmToast = $state<string | null>(null);
+  let nxmToastTimer: ReturnType<typeof setTimeout> | null = null;
 
   let busy = $state(false);
   let error = $state<string | null>(null);
@@ -251,6 +255,44 @@
 
   async function onCancelDownload(id: string) {
     await api.cancelDownload(id);
+  }
+
+  /** Show the non-blocking nxm:// arrival toast and auto-dismiss it after a short delay. */
+  function showNxmToast() {
+    nxmToast = "Download started from NexusMods";
+    if (nxmToastTimer) clearTimeout(nxmToastTimer);
+    nxmToastTimer = setTimeout(() => (nxmToast = null), 4000);
+  }
+
+  /**
+   * An nxm:// link arrived (NXM-01): the shell already started the download server-side and
+   * emits `download://progress` for the new row. Here we just confirm with the Success toast
+   * and ensure a row exists so the user sees it appear even before the first progress tick.
+   */
+  function applyNxmArrival(a: api.NxmArrival) {
+    showNxmToast();
+    expiredLink = null;
+    if (!downloads.some((d) => d.id === a.id)) {
+      downloads = [
+        ...downloads,
+        {
+          id: a.id,
+          name: a.id,
+          downloaded: 0,
+          total: null,
+          state: "downloading",
+          // The deep-link row's coordinates live server-side; the UI only mirrors progress.
+          source: { appid: 0, gameDomain: "", nexusModId: 0, fileId: 0 },
+        },
+      ];
+    }
+    // Refresh the mod list so the staged Nexus mod shows up as an ordinary ManagedMod.
+    if (selectedAppid !== null) loadConflicts();
+  }
+
+  /** An expired/invalid nxm:// link (UI-SPEC §C.3): show the Warning, never a Failed row. */
+  function applyNxmExpired(x: api.NxmExpired) {
+    expiredLink = x.reason;
   }
 
   /** Human percent for a row, or null when the total is unknown. */
@@ -576,6 +618,10 @@
   // Subscribe to download progress events (UI-SPEC §B): the list is updated entirely off
   // these async events so the UI never freezes during a multi-GB download.
   api.onDownloadProgress(applyProgress);
+  // Subscribe to nxm:// deep-link events (UI-SPEC §C): the arrival toast + the
+  // expired/invalid-link Warning. The new download row arrives via the progress stream.
+  api.onNxmArrival(applyNxmArrival);
+  api.onNxmExpired(applyNxmExpired);
 </script>
 
 <main>
@@ -649,10 +695,23 @@
   <section class="downloads">
     <h2>Downloads</h2>
 
+    {#if nxmToast}
+      <!-- §C.1: non-blocking arrival toast, Success styling, auto-dismisses. -->
+      <div class="nxm-toast" role="status">
+        {nxmToast}
+        <button class="link-btn" onclick={() => (nxmToast = null)}>Dismiss</button>
+      </div>
+    {/if}
+
     {#if loggedIn && userInfo && !userInfo.is_premium}
       <p class="muted free-hint">
         Free account: start downloads from the NexusMods website "Mod Manager Download"
         button.
+      </p>
+    {:else if loggedIn && userInfo && userInfo.is_premium}
+      <p class="muted free-hint">
+        Premium account: you can start downloads in-app, or use the NexusMods website
+        "Mod Manager Download" button.
       </p>
     {/if}
 
@@ -1221,6 +1280,17 @@
     padding: 0.5rem 0.75rem;
     margin: 0 0 0.75rem;
     font-size: 0.875rem;
+  }
+  /* §C.1 arrival toast — Success styling (green), non-blocking, auto-dismissing. */
+  .nxm-toast {
+    color: #1a7f37;
+    background: #eaf6ed;
+    border: 1px solid #1a7f37;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin: 0 0 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
   }
   .downloads .empty {
     border: 1px solid #ccc;
