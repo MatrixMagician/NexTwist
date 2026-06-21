@@ -60,8 +60,16 @@ pub fn install_archive(archive: &Path, staging_root: &Path) -> Result<StagedMod,
         ArchiveFormat::Rar => rar::extract_rar(archive, temp_root)?,
     }
 
-    // The whole archive validated. Move the temp tree into the staging root.
-    move_into_staging(temp_root, staging_root)?;
+    // The whole archive validated. Detect a cosmetic wrapper folder (e.g. an archive
+    // packaged as `MyMod/Data/foo.esp` instead of `Data/foo.esp`) so the staged tree is
+    // `Data/`-rooted rather than double-nested under `Data/MyMod/...`. This runs strictly
+    // between extract-validate and the move — the validated extract→validate→move→
+    // read-only ordering is preserved. (Carried Phase-2 gap; acute for FOMOD-02 because
+    // `<file>/<folder>` source resolution depends on the detected archive root.)
+    let move_source = detect_archive_root(temp_root)?;
+
+    // Move the (possibly unwrapped) tree into the staging root.
+    move_into_staging(&move_source, staging_root)?;
     // Consume the TempDir guard without deleting (contents were moved out).
     let _ = temp.keep();
 
@@ -96,6 +104,82 @@ fn make_temp_near(staging_root: &Path) -> Result<TempDir, ExtractError> {
         .prefix(".nextwist-extract-")
         .tempdir()
         .map_err(|e| ExtractError::io(staging_root, e))
+}
+
+/// Recognized top-level game-root items (case-insensitive). A wrapper directory that
+/// directly contains one of these — or a `Data` folder — is treated as the real root.
+///
+/// Kept SMALL and explicit (threat T-04-04): a too-broad list would wrongly flatten a
+/// legitimate multi-folder mod. `Data` is handled separately below (it is the dominant
+/// Bethesda root); these are the common script-extender / config siblings that ship at the
+/// game root alongside `Data`.
+const RECOGNIZED_ROOT_ITEMS: &[&str] = &["data", "skse", "skse64", "f4se", "obse", "nvse", "mwse"];
+
+/// Detect whether the validated `temp_root` is wrapped in a single cosmetic top-level
+/// directory and, if so, return that subdirectory as the real move source. Otherwise
+/// return `temp_root` unchanged.
+///
+/// Heuristic (RESEARCH Pitfall 1): the tree is "wrapped" iff its top level is EXACTLY one
+/// directory (no sibling files or dirs) AND that directory directly contains a recognizable
+/// game root — a child named `Data` (case-insensitively) or one of
+/// [`RECOGNIZED_ROOT_ITEMS`]. A real multi-folder mod (more than one top-level entry) or a
+/// tree already rooted at `Data/` is never flattened. Detection is applied at most once
+/// (a single wrapper level), so `Outer/Inner/Data/...` only unwraps `Outer` when `Outer`
+/// itself contains the recognizable root — it does not recursively strip arbitrary depth.
+pub(crate) fn detect_archive_root(temp_root: &Path) -> Result<PathBuf, ExtractError> {
+    let mut entries = Vec::new();
+    for entry in std::fs::read_dir(temp_root).map_err(|e| ExtractError::io(temp_root, e))? {
+        let entry = entry.map_err(|e| ExtractError::io(temp_root, e))?;
+        let path = entry.path();
+        let ft = entry.file_type().map_err(|e| ExtractError::io(&path, e))?;
+        entries.push((path, ft.is_dir()));
+    }
+
+    // Exactly one top-level entry, and it must be a directory.
+    let single_dir = match entries.as_slice() {
+        [(path, true)] => path.clone(),
+        _ => return Ok(temp_root.to_path_buf()),
+    };
+
+    // The top level is already a recognized root (e.g. the single dir IS `Data/`): do NOT
+    // flatten — that is a legitimately Data-rooted tree, not a wrapper.
+    if is_recognized_root_name(&single_dir) {
+        return Ok(temp_root.to_path_buf());
+    }
+
+    // The single wrapper dir must itself contain a recognizable game root to be unwrapped.
+    if wrapper_contains_recognized_root(&single_dir)? {
+        tracing::debug!(
+            wrapper = %single_dir.display(),
+            "detected cosmetic wrapper folder; staging from its contents",
+        );
+        return Ok(single_dir);
+    }
+
+    Ok(temp_root.to_path_buf())
+}
+
+/// Whether `path`'s file name is a recognized game-root token (case-insensitive).
+fn is_recognized_root_name(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| {
+            RECOGNIZED_ROOT_ITEMS
+                .iter()
+                .any(|tok| n.eq_ignore_ascii_case(tok))
+        })
+        .unwrap_or(false)
+}
+
+/// Whether `dir` directly contains a recognizable game-root child (case-insensitive).
+fn wrapper_contains_recognized_root(dir: &Path) -> Result<bool, ExtractError> {
+    for entry in std::fs::read_dir(dir).map_err(|e| ExtractError::io(dir, e))? {
+        let entry = entry.map_err(|e| ExtractError::io(dir, e))?;
+        if is_recognized_root_name(&entry.path()) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Move the validated `temp_root` tree into `staging_root`.
@@ -140,4 +224,77 @@ fn recursive_move(from: &Path, to: &Path) -> Result<(), ExtractError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod root_detection_tests {
+    use super::detect_archive_root;
+    use std::fs;
+    use std::path::Path;
+
+    /// Create an empty file at `root/rel`, making parent dirs as needed.
+    fn touch(root: &Path, rel: &str) {
+        let p = root.join(rel);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(&p, b"x").unwrap();
+    }
+
+    #[test]
+    fn wrapper_folder_is_flattened() {
+        // `MyMod/Data/foo.esp` ⇒ the move source becomes `.../MyMod`, so staging is
+        // `Data/foo.esp` (NOT `MyMod/Data/foo.esp`).
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "MyMod/Data/foo.esp");
+
+        let source = detect_archive_root(tmp.path()).unwrap();
+        assert_eq!(source, tmp.path().join("MyMod"));
+        assert!(source.join("Data/foo.esp").is_file());
+    }
+
+    #[test]
+    fn already_data_rooted_is_unchanged() {
+        // A tree already rooted at `Data/foo.esp` must NOT be flattened (the single
+        // top-level dir IS `Data`, a recognized root — not a cosmetic wrapper).
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "Data/foo.esp");
+
+        let source = detect_archive_root(tmp.path()).unwrap();
+        assert_eq!(source, tmp.path());
+    }
+
+    #[test]
+    fn multi_folder_mod_is_never_flattened() {
+        // More than one top-level entry ⇒ a legitimate multi-folder mod; leave it as-is
+        // even though one child is a recognizable root. This is the T-04-04 guard.
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "Data/foo.esp");
+        touch(tmp.path(), "readme.txt");
+
+        let source = detect_archive_root(tmp.path()).unwrap();
+        assert_eq!(source, tmp.path());
+    }
+
+    #[test]
+    fn nested_wrapper_unwraps_only_one_level() {
+        // `Outer/Inner/Data/...`: the single top-level dir is `Outer`, but `Outer` does
+        // NOT directly contain a recognized root (only `Inner` does) ⇒ NOT flattened.
+        // Detection strips at most one cosmetic level and never guesses through depth.
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "Outer/Inner/Data/foo.esp");
+
+        let source = detect_archive_root(tmp.path()).unwrap();
+        assert_eq!(source, tmp.path(), "Outer lacks a direct Data child ⇒ unchanged");
+    }
+
+    #[test]
+    fn known_top_level_item_is_recognized_root() {
+        // A single wrapper dir whose child is a known top-level game item (`SKSE`) is
+        // treated as the root and unwrapped.
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "WrapDir/SKSE/plugins/foo.dll");
+
+        let source = detect_archive_root(tmp.path()).unwrap();
+        assert_eq!(source, tmp.path().join("WrapDir"));
+        assert!(source.join("SKSE/plugins/foo.dll").is_file());
+    }
 }
