@@ -203,10 +203,17 @@ impl NxmLink {
 
 /// Look up a query-string parameter by name and percent-decode its value.
 ///
-/// A tiny dependency-free `application/x-www-form-urlencoded` reader (mirrors Plan-02's
-/// local percent-encoder decision — the workspace `reqwest` stays on its minimal
-/// rustls-only feature set, and no `url`/`serde_urlencoded` dep is added). Returns the
-/// first match. The decoded value is treated as opaque by every caller.
+/// A tiny dependency-free query reader (mirrors Plan-02's local percent-encoder decision
+/// — the workspace `reqwest` stays on its minimal rustls-only feature set, and no
+/// `url`/`serde_urlencoded` dep is added). Returns the first match. The decoded value is
+/// treated as opaque by every caller.
+///
+/// WR-04: every value this reads (`key`/`expires`/`user_id`/`code`/`state`) is an
+/// **opaque** token, NOT a `application/x-www-form-urlencoded` form field. OAuth
+/// `code`/`state` (and base64url-adjacent keys) legitimately contain a literal `+`, so we
+/// use **raw** RFC-3986 percent-decoding that does NOT apply the form `+`→space rule — a
+/// `+` is preserved verbatim. Translating `+`→space here corrupted those values, causing
+/// spurious CSRF mismatches and bad code exchanges.
 fn query_get(query: &str, name: &str) -> Option<String> {
     query
         .split('&')
@@ -215,19 +222,19 @@ fn query_get(query: &str, name: &str) -> Option<String> {
         .map(|(_, v)| percent_decode(v))
 }
 
-/// Minimal RFC-3986 percent-decoder for query values (also turns `+` into a space, per the
-/// form-urlencoded convention). Invalid `%XX` sequences are passed through literally rather
-/// than panicking (defensive: untrusted input must never crash the handler).
+/// Minimal RFC-3986 percent-decoder for **opaque** query values.
+///
+/// Unlike `application/x-www-form-urlencoded` decoding, this does NOT translate `+` into a
+/// space: the only callers here are opaque OAuth/redemption tokens (WR-04), which may
+/// contain a literal `+` (base64url-adjacent). A `+` is therefore passed through
+/// untouched. Invalid `%XX` sequences are passed through literally rather than panicking
+/// (defensive: untrusted input must never crash the handler).
 fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
         match bytes[i] {
-            b'+' => {
-                out.push(b' ');
-                i += 1;
-            }
             b'%' if i + 2 < bytes.len() => {
                 let hi = (bytes[i + 1] as char).to_digit(16);
                 let lo = (bytes[i + 2] as char).to_digit(16);
@@ -254,6 +261,33 @@ fn percent_decode(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// WR-04: a literal `+` in an OAuth `code`/`state` (or an opaque key) must be
+    /// preserved, NOT decoded to a space — these are not form fields. A `+`→space here
+    /// produced spurious CSRF mismatches and bad code exchanges.
+    #[test]
+    fn percent_decode_preserves_literal_plus() {
+        assert_eq!(percent_decode("a+b/c=="), "a+b/c==");
+        // %2B (an explicitly-encoded plus) still decodes to a plus.
+        assert_eq!(percent_decode("a%2Bb"), "a+b");
+        // A normal percent-escape still decodes; a stray `%` is passed through.
+        assert_eq!(percent_decode("hello%20world"), "hello world");
+        assert_eq!(percent_decode("100%"), "100%");
+    }
+
+    /// WR-04 at the query layer: an oauth callback whose `code`/`state` contain `+`
+    /// round-trips through `query_get` with the `+` intact (no CSRF-breaking mangling).
+    #[test]
+    fn oauth_callback_preserves_plus_in_code_and_state() {
+        let kind = NxmLink::parse("nxm://oauth/callback?code=ab+cd&state=ef+gh").unwrap();
+        match kind {
+            NxmLinkKind::OAuthCallback { code, state } => {
+                assert_eq!(code, "ab+cd");
+                assert_eq!(state, "ef+gh");
+            }
+            other => panic!("expected OAuthCallback, got {other:?}"),
+        }
+    }
 
     #[test]
     fn nxm_link_serde_round_trips() {
