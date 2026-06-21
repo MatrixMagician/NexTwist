@@ -85,6 +85,55 @@ pub struct NexusSource {
     pub display_name: String,
 }
 
+/// A NexusMods Collection revision pinned for a game (COLL-01).
+///
+/// A Collection is parsed from its revision manifest (`collection.json`) and persisted
+/// additively (V5 migration). `(appid, slug, revision)` identify the exact revision and
+/// form the idempotent upsert key. `profile_id` is `None` until the Collection is
+/// materialised into its dedicated Phase-2 profile (Plan 04); deploying a Collection is a
+/// profile switch, never a new primitive. The `id` field is assigned by the store.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Collection {
+    /// Stable row id assigned by the store (0 before insert).
+    pub id: i64,
+    /// Steam AppID the Collection targets.
+    pub appid: u32,
+    /// The Collection's URL slug on NexusMods.
+    pub slug: String,
+    /// The pinned revision number.
+    pub revision: u32,
+    /// Human-readable Collection name (from the manifest `info.name`).
+    pub name: String,
+    /// The dedicated Phase-2 profile this Collection deploys into, once materialised.
+    pub profile_id: Option<i64>,
+}
+
+/// One pinned mod inside a Collection (COLL-02).
+///
+/// Carries the Nexus source identity (`nexus_mod_id`/`file_id`/`md5`), the install
+/// `phase` (0-based ordering), the conflict `rank` (lower = higher priority, derived
+/// from the manifest `modRules`), and a link to the local `managed_mod` row it stages
+/// into. Recorded additively against its `collection` (V5); both FKs CASCADE so the link
+/// sheds when the collection or the managed_mod is deleted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CollectionMod {
+    /// The local `managed_mod` row id this pinned mod stages into.
+    pub mod_id: i64,
+    /// NexusMods mod id the pinned file belongs to.
+    pub nexus_mod_id: u64,
+    /// NexusMods file id pinned by the Collection revision.
+    pub file_id: u64,
+    /// The pinned file's md5 (when the manifest supplies one) for file-matching.
+    pub md5: Option<String>,
+    /// Install ordering phase (0-based) from the manifest.
+    pub phase: u32,
+    /// Conflict rank (lower = higher priority), derived from the manifest `modRules`.
+    pub rank: u32,
+    /// The replayed FOMOD `choices` JSON for this mod, when the manifest pins one
+    /// (`{type:"fomod", options:[…]}`); `None` for a mod with no scripted installer.
+    pub choices_json: Option<String>,
+}
+
 /// The kind of a Bethesda plugin master/light/regular file, used to group masters
 /// ahead of regular plugins when sorting load order (D-08).
 ///
@@ -308,6 +357,56 @@ mod tests {
         let json = serde_json::to_string(&p).unwrap();
         let back: Plugin = serde_json::from_str(&json).unwrap();
         assert_eq!(p, back);
+    }
+
+    #[test]
+    fn collection_serde_round_trips() {
+        let c = Collection {
+            id: 3,
+            appid: 489830,
+            slug: "skyrim-essentials".into(),
+            revision: 7,
+            name: "Skyrim Essentials".into(),
+            profile_id: Some(11),
+        };
+        let json = serde_json::to_string(&c).unwrap();
+        let back: Collection = serde_json::from_str(&json).unwrap();
+        assert_eq!(c, back);
+
+        // A not-yet-materialised collection (no profile) round-trips too.
+        let no_profile = Collection {
+            profile_id: None,
+            ..c
+        };
+        let json = serde_json::to_string(&no_profile).unwrap();
+        let back: Collection = serde_json::from_str(&json).unwrap();
+        assert_eq!(no_profile, back);
+    }
+
+    #[test]
+    fn collection_mod_serde_round_trips() {
+        let cm = CollectionMod {
+            mod_id: 42,
+            nexus_mod_id: 12604,
+            file_id: 120063,
+            md5: Some("d41d8cd98f00b204e9800998ecf8427e".into()),
+            phase: 0,
+            rank: 3,
+            choices_json: Some(r#"{"type":"fomod","options":[]}"#.into()),
+        };
+        let json = serde_json::to_string(&cm).unwrap();
+        let back: CollectionMod = serde_json::from_str(&json).unwrap();
+        assert_eq!(cm, back);
+
+        // A mod with no md5 and no FOMOD choices round-trips too.
+        let bare = CollectionMod {
+            md5: None,
+            choices_json: None,
+            ..cm
+        };
+        let json = serde_json::to_string(&bare).unwrap();
+        let back: CollectionMod = serde_json::from_str(&json).unwrap();
+        assert_eq!(bare, back);
     }
 
     #[test]

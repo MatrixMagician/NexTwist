@@ -15,10 +15,15 @@
 //! The V4 migration (Phase 3) adds Nexus provenance additively:
 //!   * **nexus provenance** (NEXUS-03/06) — [`Store::add_nexus_source`] / [`Store::get_nexus_source`]
 //!
+//! The V5 migration (Phase 4) adds the Collection acquisition substrate additively:
+//!   * **collections** (COLL-01/02) — [`Store::add_collection`] / [`Store::get_collection`]
+//!     / [`Store::add_collection_mod`] / [`Store::list_collection_mods`]
+//!
 //! Encapsulation invariant: NO `rusqlite` type appears in this crate's public API.
 //! Downstream crates (`deploy`, `steam`, the Tauri shell) speak only in `core` types
 //! and the small journal value types re-exported below. All SQL stays inside `store`.
 
+mod collections;
 mod db;
 mod journal;
 mod manifest;

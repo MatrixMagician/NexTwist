@@ -20,6 +20,13 @@ use rusqlite::Connection;
 // Embeds every `Vn__*.sql` under `src/migrations/` into a `migrations::runner()`.
 embed_migrations!("src/migrations");
 
+// Re-export the macro-generated `migrations` module within the crate so sibling module
+// tests (e.g. `collections.rs`'s V5 migration-reach guard) can pin a target version via
+// `refinery::Target`, exactly as the in-file `db.rs` tests do. Test-only — the runner is
+// otherwise reached through `migrations::runner()` inside this module.
+#[cfg(test)]
+pub(crate) use migrations as _migrations_reexport;
+
 /// A handle to the NexTwist persistence layer.
 ///
 /// Wraps a single rusqlite [`Connection`]. All SQL is encapsulated behind the
