@@ -218,6 +218,13 @@ pub async fn download_collection(
         .collect()
         .await;
 
+    // ── Rule→rank mapping (COLL-04 / BL-01): compute each mod's deploy rank from the
+    //    manifest's modRules + fileOverrides ONCE, so the author-intended conflict order
+    //    reaches the deploy engine (instead of every mod being hardcoded to one rank). The
+    //    map is keyed by manifest index; a mod no rule touches keeps its manifest-order
+    //    baseline rank. ───────────────────────────────────────────────────────────────
+    let ranks = nexus::compute_collection_ranks(&collection);
+
     // Persist each successful mod into the collection + replay its FOMOD choices headlessly.
     for (idx, name, res) in results {
         let m = &collection.mods[idx];
@@ -231,7 +238,9 @@ pub async fn download_collection(
                 {
                     report.stale_choices.push((name.clone(), e));
                 }
-                persist_collection_mod(&state, collection_id, &dl, m).await?;
+                // The rule-derived rank for this mod (manifest baseline + modRules delta).
+                let rank = ranks.get(&idx).copied().unwrap_or((idx as u32) + 1).max(1);
+                persist_collection_mod(&state, collection_id, &dl, m, rank).await?;
                 report.downloaded += 1;
             }
             Err(reason) => report.failed.push((name, reason)),
@@ -410,11 +419,16 @@ fn replay_for(staging_root: &std::path::Path, choices: &nexus::Choices) -> Resul
 
 /// Persist a downloaded Collection mod into the V5 collection tables, carrying its pinned
 /// FOMOD `choices` JSON verbatim (the store facade upserts the `fomod_choice` row).
+///
+/// `rank` is the rule-derived deploy rank (manifest baseline + `modRules` delta, computed by
+/// `nexus::compute_collection_ranks`) so the author-intended conflict order reaches the
+/// deploy engine (BL-01 / COLL-04).
 async fn persist_collection_mod(
     state: &State<'_, Mutex<AppState>>,
     collection_id: i64,
     dl: &crate::commands::downloads::DownloadResult,
     m: &nexus::CollectionMod,
+    rank: u32,
 ) -> Result<(), String> {
     let choices_json = m
         .choices
@@ -427,7 +441,7 @@ async fn persist_collection_mod(
         file_id: m.source.file_id.unwrap_or(0),
         md5: m.source.md5.clone(),
         phase: m.phase,
-        rank: 1,
+        rank,
         choices_json,
     };
     let guard = state.lock().await;

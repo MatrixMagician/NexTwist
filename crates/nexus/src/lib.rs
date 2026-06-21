@@ -43,5 +43,8 @@ pub use download::{download_to, CancelFlag};
 pub use error::NexusError;
 pub use model::{DownloadLink, ModFile, NxmLink, NxmLinkKind, OAuthTokens, UserInfo};
 pub use ratelimit::RateLimiter;
-pub use replay::{is_auto_fetchable, map_rules_to_ranks, replay_choices, RankAdjustment};
+pub use replay::{
+    compute_collection_ranks, is_auto_fetchable, map_rules_to_ranks, replay_choices,
+    RankAdjustment,
+};
 pub use resolve::{resolve_collection, ModStatus, ResolveReport, ResolvedMod};

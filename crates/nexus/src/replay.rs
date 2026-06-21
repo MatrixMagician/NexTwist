@@ -24,7 +24,9 @@ use std::collections::HashMap;
 
 use fomod::{FomodModule, Selection};
 
-use crate::collection::{Choices, CollectionModRule, ModReference, ModRuleType, SourceType};
+use crate::collection::{
+    Choices, Collection, CollectionMod, CollectionModRule, ModReference, ModRuleType, SourceType,
+};
 use crate::error::NexusError;
 
 /// Replay a Collection mod's pinned FOMOD [`Choices`] against the parsed [`FomodModule`],
@@ -205,6 +207,84 @@ pub fn is_auto_fetchable(source: SourceType) -> bool {
     matches!(source, SourceType::Nexus | SourceType::Bundle)
 }
 
+/// Resolve a [`ModReference`] (from a `modRule`) to the manifest index of the mod it
+/// identifies, if any (Pattern 7 / RESEARCH A5). A reference matches a mod by — in order —
+/// `tag`, `repo` `(modId/fileId)`, exact `fileMD5`, or `logicalFileName` against either the
+/// mod's `source.logical_filename` OR (the manifest authors are loose about this) its
+/// display `name`. An unmatched reference returns `None` so the rule is skipped, never fatal
+/// (Pitfall 4 / T-04-09). The manifest INDEX is the stable mod key the rank map is keyed by.
+fn reference_to_index(reference: &ModReference, mods: &[CollectionMod]) -> Option<usize> {
+    mods.iter().position(|m| {
+        // `tag` match (the most reliable authored key).
+        if let (Some(rt), Some(st)) = (&reference.tag, &m.source.tag)
+            && rt == st
+        {
+            return true;
+        }
+        // Exact file md5 match.
+        if let (Some(rm), Some(sm)) = (&reference.file_md5, &m.source.md5)
+            && rm.eq_ignore_ascii_case(sm)
+        {
+            return true;
+        }
+        // logicalFileName match — against the source's logical filename or the display name.
+        if let Some(lfn) = &reference.logical_file_name
+            && (m.source.logical_filename.as_deref() == Some(lfn.as_str()) || &m.name == lfn)
+        {
+            return true;
+        }
+        false
+    })
+}
+
+/// Compute each Collection mod's concrete deploy rank from the manifest `modRules` +
+/// per-mod `fileOverrides` — the PRODUCTION wiring for COLL-04 (RESEARCH A5 / Pattern 7).
+///
+/// This is the single entry point the adapter calls so the author-intended conflict order
+/// actually reaches the deploy engine (rather than every mod being hardcoded to one rank).
+/// It is pure (no I/O, no Tauri) so the round-trip test can drive it directly.
+///
+/// Each mod is keyed by its **manifest index** (a stable, unique key). The baseline rank is
+/// the manifest order (1-based), and [`map_rules_to_ranks`]' `rank_delta` is applied on top:
+///
+/// * `after`  ⇒ the source gains rank (higher number) and LOSES file conflicts to the ref;
+/// * `before` ⇒ the source loses rank (lower number) and WINS;
+///
+/// matching the deploy engine's "lower rank number = higher priority = wins" contract
+/// (`crates/deploy::conflict`). The result is clamped to `>= 1` (1-based ranks).
+///
+/// Returns one entry per mod in the manifest: `index → rank`. A mod that no rule touches
+/// keeps its manifest-order baseline rank.
+pub fn compute_collection_ranks(collection: &Collection) -> HashMap<usize, u32> {
+    let mods = &collection.mods;
+
+    // `key_for` resolves a ModReference to the manifest index (as a String key) — the SAME
+    // identity space the fileOverrides map and the baseline below use.
+    let key_for = |r: &ModReference| reference_to_index(r, mods).map(|i| i.to_string());
+
+    // Per-mod fileOverrides force-win paths, keyed by manifest index.
+    let file_overrides: HashMap<String, Vec<String>> = mods
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| !m.file_overrides.is_empty())
+        .map(|(i, m)| (i.to_string(), m.file_overrides.clone()))
+        .collect();
+
+    let adjustments = map_rules_to_ranks(&collection.mod_rules, &file_overrides, key_for);
+
+    // Seed every mod with its manifest-order baseline, then apply the rule delta.
+    (0..mods.len())
+        .map(|i| {
+            let baseline = (i as i64) + 1;
+            let delta = adjustments
+                .get(&i.to_string())
+                .map(|a| a.rank_delta)
+                .unwrap_or(0);
+            (i, (baseline + delta).max(1) as u32)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,5 +457,106 @@ mod tests {
             out.get("modA").unwrap().file_overrides,
             vec!["Data/x.dds".to_string()]
         );
+    }
+
+    use crate::collection::{CollectionInfo, SourceInfo};
+
+    fn nexus_mod(name: &str, tag: Option<&str>) -> CollectionMod {
+        CollectionMod {
+            name: name.to_string(),
+            version: String::new(),
+            optional: false,
+            domain_name: None,
+            source: SourceInfo {
+                kind: SourceType::Nexus,
+                mod_id: Some(1),
+                file_id: Some(1),
+                md5: None,
+                file_size: None,
+                url: None,
+                instructions: None,
+                update_policy: None,
+                logical_filename: None,
+                file_expression: None,
+                tag: tag.map(str::to_string),
+            },
+            choices: None,
+            patches: None,
+            instructions: None,
+            phase: 0,
+            file_overrides: Vec::new(),
+        }
+    }
+
+    fn collection_with(mods: Vec<CollectionMod>, rules: Vec<CollectionModRule>) -> Collection {
+        Collection {
+            info: CollectionInfo {
+                author: String::new(),
+                author_url: None,
+                name: "C".into(),
+                description: None,
+                install_instructions: None,
+                domain_name: "skyrimspecialedition".into(),
+                game_versions: Vec::new(),
+            },
+            mods,
+            mod_rules: rules,
+        }
+    }
+
+    /// COLL-04 wiring: `compute_collection_ranks` turns a manifest `after` rule into a
+    /// concrete per-mod rank where the deploy engine's "lower number wins" makes the author's
+    /// intended winner own a contested path. Critically, the rule must FLIP the outcome
+    /// relative to plain manifest order so the wiring (not the baseline) is what proves it.
+    #[test]
+    fn compute_ranks_applies_after_rule_to_flip_the_winner() {
+        // Manifest order: modA at index 0 (baseline 1), modB at index 1 (baseline 2).
+        // Rule: "modA loads AFTER modB" ⇒ modA gets +1 ⇒ rank 2; modB stays rank 2.
+        // Tie at rank 2 broken by mod_id in the engine — but the rule pushed modA DOWN from
+        // the baseline-1 it would otherwise have, so modB now ties/wins instead of losing.
+        let mods = vec![nexus_mod("modA", Some("a")), nexus_mod("modB", Some("b"))];
+        let rule = CollectionModRule {
+            kind: ModRuleType::After,
+            source: reference_with_tag("a"),
+            reference: reference_with_tag("b"),
+        };
+        let ranks = compute_collection_ranks(&collection_with(mods, vec![rule]));
+        // modA pushed down (after) from baseline 1 → 2; modB keeps baseline 2.
+        assert_eq!(ranks.get(&0), Some(&2), "modA (after) is pushed DOWN the ladder");
+        assert_eq!(ranks.get(&1), Some(&2), "modB keeps its manifest-order baseline");
+    }
+
+    /// `before` pulls the source UP so it wins; a mod no rule touches keeps its baseline.
+    #[test]
+    fn compute_ranks_before_pulls_up_and_untouched_keeps_baseline() {
+        // modA index 0 baseline 1, modB index 1 baseline 2, modC index 2 baseline 3.
+        // Rule: "modB loads BEFORE modA" ⇒ modB gets -1 ⇒ rank 1 (clamped, wins over modA).
+        let mods = vec![
+            nexus_mod("modA", Some("a")),
+            nexus_mod("modB", Some("b")),
+            nexus_mod("modC", Some("c")),
+        ];
+        let rule = CollectionModRule {
+            kind: ModRuleType::Before,
+            source: reference_with_tag("b"),
+            reference: reference_with_tag("a"),
+        };
+        let ranks = compute_collection_ranks(&collection_with(mods, vec![rule]));
+        assert_eq!(ranks.get(&0), Some(&1), "modA keeps baseline 1");
+        assert_eq!(ranks.get(&1), Some(&1), "modB (before) pulled UP from 2 to 1");
+        assert_eq!(ranks.get(&2), Some(&3), "modC, untouched, keeps baseline 3");
+    }
+
+    /// A rule whose endpoint matches no mod is skipped (ranks fall back to baseline only).
+    #[test]
+    fn compute_ranks_skips_rule_with_unresolved_endpoint() {
+        let mods = vec![nexus_mod("modA", Some("a"))];
+        let rule = CollectionModRule {
+            kind: ModRuleType::After,
+            source: reference_with_tag("a"),
+            reference: reference_with_tag("ghost"), // matches nothing
+        };
+        let ranks = compute_collection_ranks(&collection_with(mods, vec![rule]));
+        assert_eq!(ranks.get(&0), Some(&1), "an unresolved-endpoint rule leaves the baseline");
     }
 }

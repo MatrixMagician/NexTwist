@@ -2850,6 +2850,7 @@ dependencies = [
  "blake3",
  "nextwist-core",
  "nextwist-loadorder",
+ "nextwist-nexus",
  "nextwist-steam",
  "nextwist-store",
  "nextwist-testkit",

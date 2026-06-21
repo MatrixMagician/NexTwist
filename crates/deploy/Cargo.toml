@@ -40,3 +40,9 @@ serde.workspace = true
 testkit.workspace = true
 proptest.workspace = true
 tempfile.workspace = true
+# `nexus` (collection manifest parse + rule→rank mapping) is a TEST-ONLY dep used by
+# collection_round_trip.rs to drive the REAL adapter path (parse manifest →
+# compute_collection_ranks → persist ranks → deploy) so the round-trip proves the manifest's
+# modRules actually decide the conflict winner (BL-01 / COLL-04). No cycle: nexus does not
+# depend on deploy, and this edge is dev-only.
+nexus.workspace = true

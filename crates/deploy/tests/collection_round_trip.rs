@@ -9,6 +9,16 @@
 //! exercised here directly against the headless engine + store with the testkit blake3
 //! DIR_SENTINEL pristine harness — no Tauri, no live Premium account, no download.
 //!
+//! BL-01 REGRESSION LOCK: the deploy ranks are NOT hand-written here. They are computed by
+//! the REAL adapter helper `nexus::compute_collection_ranks` from a parsed `collection.json`
+//! manifest's `modRules`, then persisted into the store and read back the SAME way
+//! `deploy_collection` does. The manifest is authored so the `after` rule makes a mod with a
+//! HIGHER `managed_mod` id (which would LOSE the engine's mod_id tie-break under the old
+//! hardcoded `rank: 1`) instead WIN the contested path. The test therefore FAILS if the
+//! rule→rank wiring is removed (every mod falls back to one rank, the tie-break flips the
+//! winner) and PASSES only when the manifest's authored conflict order genuinely reaches the
+//! deploy engine. Hand-set ranks can no longer satisfy it.
+//!
 //! The live end-to-end (real Premium account → real Collection archive download → deploy →
 //! in-game launch → uninstall) remains a manual UAT item (the Plan checkpoint / NEXUS-01
 //! live-account gate). The reversibility CONTRACT it would visually confirm is regression-
@@ -19,6 +29,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use deploy::{purge, switch_profile};
+use nexus::Collection as NexusCollection;
 use nextwist_core::{Collection, CollectionMod, Game, ManagedMod};
 use store::Store;
 use tempfile::TempDir;
@@ -86,18 +97,56 @@ fn add_mod(store: &Store, appid: u32, name: &str, root: &std::path::Path, rank: 
         .unwrap()
 }
 
-/// COLL-04 + COLL-05 (BLOCKING-PRISTINE): a Collection deploys as a dedicated profile via
-/// `switch_profile`, the modded files land with the rule-derived ranks deciding conflicts,
-/// and uninstalling it (purge → delete_profile → remove staged trees) returns the install
-/// byte-for-byte pristine.
+/// A `collection.json` whose `modRules` make the author-intended winner DIFFER from the
+/// engine's mod_id tie-break, so a deploy driven by the REAL rule→rank mapping resolves the
+/// contested path differently than the old hardcoded `rank: 1` would have (BL-01).
+///
+/// Manifest order: `modB` is index 0, `modA` is index 1. The rule "modA loads AFTER modB"
+/// pushes modA DOWN the rank ladder (it loses conflicts to modB). Combined with adding modA's
+/// `managed_mod` FIRST below (so modA has the LOWER mod_id and would WIN the engine's
+/// equal-rank tie-break), this guarantees the rule — not the tie-break — decides the winner.
+const MANIFEST_JSON: &str = r#"{
+  "info": { "name": "Test Collection", "domainName": "skyrimspecialedition" },
+  "mods": [
+    {
+      "name": "modB",
+      "source": { "type": "nexus", "modId": 200, "fileId": 2000, "tag": "modB-tag" }
+    },
+    {
+      "name": "modA",
+      "source": { "type": "nexus", "modId": 100, "fileId": 1000, "tag": "modA-tag" }
+    }
+  ],
+  "modRules": [
+    {
+      "type": "after",
+      "source": { "tag": "modA-tag" },
+      "reference": { "tag": "modB-tag" }
+    }
+  ]
+}"#;
+
+/// COLL-04 + COLL-05 + BL-01 (BLOCKING-PRISTINE): a Collection deploys as a dedicated profile
+/// via `switch_profile`, the modded files land with the **manifest rule-derived ranks**
+/// deciding conflicts (computed by the real `nexus::compute_collection_ranks`, never
+/// hand-set), and uninstalling it (purge → delete_profile → remove staged trees) returns the
+/// install byte-for-byte pristine.
 #[test]
 fn collection_install_deploy_uninstall_round_trips_pristine() {
     let fx = Fixture::new();
     let pristine = lay_vanilla(&fx);
     let game = fx.game();
 
-    // Two collection mods. modA + modB contest Data/shared.esp (different bytes); modA's
-    // rule-derived rank wins (lower rank number = higher priority). Each has a unique file.
+    // Parse the manifest through the REAL adapter parser, then compute the deploy ranks the
+    // SAME way download_collection does — from the manifest's modRules, NOT by hand.
+    let manifest = NexusCollection::parse(MANIFEST_JSON).expect("manifest parses");
+    let ranks = nexus::compute_collection_ranks(&manifest);
+    // manifest index 0 = modB, index 1 = modA. "modA after modB" pushes modA down.
+    assert_eq!(ranks.get(&0).copied(), Some(1), "modB keeps its manifest-order rank (wins)");
+    assert_eq!(ranks.get(&1).copied(), Some(3), "modA is pushed DOWN by the `after` rule (loses)");
+
+    // Two collection mods. modA + modB contest Data/shared.esp (different bytes). Each has a
+    // unique file too. modB's manifest-derived rank (1) beats modA's (3) on the shared path.
     let mod_a_root = fx.stage_mod(
         "modA",
         &[("Data/shared.esp", b"A-SHARED"), ("Data/onlyA.esp", b"A-ONLY")],
@@ -108,10 +157,16 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
     );
 
     let store = fx.open_store();
+    // CRITICAL ordering for the regression lock: add modA FIRST so it gets the LOWER mod_id.
+    // Under the OLD hardcoded `rank: 1`, the engine's equal-rank tie-break (lowest mod_id
+    // wins) would hand modA the shared path. The manifest rule must OVERRIDE that — and does
+    // only because the ranks below come from `compute_collection_ranks`, not a literal 1.
     let m_a = add_mod(&store, game.appid, "modA", &mod_a_root, 1);
-    let m_b = add_mod(&store, game.appid, "modB", &mod_b_root, 2);
+    let m_b = add_mod(&store, game.appid, "modB", &mod_b_root, 1);
+    assert!(m_a < m_b, "modA must have the lower managed_mod id (the tie-break it would win)");
 
-    // ── Persist the Collection + its mods (V5 facade), as download_collection would. ──
+    // ── Persist the Collection + its mods (V5 facade), as download_collection would — using
+    //    the manifest-derived ranks read out of `compute_collection_ranks` per manifest index.
     let collection_id = store
         .add_collection(&Collection {
             id: 0,
@@ -122,39 +177,29 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
             profile_id: None,
         })
         .unwrap();
-    // Ranks: modA rank 1 (wins shared.esp), modB rank 2 — exactly what map_rules_to_ranks
-    // would yield for a "modB loads after modA" rule.
-    store
-        .add_collection_mod(
-            collection_id,
-            &CollectionMod {
-                mod_id: m_a,
-                nexus_mod_id: 100,
-                file_id: 1000,
-                md5: None,
-                phase: 0,
-                rank: 1,
-                choices_json: None,
-            },
-        )
-        .unwrap();
-    store
-        .add_collection_mod(
-            collection_id,
-            &CollectionMod {
-                mod_id: m_b,
-                nexus_mod_id: 200,
-                file_id: 2000,
-                md5: None,
-                phase: 0,
-                rank: 2,
-                choices_json: None,
-            },
-        )
-        .unwrap();
 
-    // ── DEPLOY (COLL-04): create the dedicated profile, set membership by stored rank,
-    //    deploy via the SAME switch_profile path (no new primitive). ──
+    // Map each manifest mod (by name) to its staged managed_mod id + its rule-derived rank.
+    let mod_id_for = |name: &str| if name == "modA" { m_a } else { m_b };
+    for (idx, m) in manifest.mods.iter().enumerate() {
+        let rank = ranks.get(&idx).copied().expect("every mod has a computed rank");
+        store
+            .add_collection_mod(
+                collection_id,
+                &CollectionMod {
+                    mod_id: mod_id_for(&m.name),
+                    nexus_mod_id: m.source.mod_id.unwrap(),
+                    file_id: m.source.file_id.unwrap(),
+                    md5: None,
+                    phase: m.phase,
+                    rank,
+                    choices_json: None,
+                },
+            )
+            .unwrap();
+    }
+
+    // ── DEPLOY (COLL-04): create the dedicated profile, set membership by the STORED
+    //    (rule-derived) rank, deploy via the SAME switch_profile path (no new primitive). ──
     let profile_id = store.create_profile(game.appid, "Collection: Test Collection").unwrap();
     let cmods = store.list_collection_mods(collection_id).unwrap();
     assert_eq!(cmods.len(), 2, "both collection mods persisted");
@@ -164,11 +209,14 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
     let report = switch_profile(&store, &game, profile_id).unwrap();
     assert_eq!(report.deployed.deployed, 3, "deploys shared + onlyA + onlyB");
 
-    // The rule-ranked winner (rank-1 modA) owns the contested path; both unique files land.
+    // The rule-ranked winner owns the contested path. modB (manifest rank 1) WINS over modA
+    // (manifest rank 3) — the OPPOSITE of the mod_id tie-break modA would win under a flat
+    // `rank: 1`. This assertion is what fails if the rule→rank wiring is removed.
     assert_eq!(
         fs::read(fx.install.join("Data/shared.esp")).unwrap(),
-        b"A-SHARED",
-        "the rank-1 collection mod (modA) wins the shared.esp conflict (Pattern 7)"
+        b"B-SHARED",
+        "the manifest `after` rule makes modB (rank 1) win shared.esp over modA (rank 3) — \
+         NOT the engine's lowest-mod_id tie-break (which would pick modA). BL-01 wiring."
     );
     assert!(fx.install.join("Data/onlyA.esp").is_file());
     assert!(fx.install.join("Data/onlyB.esp").is_file());
