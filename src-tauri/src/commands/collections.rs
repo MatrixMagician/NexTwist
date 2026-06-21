@@ -463,6 +463,14 @@ fn replay_for(staging_root: &std::path::Path, choices: &nexus::Choices) -> Resul
 /// `rank` is the rule-derived deploy rank (manifest baseline + `modRules` delta, computed by
 /// `nexus::compute_collection_ranks`) so the author-intended conflict order reaches the
 /// deploy engine (BL-01 / COLL-04).
+///
+/// The Nexus identity (`nexus_mod_id`/`file_id`) is resolved honestly rather than coerced to
+/// a sentinel `0` (WR-04): a `nexus` source MUST carry both ids — the fetchable partition in
+/// `download_collection` already pushes any nexus mod missing its ids to `report.failed`
+/// BEFORE it can reach here, so a `nexus` mod without ids is a contract breach surfaced as a
+/// clear error, never written as a fake `0/0` pin that would later masquerade as a real
+/// identity and defeat file-matching/provenance. A non-nexus source legitimately has no
+/// Nexus identity and records `0/0` — there the absence is honest, not a missing pin.
 async fn persist_collection_mod(
     state: &State<'_, Mutex<AppState>>,
     collection_id: i64,
@@ -475,10 +483,27 @@ async fn persist_collection_mod(
         .as_ref()
         .map(|c| serde_json::to_string(c).map_err(boundary_err))
         .transpose()?;
+
+    // Resolve the Nexus identity honestly (WR-04): a `nexus` source must have both ids; any
+    // other source has none (records 0/0). Never coerce a MISSING nexus pin to 0.
+    let (nexus_mod_id, file_id) = match m.source.kind {
+        SourceType::Nexus => match (m.source.mod_id, m.source.file_id) {
+            (Some(mod_id), Some(file_id)) => (mod_id, file_id),
+            _ => {
+                return Err(format!(
+                    "internal error: nexus mod '{}' reached persistence without its pinned \
+                     mod/file id",
+                    m.name
+                ))
+            }
+        },
+        _ => (0, 0),
+    };
+
     let cm = nextwist_core::CollectionMod {
         mod_id: dl.mod_id,
-        nexus_mod_id: m.source.mod_id.unwrap_or(0),
-        file_id: m.source.file_id.unwrap_or(0),
+        nexus_mod_id,
+        file_id,
         md5: m.source.md5.clone(),
         phase: m.phase,
         rank,
