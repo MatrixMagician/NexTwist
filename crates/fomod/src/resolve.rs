@@ -81,6 +81,15 @@ pub fn resolve(module: &FomodModule, selection: &Selection) -> Result<Vec<FileIn
     //    installIfUsable and the option's live type is not NotUsable.
     if let Some(steps) = &module.steps {
         for step in &steps.steps {
+            // A step with a `<visible>` dependency contributes its files ONLY when that
+            // dependency holds against the current flags/files (FOMOD spec step visibility,
+            // WR-01). An invisible step is skipped entirely — its selected/Required options
+            // must NOT reach the install plan. A step with no `<visible>` is always visible.
+            if let Some(vis) = &step.visible
+                && !eval(vis, &selection.flags, &selection.files)
+            {
+                continue;
+            }
             let Some(groups) = &step.groups else { continue };
             for group in &groups.groups {
                 let Some(plugins) = &group.plugins else {

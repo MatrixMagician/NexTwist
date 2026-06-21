@@ -229,6 +229,49 @@ fn resolve_omits_conditional_when_flag_unset() {
     assert!(!dests.contains(&PathBuf::from("patchA.esp")), "conditional absent");
 }
 
+/// WR-01: a step whose `<visible>` dependency does NOT hold is skipped entirely — its
+/// selected options' files must be ABSENT from the plan. The `flags` fixture's second step
+/// ("Hi-Res Options", file `hires/extra.dds → textures/extra.dds`) is visible only when the
+/// flag `hires=on`. Selecting its option WITHOUT that flag (the step is invisible) must
+/// install nothing for that step.
+#[test]
+fn resolve_skips_invisible_step_files() {
+    let m = parse_module_config(&fixture("flags")).unwrap();
+
+    // Select the hidden step's option but do NOT set hires=on ⇒ the step is invisible.
+    let mut sel = Selection::default();
+    sel.chosen
+        .insert(("Hi-Res Options".into(), "HiRes Extras".into(), "Extra Textures".into()));
+    let plan = resolve(&m, &sel).expect("resolve flags (invisible step)");
+    let dests: Vec<PathBuf> = plan.iter().map(|f| f.dest_rel.clone()).collect();
+    assert!(
+        !dests.contains(&PathBuf::from("textures/extra.dds")),
+        "an invisible step's selected files must NOT install: {dests:?}"
+    );
+}
+
+/// WR-01 (positive): when the `<visible>` dependency holds (flag `hires=on`), the same
+/// selected option's files DO install — visibility gates the step, it doesn't disable it.
+#[test]
+fn resolve_includes_visible_step_files() {
+    let m = parse_module_config(&fixture("flags")).unwrap();
+
+    // hires=on makes step 2 visible; selecting its option installs the hi-res file.
+    let sel = Selection {
+        chosen: [("Hi-Res Options".into(), "HiRes Extras".into(), "Extra Textures".into())]
+            .into_iter()
+            .collect(),
+        flags: flags(&[("hires", "on")]),
+        ..Default::default()
+    };
+    let plan = resolve(&m, &sel).expect("resolve flags (visible step)");
+    let dests: Vec<PathBuf> = plan.iter().map(|f| f.dest_rel.clone()).collect();
+    assert!(
+        dests.contains(&PathBuf::from("textures/extra.dds")),
+        "a visible step's selected files install: {dests:?}"
+    );
+}
+
 #[test]
 fn resolve_performs_no_filesystem_write() {
     // The dry-run safety gate: resolve must NEVER touch disk. Run it with the process cwd
