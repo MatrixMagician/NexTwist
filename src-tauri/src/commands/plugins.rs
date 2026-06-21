@@ -145,9 +145,16 @@ pub async fn set_plugin_enabled(
 /// Proton-prefix AppData location via libloot (masters-first enforced internally).
 ///
 /// `order` is the full desired plugin list (name/kind/enabled/order) in the user's chosen
-/// order; the index in the vector becomes the stored order. Persists every row to
-/// `plugin_state`, then calls `loadorder::apply_load_order`. On a write failure the
-/// libloot reason is surfaced verbatim for the UI-SPEC plugins.txt error copy.
+/// order; the index in the vector becomes the stored order. Writes `plugins.txt` FIRST,
+/// then persists every row to `plugin_state` only after the file write succeeds. On a
+/// write failure the libloot reason is surfaced verbatim for the UI-SPEC plugins.txt error
+/// copy.
+///
+/// WR-05: the file write precedes the DB persist so a libloot/IO failure leaves the DB
+/// UNTOUCHED — matching the user's "nothing was saved" mental model when the command
+/// returns an error. (Writing the DB first would record the new order while the on-disk
+/// `plugins.txt` was never written, leaving the persisted state and the prefix disagreeing
+/// after a failure.)
 #[tauri::command]
 pub async fn save_plugin_order(
     state: State<'_, Mutex<AppState>>,
@@ -157,7 +164,16 @@ pub async fn save_plugin_order(
     let game = require_game(&state, appid).await?;
     let profile_id = active_profile_id(&state, appid).await?;
 
-    // Persist each plugin's enable/order to the active profile (the index = order).
+    // 1. Write plugins.txt at the prefix AppData via libloot (masters-first; D-08). Doing
+    //    this FIRST means a failure here leaves the DB untouched (WR-05: nothing saved).
+    let folder = loadorder::appdata_folder_name(appid)
+        .ok_or_else(|| format!("game {appid} is not supported"))?;
+    let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
+    let written = loadorder::apply_load_order(appid, &game.install_dir, &appdata_local, &order)
+        .map_err(boundary_err)?;
+
+    // 2. Only AFTER the file write succeeded, persist each plugin's enable/order to the
+    //    active profile (the index = order), under one lock for a consistent snapshot.
     {
         let guard = state.lock().await;
         for (idx, p) in order.iter().enumerate() {
@@ -171,12 +187,7 @@ pub async fn save_plugin_order(
         }
     }
 
-    // Write plugins.txt at the prefix AppData via libloot (masters-first; D-08).
-    let folder = loadorder::appdata_folder_name(appid)
-        .ok_or_else(|| format!("game {appid} is not supported"))?;
-    let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
-    loadorder::apply_load_order(appid, &game.install_dir, &appdata_local, &order)
-        .map_err(boundary_err)
+    Ok(written)
 }
 
 /// Propose a LOOT-sorted order (PLUGIN-03, D-12) — returns the proposed order + critical
