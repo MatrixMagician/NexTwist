@@ -181,6 +181,22 @@ struct DownloadFailure {
     is_redeem: bool,
 }
 
+/// RAII cleanup for the untrusted partial download archive (CR-01).
+///
+/// While the temp `.nextwist-dl-*.archive` exists in the deploy-trusted staging dir, this
+/// guard ensures it is unlinked when it goes out of scope — on success (after the explicit
+/// `remove_file`, where Drop is a no-op), on any `?` early-return, on a cancel, or on a
+/// panic. This guarantees partially-written, untrusted bytes never linger in staging.
+struct TempArchive(PathBuf);
+
+impl Drop for TempArchive {
+    fn drop(&mut self) {
+        // Best-effort, synchronous unlink on any exit path. Already-removed (the success
+        // path) is fine — `remove_file` on a missing file just errors and is ignored.
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 /// What `run_download` returns on success: the result DTO plus the final byte counts so
 /// the caller can emit the terminal "done" progress event.
 struct RunOk {
@@ -232,6 +248,13 @@ async fn run_download(
             is_redeem: false,
         })?;
     let archive_path = staging_dir.join(format!(".nextwist-dl-{id}.archive"));
+    // CR-01 (BLOCKER): RAII-guard the untrusted partial archive so it is unlinked on
+    // EVERY exit from the download/extract window — a chunk/transport/IO error, an
+    // extract failure, a cancel, or a panic. A leftover `.nextwist-dl-*.archive` is
+    // partially-written, untrusted bytes inside the deploy-trusted staging dir; it must
+    // never be orphaned there. On success the explicit `remove_file` below already
+    // unlinks it (the guard's Drop is then a harmless best-effort no-op).
+    let _archive_guard = TempArchive(archive_path.clone());
 
     let id_owned = id.to_string();
     let win = window.clone();

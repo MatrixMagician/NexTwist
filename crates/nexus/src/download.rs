@@ -84,6 +84,32 @@ where
     let total = resp.content_length();
     tracing::info!(total = ?total, "starting streaming download"); // no uri logged
 
+    // CR-01: the partial file must be removed on EVERY error exit, not only on cancel.
+    // Run the create→stream→write→flush window in an inner block; on ANY `Err` (transport
+    // chunk error, write/flush I/O error, or a cancel) unlink `dest` before returning so a
+    // partially-written, untrusted archive never lingers in the deploy-trusted staging dir.
+    let result = stream_to_file(resp, dest, cancel, total, on_progress).await;
+    if result.is_err() {
+        // Best-effort cleanup of the partial; the file handle is already dropped inside
+        // `stream_to_file` before this point.
+        let _ = tokio::fs::remove_file(dest).await;
+    }
+    result
+}
+
+/// Create `dest`, stream the response body into it chunk-by-chunk, and flush. Returns the
+/// total bytes written. The caller ([`download_to`]) unlinks `dest` if this returns `Err`
+/// (CR-01) — this helper does not, so the cleanup lives in exactly one place.
+async fn stream_to_file<F>(
+    resp: reqwest::Response,
+    dest: &Path,
+    cancel: &CancelFlag,
+    total: Option<u64>,
+    on_progress: F,
+) -> Result<u64, NexusError>
+where
+    F: Fn(u64, Option<u64>),
+{
     let mut file = tokio::fs::File::create(dest)
         .await
         .map_err(|e| NexusError::io(dest, e))?;
@@ -95,9 +121,9 @@ where
     // whole-body read, which would OOM on a multi-GB pack).
     while let Some(chunk) = stream.next().await {
         if cancel.is_cancelled() {
-            // Drop the partial file; a cancelled download must not look "done".
+            // Drop the partial file handle; the caller unlinks `dest`. A cancelled
+            // download must not look "done".
             drop(file);
-            let _ = tokio::fs::remove_file(dest).await;
             return Err(NexusError::Http("download cancelled".to_string()));
         }
         let chunk = chunk.map_err(|e| NexusError::Http(e.to_string()))?;

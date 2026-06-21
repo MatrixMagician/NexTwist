@@ -266,3 +266,37 @@ async fn download_to_cancel_removes_partial_file() {
     assert!(matches!(err, NexusError::Http(_)));
     assert!(!dest.exists(), "the partial file must be removed on cancel");
 }
+
+/// CR-01: a mid-stream transport error (the server promises more bytes via Content-Length
+/// than it sends, so reqwest yields an `Err` chunk) must ALSO unlink the partial file —
+/// not just the cancel path. Before the fix, only the cancel branch cleaned up, so a
+/// truncated/aborted body orphaned a `.archive` partial in the staging dir.
+#[tokio::test]
+async fn download_to_transport_error_removes_partial_file() {
+    let mut server = mockito::Server::new_async().await;
+    // Advertise 64 KiB but send only 1 KiB: reqwest detects the short body and errors the
+    // stream after the first chunk is written, exercising the post-create error path.
+    let short_body = vec![9u8; 1024];
+    let _m = server
+        .mock("GET", "/cdn/truncated.zip")
+        .with_status(200)
+        .with_header("content-length", &(64 * 1024).to_string())
+        .with_body(short_body)
+        .create_async()
+        .await;
+
+    let dir = tempfile::tempdir().unwrap();
+    let dest = dir.path().join("truncated.zip");
+    let http = reqwest::Client::new();
+    let cancel = CancelFlag::new();
+    let uri = format!("{}/cdn/truncated.zip", server.url());
+
+    let err = download_to(&http, &uri, &dest, &cancel, |_, _| {})
+        .await
+        .expect_err("a truncated body must surface a transport error");
+    assert!(matches!(err, NexusError::Http(_)));
+    assert!(
+        !dest.exists(),
+        "CR-01: the partial file must be removed on a mid-stream transport error"
+    );
+}
