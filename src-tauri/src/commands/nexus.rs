@@ -16,6 +16,11 @@ use crate::commands::boundary_err;
 use crate::keyring;
 use crate::state::{AppState, OAUTH_REDIRECT};
 
+/// Process-monotonic nonce for `nxm://` download row ids (WR-06). Guarantees a unique id
+/// per arrival even for repeated links to the same mod+file, so two concurrent arrivals
+/// never collide on the cancel-flag key or the temp archive path.
+static NXM_DOWNLOAD_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Map a NexusMods game domain (the `nxm://` host) to a managed Steam AppID.
 ///
 /// The `nxm://` link carries the game *domain* (e.g. `skyrimspecialedition`), but the
@@ -163,8 +168,16 @@ fn route_download(app: &tauri::AppHandle, link: NxmLink) {
         return;
     };
 
-    // A fresh UI row id; the arrival toast + the new downloads row both key off it.
-    let id = format!("nxm-{}-{}", link.mod_id, link.file_id);
+    // A fresh, UNIQUE-per-arrival UI row id (WR-06). The arrival toast + the new downloads
+    // row both key off it, and `AppState.downloads` keys its cancel flag off it. A
+    // deterministic `nxm-<mod>-<file>` id let a re-fired link (a common double-click /
+    // browser re-fire) collide: the second insert overwrote the first cancel flag, so a
+    // cancel only aborted the second download while the first kept streaming — an
+    // unkillable orphan racing the SAME temp archive path. Appending a process-monotonic
+    // nonce makes the id (and thus the `.nextwist-dl-<id>.archive` temp path + the cancel
+    // key) unique per invocation, so concurrent arrivals never collide.
+    let nonce = NXM_DOWNLOAD_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let id = format!("nxm-{}-{}-{}", link.mod_id, link.file_id, nonce);
 
     // Confirm the arrival immediately (UI-SPEC §C.1) — the row then streams via events.
     let _ = app.emit("nxm://arrival", NxmArrival { id: id.clone() });
