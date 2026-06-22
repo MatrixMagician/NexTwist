@@ -110,6 +110,36 @@ reason the release builds on `ubuntu-22.04` — the glibc / WebKitGTK 4.1 compat
 
 ---
 
+## Local builds on modern distros — `NO_STRIP=true`
+
+The distributed AppImage is built in CI on **`ubuntu-22.04`** (the glibc / WebKitGTK 4.1
+floor). A **local** build on a bleeding-edge distro (e.g. Fedora 44) fails at the bundling
+step with:
+
+```
+strip: ... unknown type [0x13] section `.relr.dyn'
+strip: Unable to recognise the format of the input file ... .so
+Error failed to bundle project: `failed to run linuxdeploy`
+```
+
+Cause: `linuxdeploy` bundles its own old `binutils strip`, which cannot parse shared
+libraries built with a newer toolchain — those `.so` files use the modern `DT_RELR`
+relative-relocation format (`.relr.dyn`, ELF section type `0x13`). The CI build does not
+hit this because `ubuntu-22.04`'s older toolchain emits no `.relr.dyn`.
+
+**Fix for local builds — skip stripping:**
+
+```bash
+NO_STRIP=true cargo tauri build --bundles appimage
+```
+
+The resulting AppImage is larger (libraries are unstripped) and is intended for **local
+UAT only**. The artifact you **distribute** is the CI (`ubuntu-22.04`) build, which strips
+cleanly and yields the smaller, compatibility-floored binary. `NO_STRIP` therefore does
+**not** belong in `release.yml`.
+
+---
+
 ## Accepted v1 limitation
 
 **No code-signing / provenance** ships in v1 (threat T-05-07, accepted). The AppImage is
