@@ -1,0 +1,79 @@
+name: release
+
+# Tag-triggered AppImage build + GitHub Release upload (DIST-01) and a re-run of the
+# cargo-deny supply-chain gate so the license/ban result is reproducible from the release
+# run and citable in DIST-AUDIT.md (DIST-02). Structurally mirrors ci.yml's build prereqs
+# (apt deps + toolchain + cache + frontend build) but swaps the test/clippy steps for the
+# tauri-action bundle+upload step. The product version lives only in src-tauri/tauri.conf.json;
+# the pushed `v*` tag drives tagName (no version is duplicated here).
+
+on:
+  push:
+    tags: ["v*"]
+
+# tauri-action needs write access to create/upload the GitHub Release; the default
+# GITHUB_TOKEN is read-only (RESEARCH Pitfall 5).
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  appimage:
+    name: build appimage + release (ubuntu-22.04)
+    # 22.04 (not ubuntu-latest/24.04) for the glibc / WebKitGTK 4.1 runtime compatibility
+    # floor — building on a newer Ubuntu raises the floor and can break older user systems
+    # (RESEARCH Pitfall 3).
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri Linux build deps
+        # Same set as ci.yml plus `patchelf` for linuxdeploy RPATH fixups during bundling.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            curl wget file libssl-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build frontend (static SPA Tauri embeds)
+        run: |
+          npm --prefix frontend ci
+          npm --prefix frontend run build
+
+      - name: Build AppImage + create GitHub Release
+        # First-party Tauri-org action, pinned to the current release tag for
+        # reproducibility (RESEARCH Open Q1 / threat T-05-SC). One step bundles the
+        # AppImage and creates/uploads the Release.
+        uses: tauri-apps/tauri-action@action-v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "NexTwist ${{ github.ref_name }}"
+          projectPath: src-tauri
+          args: --bundles appimage
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      # DIST-02 evidence: re-run the supply-chain gate (same shape as ci.yml) so the
+      # license/ban/advisory result — including the non-free UnRAR ban — is reproducible
+      # from the release run. This run's log is the cited evidence in DIST-AUDIT.md.
+      - name: cargo deny check (DIST-02 audit evidence)
+        run: cargo deny check advisories bans licenses sources
