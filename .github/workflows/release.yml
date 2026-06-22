@@ -45,6 +45,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -53,6 +55,17 @@ jobs:
         run: |
           npm --prefix frontend ci
           npm --prefix frontend run build
+
+      # Pre-release validation gate (mirrors ci.yml:51-55). A `v*` tag can be pushed onto
+      # any commit — including one CI never ran, or where CI is pending/failed — so the
+      # release job re-runs the same test + clippy discipline here. `--locked` makes a stale
+      # Cargo.lock a hard failure, guaranteeing the shipped AppImage is built from the exact
+      # dependency graph these checks validated (WR-01 / DIST-02 reproducibility).
+      - name: cargo test --workspace (release gate)
+        run: cargo test --workspace --locked
+
+      - name: cargo clippy --workspace (release gate)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Build AppImage + create GitHub Release
         # First-party Tauri-org action, pinned to the current release tag for
@@ -65,7 +78,9 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "NexTwist ${{ github.ref_name }}"
           projectPath: src-tauri
-          args: --bundles appimage
+          # --locked: fail the release if Cargo.lock is stale, so the bundled binary is
+          # built from the same locked dependency graph the gate steps above validated.
+          args: --bundles appimage --locked
 
       - name: Install cargo-deny
         uses: taiki-e/install-action@v2
