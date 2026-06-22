@@ -54,7 +54,13 @@ echo
 
 echo "== 3. UnRAR / non-free RAR absence (expect NO output below — DIST-02 / T-05-04) =="
 find squashfs-root \( -iname '*unrar*' -o -iname '*libunrar*' \) -print
-grep -rIl --binary-files=text -e 'UnRAR' "$BIN" || echo "no UnRAR string in $BIN"
+# Scan ALL shipped native code, not just the main binary: if the UnRAR algorithm were
+# ever pulled in statically through a transitive dep, it could land in a bundled shared
+# object under usr/lib/*.so* rather than in the nextwist binary. Grepping both the binary
+# and the bundled libraries closes that gap (WR-03).
+grep -rIl --binary-files=text -e 'UnRAR' \
+  "$BIN" squashfs-root/usr/lib \
+  || echo "no UnRAR string in shipped native code (binary + bundled libraries)"
 echo
 
 echo "== 4. WebKitGTK absence (expect NO output — the AppImage uses the host's WebKitGTK 4.1) =="

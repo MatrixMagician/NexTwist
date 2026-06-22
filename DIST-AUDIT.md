@@ -86,12 +86,17 @@ run as the bundled-library manifest.
 
 ```bash
 find squashfs-root \( -iname '*unrar*' -o -iname '*libunrar*' \)   # expect: no output
-grep -rIl --binary-files=text -e 'UnRAR' squashfs-root/usr/bin/nextwist  # expect: no match
+# Content grep over ALL shipped native code — the main binary AND every bundled library:
+grep -rIl --binary-files=text -e 'UnRAR' \
+  squashfs-root/usr/bin/nextwist squashfs-root/usr/lib   # expect: no match
 ```
 
-**Expected:** **no UnRAR library and no `UnRAR` string** in the shipped binary. This is the
-explicit, by-name confirmation that the non-free **UnRAR** code is absent — consistent with the
-`deny.toml` ban and the design decision to shell out to a system `unrar`/`7z` for `.rar`.
+**Expected:** **no UnRAR library and no `UnRAR` string** in the shipped native code — both the
+main `nextwist` binary and the bundled `usr/lib/*.so*` libraries. Scanning the libraries (not
+just the binary) catches the case where the UnRAR algorithm is pulled in statically through a
+transitive dependency that lands in a shared object. This is the explicit, by-name confirmation
+that the non-free **UnRAR** code is absent — consistent with the `deny.toml` ban and the design
+decision to shell out to a system `unrar`/`7z` for `.rar`.
 
 ### 2.4 WebKitGTK absence — uses the host (runtime requirement)
 
