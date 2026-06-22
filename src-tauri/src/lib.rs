@@ -24,6 +24,27 @@ fn resolve_data_dir(app: &tauri::App) -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from(".nextwist"))
 }
 
+/// Report the result of the `nxm://` handler self-test (DIST-01 "self-test passes").
+///
+/// Strictly non-fatal (locked warn-and-continue decision, T-05-02): it consumes the
+/// `Result` the deep-link plugin's `is_registered("nxm")` produces and logs PASS/WARN on
+/// every arm, returning `()` regardless. It NEVER `?`-propagates, `unwrap`s, or `expect`s,
+/// so a minimal distro lacking `xdg-mime` still lets the app open. Extracted from the
+/// `setup` call site purely so it can be exercised headlessly (`tests/nxm_self_test.rs`)
+/// without a live OS desktop session. Generic over the error so the test needs no
+/// (non-constructible) plugin `Error`; the call site passes the plugin's own `Result<bool>`.
+pub fn nxm_self_test<E: std::fmt::Display>(result: Result<bool, E>) {
+    // Calls the plugin's own is_registered() upstream — do NOT hand-roll an xdg-mime query
+    // (the plugin owns the desktop-file naming; reimplementing risks a filename mismatch).
+    match result {
+        Ok(true) => tracing::info!("nxm:// handler self-test: PASS"),
+        Ok(false) => {
+            tracing::warn!("nxm:// handler self-test: NexTwist is not the default handler")
+        }
+        Err(e) => tracing::warn!(error = %e, "nxm:// handler self-test: could not query xdg-mime"),
+    }
+}
+
 /// Run `recover_on_launch` for every managed game so any interrupted prior operation is
 /// replayed to a consistent state BEFORE the window is shown (DEPLOY-06 startup half).
 ///
@@ -79,14 +100,20 @@ pub fn run() {
 
             // Register the `nxm://` scheme + capture handler (NXM-01). On Linux this needs
             // `xdg-mime` + `update-desktop-database` on PATH for dev/installed-runtime
-            // registration; the AppImage `.desktop` MIME registration is a Phase-5 concern
-            // (RESEARCH Pitfall 4). Failures here are non-fatal — the app still opens.
+            // registration; in a shipped AppImage the plugin's `register_all()` reads
+            // `$APPIMAGE` for a durable absolute `Exec=` path. Failures here are non-fatal —
+            // the app still opens. The Phase-5 self-test below surfaces a WARN when NexTwist
+            // is not the registered default (T-05-01), making a stale/hijacked handler observable.
             #[cfg(any(windows, target_os = "linux"))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 if let Err(e) = app.deep_link().register_all() {
                     tracing::warn!(error = %e, "nxm:// deep-link registration failed (xdg-mime/update-desktop-database missing?)");
                 }
+                // Phase-5 self-test (DIST-01 "self-test passes"). Calls the plugin's own
+                // is_registered() and reports PASS/WARN on every arm — strictly non-fatal so
+                // a missing xdg-mime never aborts startup (locked warn-and-continue, T-05-02).
+                nxm_self_test(app.deep_link().is_registered("nxm"));
                 // Route every incoming `nxm://` URL through the thin shell router. ALL parsing
                 // is in the headless `nexus::NxmLink::parse`; this closure only forwards. The
                 // url is NEVER logged here (it may carry a key/expires/code — V7).
