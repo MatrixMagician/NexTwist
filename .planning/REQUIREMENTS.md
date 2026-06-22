@@ -75,7 +75,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Distribution
 
 - [x] **DIST-01**: NexTwist is packaged and runnable as a Linux AppImage
-- [ ] **DIST-02**: The distributed build passes a license-compliance audit (no non-free bundled code, e.g. UnRAR)
+- [x] **DIST-02**: The distributed build passes a license-compliance audit (no non-free bundled code, e.g. UnRAR)
 
 ## v2 Requirements
 
@@ -157,7 +157,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COLL-04 | Phase 4 | Complete |
 | COLL-05 | Phase 4 | Complete |
 | DIST-01 | Phase 5 | Complete |
-| DIST-02 | Phase 5 | Pending |
+| DIST-02 | Phase 5 | Complete |
 
 **Coverage:**
 

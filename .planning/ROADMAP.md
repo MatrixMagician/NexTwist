@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Multi-Mod Management** - Many mods with conflict resolution, load order, plugin ordering, and per-game profiles (completed 2026-06-21)
 - [x] **Phase 3: NexusMods Login & Download** - OAuth login, secure tokens, in-app + nxm:// one-click downloads into staging (completed 2026-06-21)
 - [x] **Phase 4: Guided Installers & Collections** - FOMOD wizard installs and end-to-end NexusMods Collection install/deploy/uninstall (completed 2026-06-21)
-- [ ] **Phase 5: AppImage Distribution** - License-clean, single-file Linux AppImage with registered nxm:// handler
+- [x] **Phase 5: AppImage Distribution** - License-clean, single-file Linux AppImage with registered nxm:// handler (completed 2026-06-22)
 
 ## Phase Details
 
@@ -148,7 +148,7 @@ Plans:
   1. User can run NexTwist as a packaged single-file Linux AppImage, with the nxm:// scheme handler registered to the AppImage on first run (stable Exec path, self-test passes)
   2. The distributed build passes a license-compliance audit (cargo-deny / bundled-binary review) confirming no non-free code (e.g. UnRAR) is shipped
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 **UI hint**: no
 
 Plans:
@@ -158,7 +158,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 05-02-PLAN.md — Release + audit slice (DIST-01/DIST-02): tag-triggered `release.yml` (AppImage build on ubuntu-22.04 via tauri-action + GitHub Release upload + reproducible `cargo deny` evidence) + `scripts/dist-audit.sh` bundled-binary enumeration + `DIST-AUDIT.md` license/UnRAR-absence audit record
+- [x] 05-02-PLAN.md — Release + audit slice (DIST-01/DIST-02): tag-triggered `release.yml` (AppImage build on ubuntu-22.04 via tauri-action + GitHub Release upload + reproducible `cargo deny` evidence) + `scripts/dist-audit.sh` bundled-binary enumeration + `DIST-AUDIT.md` license/UnRAR-absence audit record
 
 ## Progress
 
@@ -171,4 +171,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Multi-Mod Management | 5/5 | Complete   | 2026-06-21 |
 | 3. NexusMods Login & Download | 3/3 | Complete    | 2026-06-21 |
 | 4. Guided Installers & Collections | 4/4 | Complete   | 2026-06-21 |
-| 5. AppImage Distribution | 1/2 | In Progress|  |
+| 5. AppImage Distribution | 2/2 | Complete   | 2026-06-22 |
