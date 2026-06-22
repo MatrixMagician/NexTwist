@@ -33,7 +33,7 @@
   "bundle": {
     "active": true,
     "targets": ["appimage"],
-    "icon": ["icons/icon.png"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png"],
     "category": "Utility",
     "shortDescription": "Safe, reversible Linux mod manager",
     "longDescription": "NexTwist installs and uninstalls mods safely on Linux: non-destructive, fully reversible, conflict-aware deployment for Proton/Wine games."
