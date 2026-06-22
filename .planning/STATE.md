@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 04
-current_phase_name: guided-installers-collections
-status: verifying
+current_phase: 05
+current_phase_name: AppImage Distribution
+status: executing
 stopped_at: Phase 2 (Multi-Mod Management) BUILT + auto-verified (21/21 must-haves, code review 2 BLOCKERs fixed, 142 tests green); autonomous run STOPPED at user request. Phase 2 awaiting 4 manual/in-game UAT items (02-UAT.md).
-last_updated: "2026-06-21T18:28:45.875Z"
-last_activity: 2026-06-21
-last_activity_desc: Phase 04 execution started
+last_updated: "2026-06-22T13:26:21.626Z"
+last_activity: 2026-06-22
+last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 19
-  completed_plans: 19
+  total_plans: 21
+  completed_plans: 20
   percent: 80
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-20)
 
 **Core value:** Mods install and uninstall safely — non-destructive, fully reversible, conflict-aware deployment into Proton/Wine games on Linux.
-**Current focus:** Phase 04 — guided-installers-collections
+**Current focus:** Phase 05 — AppImage Distribution
 
 ## Current Position
 
-Phase: 04 (guided-installers-collections) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-06-21 — Phase 04 execution started
+Phase: 05 (AppImage Distribution) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-06-22 — Phase 05 execution started
 
 Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pending final manual UAT sign-off)
 
@@ -74,6 +74,7 @@ Progress: [██░░░░░░░░] 20% (1 of 5 phases built; Phase 1 pen
 | Phase 04 P04-03 | 7 | 2 tasks | 12 files |
 | Phase 04 P04-02 | 35m | 3 tasks | 6 files |
 | Phase 04 P04 | 16 | 3 tasks | 13 files |
+| Phase 05 P01 | 15 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,8 @@ Recent decisions affecting current work:
 - [Phase ?]: Collections add ZERO new engine primitives: deploy=switch_profile, uninstall=purge->delete_profile, bulk download reuses run_download_to_window (04-04)
 - [Phase ?]: replay_choices returns NexusError::Replay on a stale FOMOD choice (mod changed since pin) — never a silent mis-install (04-04)
 - [Phase ?]: Premium gate enforced before any Collection download via UserInfo.is_premium; no nxm:// free-user fallback; live Premium round-trip deferred to human UAT (04-04)
+- [Phase ?]: nxm_self_test is generic over the error type so the headless test drives all three Result arms without the plugin's non-public Error or a live OS session
+- [Phase ?]: Phase 05 icons generated via ImageMagick (cargo tauri unavailable on host); no bundle.linux.appimage object (YAGNI); version 0.1.0 unchanged as the v0.1.0 tag source of truth
 
 ### Pending Todos
 
@@ -147,7 +150,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-21T18:28:21.016Z
+Last session: 2026-06-22T13:25:37.154Z
 Stopped at: Phase 2 (Multi-Mod Management) BUILT + auto-verified (21/21 must-haves, code review 2 BLOCKERs fixed, 142 tests green); autonomous run STOPPED at user request. Phase 2 awaiting 4 manual/in-game UAT items (02-UAT.md).
 Resume file: .planning/phases/02-multi-mod-management/02-UAT.md
 Resume command: `/gsd-autonomous --from 2` to continue the milestone (UAT-1/UAT-2 done + GAP-01 fixed). Optionally finish UAT-3/UAT-4 first.
