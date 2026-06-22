@@ -1,3 +1,14 @@
+---
+phase: 05-appimage-distribution
+status: secured
+asvs_level: 1
+block_on: high
+threats_total: 8
+threats_closed: 8
+threats_open: 0
+audited: 2026-06-22
+---
+
 # Security Audit — Phase 05: AppImage Distribution
 
 **Date:** 2026-06-22
