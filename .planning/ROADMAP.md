@@ -148,11 +148,17 @@ Plans:
   1. User can run NexTwist as a packaged single-file Linux AppImage, with the nxm:// scheme handler registered to the AppImage on first run (stable Exec path, self-test passes)
   2. The distributed build passes a license-compliance audit (cargo-deny / bundled-binary review) confirming no non-free code (e.g. UnRAR) is shipped
 
-**Plans**: TBD
+**Plans**: 2 plans
+**UI hint**: no
 
 Plans:
+**Wave 1**
 
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md — Buildable + self-testing slice (DIST-01): regenerate >=128x128 icon set (linuxdeploy blocker) + wire the plugin's `is_registered("nxm")` self-test into the startup hook (non-fatal) + point `bundle.icon` at the larger icon + headless non-fatal self-test test
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 05-02-PLAN.md — Release + audit slice (DIST-01/DIST-02): tag-triggered `release.yml` (AppImage build on ubuntu-22.04 via tauri-action + GitHub Release upload + reproducible `cargo deny` evidence) + `scripts/dist-audit.sh` bundled-binary enumeration + `DIST-AUDIT.md` license/UnRAR-absence audit record
 
 ## Progress
 
@@ -165,4 +171,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Multi-Mod Management | 5/5 | Complete   | 2026-06-21 |
 | 3. NexusMods Login & Download | 3/3 | Complete    | 2026-06-21 |
 | 4. Guided Installers & Collections | 4/4 | Complete   | 2026-06-21 |
-| 5. AppImage Distribution | 0/TBD | Not started | - |
+| 5. AppImage Distribution | 0/2 | Not started | - |
