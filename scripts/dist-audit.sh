@@ -30,6 +30,15 @@ fi
 APP="$(realpath "$APP")"
 BIN="squashfs-root/usr/bin/nextwist"
 
+# Extract into a dedicated, freshly-created temp dir and operate from there. This
+# guarantees the audit only ever reads THIS artifact: a stale `squashfs-root/` from a
+# prior run or a different AppImage cannot be merged into (and silently corrupt the
+# evidence of) this one. The trap removes the whole tree on exit so the script never
+# litters the caller's CWD with a multi-hundred-MB extraction (WR-02).
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+cd "$WORK"
+
 echo "== Extracting $APP =="
 # Some CI/container runners lack FUSE; --appimage-extract never needs it.
 "$APP" --appimage-extract >/dev/null
