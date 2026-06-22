@@ -12,7 +12,7 @@ Mods must install and uninstall **safely**: deployment is non-destructive (the b
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ App is distributable as a Linux AppImage — Phase 5 (license-clean, nxm:// handler auto-registered; verified on hardware 2026-06-22)
 
 ### Active
 
@@ -26,7 +26,6 @@ Mods must install and uninstall **safely**: deployment is non-destructive (the b
 - [ ] User can control mod load order / priority
 - [ ] App detects Steam (Proton) game installations on Linux
 - [ ] Bethesda Creation Engine games (e.g. Skyrim SE, Fallout 4) are supported first
-- [ ] App is distributable as a Linux AppImage
 
 ### Out of Scope
 
@@ -80,4 +79,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-20 after initialization*
+*Last updated: 2026-06-22 after Phase 5 (AppImage Distribution) — milestone v1.0 phases all complete*
