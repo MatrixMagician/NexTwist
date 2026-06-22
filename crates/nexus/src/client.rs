@@ -181,6 +181,20 @@ impl NexusClient {
             return Err(NexusError::RateLimited(RateLimiter::retry_after_secs(&headers)));
         }
         if !status.is_success() {
+            // Diagnostic (secret-free per V7 — NEVER log key/expires/uri): record the real
+            // HTTP status of a failed download-link request. The UI replaces this with the
+            // friendly "link expired" message (UI-SPEC §C.3), which hides the actual code
+            // and makes field diagnosis of a redemption 4xx (401/403 auth vs 404/410 gone)
+            // impossible from logs alone. `had_key` distinguishes a free-user redemption
+            // from a premium request.
+            tracing::warn!(
+                game_domain,
+                mod_id,
+                file_id,
+                status = status.as_u16(),
+                had_key = key.is_some(),
+                "download_link request failed"
+            );
             // A 4xx on a keyed (free-user) request means the link could not be redeemed
             // (expired/invalid key+expires). Surface that distinctly so the UI shows
             // "link expired", not a generic download failure.
