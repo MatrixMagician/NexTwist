@@ -1,13 +1,15 @@
 ---
 phase: 02-multi-mod-management
 verified: 2026-06-21T00:00:00Z
-status: human_needed
+status: passed
+human_verified: 2026-06-23  # was stale at human_needed; 02-UAT.md is complete with all 4 tests passed
 score: 21/21 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
 mode: mvp
 security: 02-SECURITY.md (18/18 threats closed, 2026-06-23)
-wr_failure_paths_automated: "WR-02 and WR-05 are now automated (dce7238 + profile_switch.rs strengthening 2026-06-23): failed_switch_after_purge_clears_stale_active_flag (no stale-active, journal-recoverable) + save_plugin_order_inner_leaves_db_untouched_on_write_failure (no partial DB save). Both PASS — no bug. The remaining human_verification items below are the in-game plugin-load-order launch + AppData-folder-name match, which require real Steam Proton hardware (/gsd-verify-work 2)."
+human_verification_outcome: "ALL 4 human_verification items resolved (02-UAT.md status=complete, 4/4 passed). (1) In-game plugin load order: PASSED on real Fallout 4 2026-06-21 — Save writes valid master-first plugins.txt, live 'load order interaction failed' (RC1) fixed, LOOT-sort panic fixed (debug session loadorder-active-write). (2) AppData folder name: PASSED — appdata_folder_name(377160)->'Fallout4' matches live prefix on disk. (3) WR-02 + (4) WR-05: automated, PASSED. Caveat: a full VISIBLE mod-content in-game load was not exercised on 2026-06-21 because the test mod was double-nested (install-archive-root-detection bug) — that bug is now FIXED (commit 2fa9821), so a visible-content re-test is possible but not required (plugin-order application + path correctness are already verified)."
+wr_failure_paths_automated: "WR-02 and WR-05 are automated (dce7238 + profile_switch.rs strengthening 2026-06-23): failed_switch_after_purge_clears_stale_active_flag + save_plugin_order_inner_leaves_db_untouched_on_write_failure. Both PASS — no bug."
 re_verification: # none — initial verification
 human_verification:
   - test: "Launch Skyrim SE (or Fallout 4) via Steam Proton AFTER saving a plugin order in NexTwist, and confirm the modded plugins actually load in-game (correct masters-first order, enabled set applied)."
