@@ -67,6 +67,20 @@ jobs:
       - name: cargo clippy --workspace (release gate)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
+      - name: Extract changelog for the release body
+        id: changelog
+        # The GitHub Release body is the top-most numbered "## [x.y.z]" section of
+        # CHANGELOG.md (an [Unreleased] heading, if present, is skipped — version
+        # sections start with a digit). Emitted as a multi-line step output.
+        run: |
+          notes="$(awk '/^## \[[0-9]/{n++} n==1 && /^\[[^]]+\]: /{exit} n==2{exit} n==1{print}' CHANGELOG.md)"
+          if [ -z "$notes" ]; then notes="See CHANGELOG.md for release notes."; fi
+          {
+            echo 'notes<<CHANGELOG_EOF'
+            printf '%s\n' "$notes"
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build AppImage + create GitHub Release
         # First-party Tauri-org action, pinned to the current release tag for
         # reproducibility (RESEARCH Open Q1 / threat T-05-SC). One step bundles the
@@ -77,10 +91,14 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "NexTwist ${{ github.ref_name }}"
+          # Changelog (latest CHANGELOG.md section) shown as the Release body.
+          releaseBody: ${{ steps.changelog.outputs.notes }}
           projectPath: src-tauri
-          # --locked: fail the release if Cargo.lock is stale, so the bundled binary is
-          # built from the same locked dependency graph the gate steps above validated.
-          args: --bundles appimage --locked
+          # `-- --locked`: everything after `--` is forwarded by `tauri build` to the
+          # underlying `cargo build`. `tauri build` itself rejects a bare `--locked`
+          # (that was the v1.0 release failure); cargo consumes it here so a stale
+          # Cargo.lock fails the release and the bundled binary matches the gates above.
+          args: --bundles appimage -- --locked
 
       - name: Install cargo-deny
         uses: taiki-e/install-action@v2
