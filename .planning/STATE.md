@@ -70,6 +70,12 @@ None blocking. Forward-looking for next milestone:
 - NexusMods API remains in flux (v1 REST → GraphQL v2); the Vortex-only Collection-download restriction shapes any v2 Collection work.
 - Live OAuth2 round-trip (NEXUS-01) still gated on registering a public OAuth `client_id` under the Nexus Acceptable Use Policy (API-key path is the works-today login).
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260623-m42 | Fix release.yml AppImage build (--locked), bump version to 1.0.0, add changelog to GitHub Release | 2026-06-23 | fce5c6f | [260623-m42-fix-release-yml-appimage-build-locked-fl](./quick/260623-m42-fix-release-yml-appimage-build-locked-fl/) |
+
 ## Operator Next Steps
 
 - Start the next milestone with `/gsd-new-milestone` (it will define a fresh REQUIREMENTS.md).
