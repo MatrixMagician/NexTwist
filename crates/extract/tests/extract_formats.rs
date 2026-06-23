@@ -20,14 +20,7 @@ const FIXTURE: &[(&str, &[u8])] = &[
 ];
 
 fn build_zip(path: &Path) {
-    let f = fs::File::create(path).unwrap();
-    let mut z = ZipWriter::new(f);
-    let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-    for (name, bytes) in FIXTURE {
-        z.start_file(*name, opts).unwrap();
-        z.write_all(bytes).unwrap();
-    }
-    z.finish().unwrap();
+    build_zip_from(path, FIXTURE);
 }
 
 fn build_7z(path: &Path) {
@@ -38,6 +31,27 @@ fn build_7z(path: &Path) {
             .unwrap();
     }
     w.finish().unwrap();
+}
+
+/// A wrapper-folder layout: the mod's game content (`Wrapper/Data/Plugin.esp`) plus
+/// non-game wrapper junk (`Wrapper/Info.txt`, `Wrapper/Screenshot/shot.png`). The
+/// regression target: stage `Data/Plugin.esp` only, dropping the junk so it never leaks
+/// into the game `Data/` at deploy time.
+const WRAPPER_FIXTURE: &[(&str, &[u8])] = &[
+    ("Super Cheat Legendary Weapon Fountain/Data/Plugin.esp", b"plugin-bytes"),
+    ("Super Cheat Legendary Weapon Fountain/Info.txt", b"author notes"),
+    ("Super Cheat Legendary Weapon Fountain/Screenshot/shot.png", b"png-bytes"),
+];
+
+fn build_zip_from(path: &Path, entries: &[(&str, &[u8])]) {
+    let f = fs::File::create(path).unwrap();
+    let mut z = ZipWriter::new(f);
+    let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    for (name, bytes) in entries {
+        z.start_file(*name, opts).unwrap();
+        z.write_all(bytes).unwrap();
+    }
+    z.finish().unwrap();
 }
 
 /// True if any system rar tool is available (matches rar.rs detection order).
@@ -90,6 +104,49 @@ fn sevenz_extracts_readonly_to_staging() {
     let staging = work.path().join("staging-7z");
     let staged = install_archive(&archive, &staging).expect("7z should install");
     assert_staged_correctly(&staged, &staging);
+}
+
+#[test]
+fn wrapper_folder_stages_data_root_and_excludes_non_game_files() {
+    // Regression for install-archive-root-detection: a wrapper-folder archive
+    // (`Wrapper/Data/Plugin.esp` + non-game `Wrapper/Info.txt` + `Wrapper/Screenshot/`)
+    // must stage so the plugin lands at `Data/Plugin.esp` (NOT `Wrapper/Data/Plugin.esp`,
+    // and NOT double-nested) AND the non-game wrapper junk is EXCLUDED — so it never leaks
+    // into the game `Data/` directory when deploy re-roots non-`Data/`-prefixed relpaths.
+    let work = TempDir::new().unwrap();
+    let archive = work.path().join("wrapper-mod.zip");
+    build_zip_from(&archive, WRAPPER_FIXTURE);
+
+    let staging = work.path().join("staging-wrapper");
+    let staged = install_archive(&archive, &staging).expect("wrapper mod should install");
+
+    // The plugin is staged Data/-rooted (one cosmetic level stripped, no double-nesting).
+    let plugin = staging.join("Data/Plugin.esp");
+    assert!(plugin.is_file(), "plugin must be staged at Data/Plugin.esp");
+    assert_eq!(&fs::read(&plugin).unwrap(), b"plugin-bytes");
+
+    // Non-game wrapper siblings are EXCLUDED from staging entirely.
+    assert!(
+        !staging.join("Info.txt").exists(),
+        "non-game Info.txt must be excluded from staging"
+    );
+    assert!(
+        !staging.join("Screenshot").exists(),
+        "non-game Screenshot/ must be excluded from staging"
+    );
+
+    // The manifest reflects exactly one staged file: Data/Plugin.esp.
+    assert_eq!(
+        staged.files,
+        vec![Path::new("Data/Plugin.esp").to_path_buf()],
+        "only the Data/-rooted game file should be staged"
+    );
+
+    // And it is read-only like every staged file (staging-integrity invariant).
+    assert!(
+        fs::metadata(&plugin).unwrap().permissions().readonly(),
+        "staged plugin must be read-only"
+    );
 }
 
 #[test]

@@ -66,10 +66,10 @@ pub fn install_archive(archive: &Path, staging_root: &Path) -> Result<StagedMod,
     // between extract-validate and the move — the validated extract→validate→move→
     // read-only ordering is preserved. (Carried Phase-2 gap; acute for FOMOD-02 because
     // `<file>/<folder>` source resolution depends on the detected archive root.)
-    let move_source = detect_archive_root(temp_root)?;
+    let plan = detect_archive_root(temp_root)?;
 
-    // Move the (possibly unwrapped) tree into the staging root.
-    move_into_staging(&move_source, staging_root)?;
+    // Move the (possibly unwrapped, possibly filtered) tree into the staging root.
+    move_into_staging(&plan, staging_root)?;
     // Consume the TempDir guard without deleting (contents were moved out).
     let _ = temp.keep();
 
@@ -115,9 +115,25 @@ fn make_temp_near(staging_root: &Path) -> Result<TempDir, ExtractError> {
 /// game root alongside `Data`.
 const RECOGNIZED_ROOT_ITEMS: &[&str] = &["data", "skse", "skse64", "f4se", "obse", "nvse", "mwse"];
 
+/// The move plan produced by [`detect_archive_root`]: which source tree, and (when a
+/// cosmetic wrapper was unwrapped) which of its children are game content worth staging.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum MoveSource {
+    /// No wrapper detected (already `Data/`-rooted, a loose-file mod, or a multi-folder
+    /// mod): stage the validated tree at `root` VERBATIM — every entry is kept. This is the
+    /// conservative path; a legitimate loose-file mod whose archive root already IS the
+    /// `Data/` contents must not have any file dropped.
+    Whole { root: PathBuf },
+    /// A single cosmetic wrapper directory was detected. Stage ONLY its recognized-root
+    /// children (`Data/`, `SKSE/`, …) and drop non-game siblings (`Info.txt`,
+    /// `Screenshot/`, readmes, `fomod/` config dir, …) which would otherwise leak into the
+    /// game `Data/` directory at deploy time.
+    WrapperChildren { wrapper: PathBuf, children: Vec<PathBuf> },
+}
+
 /// Detect whether the validated `temp_root` is wrapped in a single cosmetic top-level
-/// directory and, if so, return that subdirectory as the real move source. Otherwise
-/// return `temp_root` unchanged.
+/// directory and, if so, plan to stage only that directory's GAME content. Otherwise
+/// plan to stage the whole tree unchanged.
 ///
 /// Heuristic (RESEARCH Pitfall 1): the tree is "wrapped" iff its top level is EXACTLY one
 /// directory (no sibling files or dirs) AND that directory directly contains a recognizable
@@ -126,7 +142,13 @@ const RECOGNIZED_ROOT_ITEMS: &[&str] = &["data", "skse", "skse64", "f4se", "obse
 /// tree already rooted at `Data/` is never flattened. Detection is applied at most once
 /// (a single wrapper level), so `Outer/Inner/Data/...` only unwraps `Outer` when `Outer`
 /// itself contains the recognizable root — it does not recursively strip arbitrary depth.
-pub(crate) fn detect_archive_root(temp_root: &Path) -> Result<PathBuf, ExtractError> {
+///
+/// When a wrapper IS unwrapped, only its recognized-root children are staged (Vortex/MO2
+/// "fixup" behavior): the wrapper's structure has told us the game layout, so non-game
+/// siblings are documentation/junk and are excluded rather than copied into the game
+/// `Data/`. The no-wrapper path stays verbatim — it has no such signal and a loose-file
+/// mod's files legitimately belong directly in `Data/`.
+pub(crate) fn detect_archive_root(temp_root: &Path) -> Result<MoveSource, ExtractError> {
     let mut entries = Vec::new();
     for entry in std::fs::read_dir(temp_root).map_err(|e| ExtractError::io(temp_root, e))? {
         let entry = entry.map_err(|e| ExtractError::io(temp_root, e))?;
@@ -135,28 +157,37 @@ pub(crate) fn detect_archive_root(temp_root: &Path) -> Result<PathBuf, ExtractEr
         entries.push((path, ft.is_dir()));
     }
 
+    let whole = || MoveSource::Whole { root: temp_root.to_path_buf() };
+
     // Exactly one top-level entry, and it must be a directory.
     let single_dir = match entries.as_slice() {
         [(path, true)] => path.clone(),
-        _ => return Ok(temp_root.to_path_buf()),
+        _ => return Ok(whole()),
     };
 
     // The top level is already a recognized root (e.g. the single dir IS `Data/`): do NOT
     // flatten — that is a legitimately Data-rooted tree, not a wrapper.
     if is_recognized_root_name(&single_dir) {
-        return Ok(temp_root.to_path_buf());
+        return Ok(whole());
     }
 
-    // The single wrapper dir must itself contain a recognizable game root to be unwrapped.
-    if wrapper_contains_recognized_root(&single_dir)? {
-        tracing::debug!(
-            wrapper = %single_dir.display(),
-            "detected cosmetic wrapper folder; staging from its contents",
-        );
-        return Ok(single_dir);
+    // The single wrapper dir must itself contain at least one recognizable game root to be
+    // unwrapped. Collect EVERY recognized-root child as the game content to stage; any other
+    // child (Info.txt, Screenshot/, readmes, fomod/, …) is a non-game sibling we exclude.
+    let children = recognized_root_children(&single_dir)?;
+    if children.is_empty() {
+        return Ok(whole());
     }
 
-    Ok(temp_root.to_path_buf())
+    tracing::debug!(
+        wrapper = %single_dir.display(),
+        kept = children.len(),
+        "detected cosmetic wrapper folder; staging only its recognized-root children",
+    );
+    Ok(MoveSource::WrapperChildren {
+        wrapper: single_dir,
+        children,
+    })
 }
 
 /// Whether `path`'s file name is a recognized game-root token (case-insensitive).
@@ -171,38 +202,94 @@ fn is_recognized_root_name(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Whether `dir` directly contains a recognizable game-root child (case-insensitive).
-fn wrapper_contains_recognized_root(dir: &Path) -> Result<bool, ExtractError> {
+/// Collect `dir`'s direct children whose name is a recognized game-root token
+/// (case-insensitive). These are the entries that constitute the mod's game content; all
+/// other siblings are treated as non-game documentation/config and excluded. Returns paths
+/// in sorted order so staging is deterministic regardless of `read_dir` order.
+fn recognized_root_children(dir: &Path) -> Result<Vec<PathBuf>, ExtractError> {
+    let mut kept = Vec::new();
     for entry in std::fs::read_dir(dir).map_err(|e| ExtractError::io(dir, e))? {
         let entry = entry.map_err(|e| ExtractError::io(dir, e))?;
-        if is_recognized_root_name(&entry.path()) {
-            return Ok(true);
+        let path = entry.path();
+        if is_recognized_root_name(&path) {
+            kept.push(path);
         }
     }
-    Ok(false)
+    kept.sort();
+    Ok(kept)
 }
 
-/// Move the validated `temp_root` tree into `staging_root`.
+/// Move the planned source into `staging_root`.
 ///
-/// Tries a single atomic rename first (fast, same-fs). If that fails — typically
-/// because the temp dir and staging root are on different filesystems, or staging
-/// already exists — it falls back to a recursive per-file move that preserves the
-/// validated layout.
-fn move_into_staging(temp_root: &Path, staging_root: &Path) -> Result<(), ExtractError> {
+/// For [`MoveSource::Whole`] this moves the entire validated tree; for
+/// [`MoveSource::WrapperChildren`] it moves only the selected recognized-root children,
+/// dropping the wrapper's non-game siblings. Either way it tries an atomic rename first
+/// (fast, same-fs) and falls back to a recursive per-file move (cross-device, or when the
+/// staging root already exists), preserving the validated layout.
+fn move_into_staging(plan: &MoveSource, staging_root: &Path) -> Result<(), ExtractError> {
     if let Some(parent) = staging_root.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ExtractError::io(parent, e))?;
     }
 
+    match plan {
+        MoveSource::Whole { root } => move_dir_contents(root, staging_root),
+        MoveSource::WrapperChildren { children, .. } => {
+            // Stage only the recognized-root children; the wrapper itself and its non-game
+            // siblings are left behind in the temp dir (cleaned up by the TempDir guard or
+            // simply discarded). Create the staging root explicitly since we move into it
+            // child-by-child rather than renaming a whole directory onto it.
+            std::fs::create_dir_all(staging_root)
+                .map_err(|e| ExtractError::io(staging_root, e))?;
+            for child in children {
+                let dst = staging_root.join(
+                    child
+                        .file_name()
+                        .ok_or_else(|| ExtractError::io(child, bad_name_io()))?,
+                );
+                move_path(child, &dst)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Move the CONTENTS of `from` into `to`: atomic rename of the whole directory when `to`
+/// does not yet exist, else a recursive per-file move.
+fn move_dir_contents(from: &Path, to: &Path) -> Result<(), ExtractError> {
     // Fast path: atomic rename when the staging root does not yet exist.
-    if !staging_root.exists() {
-        match std::fs::rename(temp_root, staging_root) {
+    if !to.exists() {
+        match std::fs::rename(from, to) {
             Ok(()) => return Ok(()),
             Err(_) => { /* fall through to recursive move (cross-device etc.) */ }
         }
     }
 
-    std::fs::create_dir_all(staging_root).map_err(|e| ExtractError::io(staging_root, e))?;
-    recursive_move(temp_root, staging_root)
+    std::fs::create_dir_all(to).map_err(|e| ExtractError::io(to, e))?;
+    recursive_move(from, to)
+}
+
+/// Move a single path (file or directory) from `src` to `dst`, falling back to a recursive
+/// move when a plain rename is not possible (cross-device, or `dst` already exists).
+fn move_path(src: &Path, dst: &Path) -> Result<(), ExtractError> {
+    if std::fs::rename(src, dst).is_ok() {
+        return Ok(());
+    }
+    if src.is_dir() {
+        std::fs::create_dir_all(dst).map_err(|e| ExtractError::io(dst, e))?;
+        recursive_move(src, dst)
+    } else {
+        std::fs::copy(src, dst).map_err(|e| ExtractError::io(dst, e))?;
+        std::fs::remove_file(src).map_err(|e| ExtractError::io(src, e))
+    }
+}
+
+/// An `InvalidInput` I/O error for a path with no final component (should be unreachable
+/// for a `read_dir` child, but handled rather than `unwrap`ped).
+fn bad_name_io() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        "directory child has no file name",
+    )
 }
 
 /// Recursively move the contents of `from` into `to`, creating directories and
@@ -228,9 +315,9 @@ fn recursive_move(from: &Path, to: &Path) -> Result<(), ExtractError> {
 
 #[cfg(test)]
 mod root_detection_tests {
-    use super::detect_archive_root;
+    use super::{detect_archive_root, MoveSource};
     use std::fs;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     /// Create an empty file at `root/rel`, making parent dirs as needed.
     fn touch(root: &Path, rel: &str) {
@@ -239,16 +326,73 @@ mod root_detection_tests {
         fs::write(&p, b"x").unwrap();
     }
 
+    /// Assert the plan is `Whole { root }` rooted at `expected`.
+    fn assert_whole(plan: &MoveSource, expected: &Path) {
+        match plan {
+            MoveSource::Whole { root } => assert_eq!(root, expected),
+            other => panic!("expected Whole {{ root: {expected:?} }}, got {other:?}"),
+        }
+    }
+
+    /// Assert the plan is `WrapperChildren` rooted at `wrapper` with exactly `names`
+    /// (file-name, sorted) as the kept children; returns the child paths for follow-up.
+    fn assert_wrapper(plan: &MoveSource, wrapper: &Path, names: &[&str]) -> Vec<PathBuf> {
+        match plan {
+            MoveSource::WrapperChildren {
+                wrapper: w,
+                children,
+            } => {
+                assert_eq!(w, wrapper, "wrapper dir mismatch");
+                let got: Vec<String> = children
+                    .iter()
+                    .map(|c| c.file_name().unwrap().to_string_lossy().into_owned())
+                    .collect();
+                assert_eq!(got, names, "kept-children mismatch");
+                children.clone()
+            }
+            other => panic!("expected WrapperChildren, got {other:?}"),
+        }
+    }
+
     #[test]
     fn wrapper_folder_is_flattened() {
-        // `MyMod/Data/foo.esp` ⇒ the move source becomes `.../MyMod`, so staging is
-        // `Data/foo.esp` (NOT `MyMod/Data/foo.esp`).
+        // `MyMod/Data/foo.esp` ⇒ plan stages the `MyMod` wrapper's `Data` child, so staging
+        // is `Data/foo.esp` (NOT `MyMod/Data/foo.esp`).
         let tmp = tempfile::tempdir().unwrap();
         touch(tmp.path(), "MyMod/Data/foo.esp");
 
-        let source = detect_archive_root(tmp.path()).unwrap();
-        assert_eq!(source, tmp.path().join("MyMod"));
-        assert!(source.join("Data/foo.esp").is_file());
+        let plan = detect_archive_root(tmp.path()).unwrap();
+        let children = assert_wrapper(&plan, &tmp.path().join("MyMod"), &["Data"]);
+        assert!(children[0].join("foo.esp").is_file());
+    }
+
+    #[test]
+    fn wrapper_non_game_siblings_are_excluded() {
+        // THE REGRESSION: `Wrapper/Data/Plugin.esp` + non-game `Wrapper/Info.txt` and
+        // `Wrapper/Screenshot/shot.png` ⇒ only `Data` is staged; the junk siblings are
+        // dropped so they never leak into the game `Data/` at deploy time.
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "Wrapper/Data/Plugin.esp");
+        touch(tmp.path(), "Wrapper/Info.txt");
+        touch(tmp.path(), "Wrapper/Screenshot/shot.png");
+
+        let plan = detect_archive_root(tmp.path()).unwrap();
+        // Only the `Data` recognized-root child survives.
+        assert_wrapper(&plan, &tmp.path().join("Wrapper"), &["Data"]);
+    }
+
+    #[test]
+    fn wrapper_keeps_all_recognized_roots() {
+        // A wrapper carrying BOTH `Data/` and `F4SE/` (two recognized roots) plus junk:
+        // both game roots are kept (sorted), the junk dropped.
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "Wrapper/Data/Plugin.esp");
+        touch(tmp.path(), "Wrapper/F4SE/Plugins/x.dll");
+        touch(tmp.path(), "Wrapper/readme.md");
+
+        let plan = detect_archive_root(tmp.path()).unwrap();
+        // Sorted by path ⇒ "Data" before "F4SE".
+        assert_wrapper(&plan, &tmp.path().join("Wrapper"), &["Data", "F4SE"]);
     }
 
     #[test]
@@ -258,8 +402,8 @@ mod root_detection_tests {
         let tmp = tempfile::tempdir().unwrap();
         touch(tmp.path(), "Data/foo.esp");
 
-        let source = detect_archive_root(tmp.path()).unwrap();
-        assert_eq!(source, tmp.path());
+        let plan = detect_archive_root(tmp.path()).unwrap();
+        assert_whole(&plan, tmp.path());
     }
 
     #[test]
@@ -270,8 +414,20 @@ mod root_detection_tests {
         touch(tmp.path(), "Data/foo.esp");
         touch(tmp.path(), "readme.txt");
 
-        let source = detect_archive_root(tmp.path()).unwrap();
-        assert_eq!(source, tmp.path());
+        let plan = detect_archive_root(tmp.path()).unwrap();
+        assert_whole(&plan, tmp.path());
+    }
+
+    #[test]
+    fn loose_file_mod_is_kept_verbatim() {
+        // A loose-file mod with NO Data/ wrapper and several top-level files belongs
+        // directly in Data/; the no-wrapper path stages every file verbatim (no exclusion).
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "Plugin.esp");
+        touch(tmp.path(), "textures/rock.dds");
+
+        let plan = detect_archive_root(tmp.path()).unwrap();
+        assert_whole(&plan, tmp.path());
     }
 
     #[test]
@@ -282,19 +438,19 @@ mod root_detection_tests {
         let tmp = tempfile::tempdir().unwrap();
         touch(tmp.path(), "Outer/Inner/Data/foo.esp");
 
-        let source = detect_archive_root(tmp.path()).unwrap();
-        assert_eq!(source, tmp.path(), "Outer lacks a direct Data child ⇒ unchanged");
+        let plan = detect_archive_root(tmp.path()).unwrap();
+        assert_whole(&plan, tmp.path());
     }
 
     #[test]
     fn known_top_level_item_is_recognized_root() {
         // A single wrapper dir whose child is a known top-level game item (`SKSE`) is
-        // treated as the root and unwrapped.
+        // treated as the root and unwrapped (only `SKSE` kept).
         let tmp = tempfile::tempdir().unwrap();
         touch(tmp.path(), "WrapDir/SKSE/plugins/foo.dll");
 
-        let source = detect_archive_root(tmp.path()).unwrap();
-        assert_eq!(source, tmp.path().join("WrapDir"));
-        assert!(source.join("SKSE/plugins/foo.dll").is_file());
+        let plan = detect_archive_root(tmp.path()).unwrap();
+        let children = assert_wrapper(&plan, &tmp.path().join("WrapDir"), &["SKSE"]);
+        assert!(children[0].join("plugins/foo.dll").is_file());
     }
 }
