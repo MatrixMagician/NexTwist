@@ -6,6 +6,8 @@ score: 21/21 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
 mode: mvp
+security: 02-SECURITY.md (18/18 threats closed, 2026-06-23)
+wr_failure_paths_automated: "WR-02 and WR-05 are now automated (dce7238 + profile_switch.rs strengthening 2026-06-23): failed_switch_after_purge_clears_stale_active_flag (no stale-active, journal-recoverable) + save_plugin_order_inner_leaves_db_untouched_on_write_failure (no partial DB save). Both PASS — no bug. The remaining human_verification items below are the in-game plugin-load-order launch + AppData-folder-name match, which require real Steam Proton hardware (/gsd-verify-work 2)."
 re_verification: # none — initial verification
 human_verification:
   - test: "Launch Skyrim SE (or Fallout 4) via Steam Proton AFTER saving a plugin order in NexTwist, and confirm the modded plugins actually load in-game (correct masters-first order, enabled set applied)."
