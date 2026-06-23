@@ -1,10 +1,13 @@
 ---
-status: passed
+status: complete
 phase: 03-nexusmods-login-download
 source: [03-VERIFICATION.md]
 started: 2026-06-21T00:00:00Z
-updated: 2026-06-21T00:00:00Z
+updated: 2026-06-23T00:00:00Z
 ---
+
+<!-- All 3 live-HW tests passed (user sign-off 2026-06-21); status normalized passed -> complete 2026-06-23. -->
+
 
 > **Result (user sign-off 2026-06-21): all 3 tests PASSED on real hardware (account `ohingst`, Premium).**
 > Two live-UAT bugs were found and fixed before sign-off: the tauri dev-launch cwd (`d68f587`), the
