@@ -2,6 +2,14 @@
 phase: 04-guided-installers-collections
 verified: 2026-06-21T00:00:00Z
 status: human_needed
+human_uat: 2026-06-23  # 04-UAT.md: live FOMOD wizard PASSED on real HW; live Premium Collection BLOCKED by external Nexus policy (Vortex-only collection download) — see known_limitation below
+known_limitation: |
+  COLL-02 live path: NexusMods restricts Collection archive download to its own Vortex client;
+  a third-party client cannot fetch the collection file from nexusmods.com. The headless Collection
+  engine (apply pinned FOMOD choices + load order, deploy, byte-for-byte reversible uninstall) IS
+  verified by corpus + pristine round-trip tests, but live end-to-end download from Nexus is not
+  achievable for v1.0. Documented design boundary (GraphQL collectionRevision.downloadLink fetch
+  seam intentionally not implemented — adapters consume an already-fetched manifest). Revisit v2.
 score: 11/11 automatable must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
