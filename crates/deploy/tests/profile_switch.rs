@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use deploy::{purge, switch_profile, SwitchReport};
+use deploy::{purge, recover_on_launch, switch_profile, SwitchReport};
 use nextwist_core::{Game, ManagedMod};
 use store::Store;
 use tempfile::TempDir;
@@ -285,8 +285,21 @@ fn failed_switch_after_purge_clears_stale_active_flag() {
         "WR-02: a failed mid-switch must leave NO profile active (stale flag cleared)"
     );
 
-    // State/disk consistency: whatever deploy_winners placed is manifest-recorded, so a
-    // purge still restores the install byte-for-byte pristine (the game stays reversible).
+    // State/disk consistency — journal-recoverable: replay recover_on_launch exactly as the
+    // shell does for every managed game before serving the UI. Whatever deploy_winners placed
+    // is manifest-recorded + journaled, so a launch-time replay finds NO managed-file drift:
+    // every recorded file is present with the recorded bytes (no `missing`, no `changed`).
+    // (Orphans are the untouched vanilla tree — verify reports them, never deletes them; that
+    // is the report-only contract, not an inconsistency, so they are not asserted away here.)
+    let recovery = recover_on_launch(&store, &game).unwrap();
+    assert!(
+        recovery.drift.missing.is_empty() && recovery.drift.changed.is_empty(),
+        "WR-02: recover_on_launch finds the deployed set consistent (drift: {:?})",
+        recovery.drift
+    );
+
+    // ...and a purge then still restores the install byte-for-byte pristine (the game stays
+    // reversible — the deployment is purgeable to vanilla after the failed switch).
     let purged = purge(&store, &game).unwrap();
     assert!(purged.orphans.is_empty(), "purge leaves no orphans: {:?}", purged.orphans);
     let after = snapshot_tree(&fx.install).unwrap();
