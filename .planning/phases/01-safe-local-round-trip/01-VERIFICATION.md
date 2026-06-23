@@ -1,7 +1,8 @@
 ---
 phase: 01-safe-local-round-trip
 verified: 2026-06-20T00:00:00Z
-status: human_needed
+status: passed
+human_verified: 2026-06-23  # 01-UAT.md 4/4 passed on real hardware (GUI detect, deploy/purge round-trip, in-game Proton load, Flatpak/Snap)
 score: 31/31 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0

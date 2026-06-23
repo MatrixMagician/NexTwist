@@ -1,14 +1,20 @@
 ---
-status: testing
+status: complete
 phase: 01-safe-local-round-trip
 source: [01-VERIFICATION.md]
 started: 2026-06-20
-updated: 2026-06-20
+updated: 2026-06-23
 ---
 
 # Phase 1 — Manual UAT Checklist
 
+**Result: 4/4 passed on real hardware 2026-06-23 — Phase 1 fully signed off.**
+
 Automated verification passed **30/30 must-haves, 15/15 requirements** — all four core-value safety guarantees (no-original-modified, purge-to-pristine, malicious-archive-rejection, crash-recovery) are real, executed, passing tests. The items below are the only surfaces that **cannot** run headless and need you on a machine with a **display + real Steam (Proton) + a Bethesda game installed**.
+
+## Current Test
+
+[testing complete]
 
 ## Prerequisites
 - A graphical desktop session (the Tauri webview needs a display).
@@ -18,25 +24,33 @@ Automated verification passed **30/30 must-haves, 15/15 requirements** — all f
 
 ## Test items
 
-- [ ] **UAT-1 — GUI detect / add game**
+- [x] **UAT-1 — GUI detect / add game** — **PASS** (2026-06-23)
   - Steps: `cargo tauri dev` → let auto-detect run (or use "add game by folder" for a non-standard/Snap install).
   - Expected: the managed game appears with the correct **install dir** and **`compatdata/<appid>/pfx` Proton prefix**; add-by-folder accepts a valid Bethesda dir (Data/ + game exe) and rejects a non-game folder.
   - Covered headless by: `crates/steam/tests/resolve_game.rs` (synthetic fixtures).
 
-- [ ] **UAT-2 — GUI install → deploy → purge round-trip**
+- [x] **UAT-2 — GUI install → deploy → purge round-trip** — **PASS** (2026-06-23)
   - Steps: install a local `.zip`/`.7z` mod into staging → click **Deploy** → then **Purge**.
   - Expected: mod files link into `Data/`; the deploy report shows the chosen method(s) + any FS warnings (cross-device/EXDEV, non-casefolded); **Purge returns the game folder to byte-for-byte pristine with no orphans**.
   - Covered headless by: `round_trip_pristine.rs` (48-case proptest) + `crash_recovery.rs`.
 
-- [ ] **UAT-3 — In-game Proton load (DEPLOY-08 case-correctness)**
+- [x] **UAT-3 — In-game Proton load (DEPLOY-08 case-correctness)** — **PASS** (2026-06-23)
   - Steps: deploy a mod → launch the game via real Steam Proton → confirm the mod is active in-game.
   - Expected: mod content is visible/active; mixed-case mod paths resolve under Wine's case-sensitive view.
   - Covered headless by: `casefold_normalize.rs` (unit) — but actual in-game load is empirical.
 
-- [ ] **UAT-4 — Real Flatpak/Snap Steam packaging**
+- [x] **UAT-4 — Real Flatpak/Snap Steam packaging** — **PASS** (2026-06-23)
   - Steps: on a Flatpak- or Snap-packaged Steam, run detection.
   - Expected: Flatpak root auto-detected; Snap users fall back to add-by-folder (Snap root intentionally not auto-detected — A2 low-confidence, tested fallback).
 
+## Summary
+
+total: 4
+passed: 4
+issues: 0
+pending: 0
+skipped: 0
+
 ## On completion
-- All pass → Phase 1 is fully signed off. Resume the autonomous build with: `/gsd-autonomous --from 2`
+- All pass → Phase 1 is fully signed off. ✅ Done 2026-06-23.
 - Any failure → describe it; it routes to gap closure (`/gsd-plan-phase 1 --gaps`) before Phase 2.
