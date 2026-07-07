@@ -16,9 +16,11 @@
 pub mod error;
 pub mod loot;
 pub mod masterlist;
+pub mod reconcile;
 pub mod scan;
 
 pub use error::LoadOrderError;
+pub use reconcile::{reconcile_plugins_txt, ReconcileState};
 pub use loot::{
     appdata_folder_name, appdata_local_path, apply_load_order, masters_first_order,
     propose_sort, protected_plugins, SortProposal,
