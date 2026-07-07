@@ -71,8 +71,12 @@ Phase 6  Detection & CE2 path  ──┬──▶ Phase 7  Load order ──┐
   4. Verify/repair treats the game's on-launch rewrite of `plugins.txt` (`.ccc` entries, stripped implicit ESMs, `BlueprintShips-*`) as expected, deriving intent from recorded plugin state rather than flagging a raw on-disk diff.
 
 **Scope notes**: Reuses the v1.0 libloot sort/apply machinery verbatim; only new inputs are `GameType::Starfield` + slug + bundled masterlist. Avoids Pitfalls 5 (protected masters), 7 (medium tier), 9 (masterlist currency).
-**Plans**: TBD
+**Plans**: 3 plans
 **UI hint**: yes
+
+- [ ] 07-01-PLAN.md — Engine: medium classification + PluginView, protected-master probe + defensive guard, SFLO-04 reconcile, masterlist-date (wave 1)
+- [ ] 07-02-PLAN.md — Thin Tauri wiring: list_plugins → PluginView (medium/protected), reconcile_plugins command (wave 2)
+- [ ] 07-03-PLAN.md — Frontend surfacing: protected locked rows, MEDIUM/PROTECTED badges, masterlist-age note, SFLO-04 states (wave 3)
 
 ### Phase 8: Reversible StarfieldCustom.ini Activation
 
@@ -117,6 +121,6 @@ Phase 6  Detection & CE2 path  ──┬──▶ Phase 7  Load order ──┐
 | 4. Guided Installers & Collections | v1.0 | 4/4 | Complete | 2026-06-21 |
 | 5. AppImage Distribution | v1.0 | 2/2 | Complete | 2026-06-22 |
 | 6. Starfield Detection & CE2 Path Resolution | v1.1 | 3/3 | Complete    | 2026-07-07 |
-| 7. Starfield Load Order | v1.1 | 0/? | Not started | - |
+| 7. Starfield Load Order | v1.1 | 0/3 | Not started | - |
 | 8. Reversible StarfieldCustom.ini Activation | v1.1 | 0/? | Not started | - |
 | 9. On-Hardware In-Game Verification | v1.1 | 0/? | Not started | - |
