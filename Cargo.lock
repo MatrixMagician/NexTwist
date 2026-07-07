@@ -2935,6 +2935,7 @@ dependencies = [
  "keyvalues-serde",
  "nextwist-core",
  "nextwist-store",
+ "nextwist-testkit",
  "serde",
  "serde_json",
  "steamlocate",

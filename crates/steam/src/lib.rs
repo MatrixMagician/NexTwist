@@ -14,11 +14,16 @@
 //! caller's (Tauri command, Plan 06) job — this crate does pure resolution.
 
 pub mod casing;
+pub mod ce2;
 pub mod discover;
 pub mod error;
 pub mod resolve;
 
 pub use casing::{CasingMap, canonical_data_casing};
+pub use ce2::{
+    Ce2ConfigState, DriftNotice, StarfieldStatus, VALIDATED_BUILD, drift_notice, my_games_path,
+    resolve_ce2_config, starfield_status,
+};
 pub use discover::{DetectedGame, detect_games};
 pub use error::SteamError;
 pub use resolve::{
