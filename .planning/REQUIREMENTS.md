@@ -11,7 +11,7 @@
 
 ## v1.1 Requirements
 
-Each requirement maps to exactly one roadmap phase (traceability filled by the roadmapper). Phase numbering continues from v1.0 (starts at Phase 6).
+Each requirement maps to exactly one roadmap phase (see Traceability). Phase numbering continues from v1.0 (starts at Phase 6).
 
 ### Starfield Detection & Environment
 
@@ -61,4 +61,19 @@ Each requirement maps to exactly one roadmap phase (traceability filled by the r
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| _(filled by roadmapper)_ | | |
+| SFDET-01 | Phase 6 — Starfield Detection & CE2 Path Resolution | Pending |
+| SFDET-02 | Phase 6 — Starfield Detection & CE2 Path Resolution | Pending |
+| SFDET-03 | Phase 6 — Starfield Detection & CE2 Path Resolution | Pending |
+| SFLO-01 | Phase 7 — Starfield Load Order | Pending |
+| SFLO-02 | Phase 7 — Starfield Load Order | Pending |
+| SFLO-03 | Phase 7 — Starfield Load Order | Pending |
+| SFLO-04 | Phase 7 — Starfield Load Order | Pending |
+| SFINI-01 | Phase 8 — Reversible StarfieldCustom.ini Activation | Pending |
+| SFINI-02 | Phase 8 — Reversible StarfieldCustom.ini Activation | Pending |
+| SFINI-03 | Phase 8 — Reversible StarfieldCustom.ini Activation | Pending |
+| SFINI-04 | Phase 8 — Reversible StarfieldCustom.ini Activation | Pending |
+| SFINI-05 | Phase 8 — Reversible StarfieldCustom.ini Activation | Pending |
+| SFVER-01 | Phase 9 — On-Hardware In-Game Verification | Pending |
+| SFVER-02 | Phase 9 — On-Hardware In-Game Verification | Pending |
+
+**Coverage:** 14/14 v1.1 requirements mapped to exactly one phase. No orphans, no duplicates.
