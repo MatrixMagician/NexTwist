@@ -35,6 +35,8 @@ use crate::error::LoadOrderError;
 const SKYRIM_SE: u32 = 489830;
 /// Fallout 4 AppID (mirrors `loot::FALLOUT4`).
 const FALLOUT4: u32 = 377160;
+/// Starfield AppID (mirrors `loot::STARFIELD`).
+const STARFIELD: u32 = 1716740;
 
 /// The three Bethesda plugin file extensions NexTwist scans for (lowercased).
 const PLUGIN_EXTS: [&str; 3] = ["esp", "esm", "esl"];
@@ -45,6 +47,7 @@ fn game_id_for(appid: u32) -> Option<GameId> {
     match appid {
         SKYRIM_SE => Some(GameId::SkyrimSE),
         FALLOUT4 => Some(GameId::Fallout4),
+        STARFIELD => Some(GameId::Starfield),
         _ => None,
     }
 }
@@ -361,6 +364,8 @@ mod tests {
     fn esplugin_game_id_allow_lists_supported_games() {
         assert!(matches!(esplugin_game_id(SKYRIM_SE), Some(GameId::SkyrimSE)));
         assert!(matches!(esplugin_game_id(FALLOUT4), Some(GameId::Fallout4)));
+        assert!(matches!(esplugin_game_id(STARFIELD), Some(GameId::Starfield)));
+        assert!(esplugin_game_id(0).is_none());
         assert!(esplugin_game_id(220).is_none());
     }
 }
