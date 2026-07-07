@@ -52,6 +52,16 @@ pub enum LoadOrderError {
     /// AppID before any fetch was attempted).
     #[error("unsupported game for masterlist (appid {0})")]
     UnsupportedGame(u32),
+
+    /// A caller tried to disable or reorder a protected / implicitly-active master (the
+    /// game master, hardcoded DLC, or a Creation-Club plugin libloot keeps active without a
+    /// `*` line). The reversibility + safety guarantee (SFLO-03) is enforced in the ENGINE,
+    /// not just the UI: `apply_load_order` rejects the request with this typed error before
+    /// the libloot call. The protected set is derived purely from libloot's
+    /// `Game::is_plugin_active` (see `loot::protected_plugins`) — never a hard-coded name
+    /// list. Holds the offending plugin name.
+    #[error("cannot reorder or disable protected master: {0}")]
+    ProtectedMaster(String),
 }
 
 impl LoadOrderError {

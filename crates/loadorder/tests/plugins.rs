@@ -11,11 +11,13 @@
 //! libloot/libloadorder header-parse every named plugin, so the fixture writes minimal but
 //! VALID 24-byte TES4 records in the game `Data/` dir (matching the Plan-02 spike).
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-use loadorder::loot::{appdata_local_path, apply_load_order, propose_sort};
+use loadorder::loot::{appdata_local_path, apply_load_order, propose_sort, protected_plugins};
 use loadorder::masterlist::{cache_path, ensure_masterlist};
+use loadorder::LoadOrderError;
 use nextwist_core::{Plugin, PluginKind};
 use tempfile::TempDir;
 
@@ -23,6 +25,8 @@ const SKYRIM_SE: u32 = 489830;
 const GAME_FOLDER: &str = "Skyrim Special Edition";
 const FALLOUT4: u32 = 377160;
 const FO4_FOLDER: &str = "Fallout4";
+const STARFIELD: u32 = 1716740;
+const SF_FOLDER: &str = "Starfield";
 
 /// Minimal esplugin-parseable plugin file (a bare 24-byte TES4 header record).
 fn write_min_plugin(data_dir: &Path, name: &str, master: bool) {
@@ -321,5 +325,170 @@ fn fo4_multi_master_game_master_first_active_survives() {
     assert!(
         !body.contains("Fallout4.esm") && !body.contains("DLCRobot.esm"),
         "early-loading masters are implicitly active and NOT written to Plugins.txt:\n{body}"
+    );
+}
+
+/// SFLO-03: `protected_plugins` flags a libloot-implicitly-active base master (Starfield.esm)
+/// and does NOT flag a user-enabled regular `.esp`. The protected set is derived purely from
+/// `is_plugin_active` — no hard-coded name list in the engine.
+#[test]
+fn protected_plugins_flags_implicit_master_not_user_esp() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
+    write_min_plugin(&data, "Starfield.esm", true); // game master (implicitly active)
+    write_min_plugin(&data, "Mod.esp", false); // a user regular plugin
+
+    let prefix_root = tmp.path().join("pfx");
+    // Seed a user *-line for Mod.esp so it counts as NexTwist-enabled (never protected).
+    testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, Some("*Mod.esp\n")).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
+
+    let enabled: HashSet<String> = ["Mod.esp".to_string()].into_iter().collect();
+    let protected = protected_plugins(STARFIELD, &install, &appdata_local, &enabled).unwrap();
+
+    assert!(
+        protected.contains("Starfield.esm"),
+        "the implicit game master is protected: {protected:?}"
+    );
+    assert!(
+        !protected.contains("Mod.esp"),
+        "a user-enabled *-line plugin is never protected: {protected:?}"
+    );
+}
+
+/// SFLO-03 (protected immutability): `apply_load_order` REJECTS a request that reorders a
+/// protected master relative to libloot's canonical order, with the typed
+/// `LoadOrderError::ProtectedMaster` — defense-in-depth in the engine, not UI-only.
+#[test]
+fn protected_reorder_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
+    // Two Starfield implicitly-active masters (canonical order: Starfield.esm, Constellation.esm).
+    write_min_plugin(&data, "Starfield.esm", true);
+    write_min_plugin(&data, "Constellation.esm", true);
+    write_min_plugin(&data, "Mod.esp", false);
+
+    let prefix_root = tmp.path().join("pfx");
+    testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, None).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
+
+    // Desired list SWAPS the two protected masters (Constellation before Starfield) — a
+    // reorder of the implicit set. They are not user-enabled, so they are protected.
+    let desired = vec![
+        plugin("Constellation.esm", PluginKind::Esm, false, 0),
+        plugin("Starfield.esm", PluginKind::Esm, false, 1),
+        plugin("Mod.esp", PluginKind::Esp, true, 2),
+    ];
+    let err = apply_load_order(STARFIELD, &install, &appdata_local, &desired).unwrap_err();
+    assert!(
+        matches!(err, LoadOrderError::ProtectedMaster(_)),
+        "reordering a protected master must be a typed rejection, got: {err:?}"
+    );
+}
+
+/// SFLO-03 (protected immutability): `apply_load_order` REJECTS disabling a protected master.
+#[test]
+fn protected_disable_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
+    write_min_plugin(&data, "Starfield.esm", true);
+    write_min_plugin(&data, "Mod.esp", false);
+
+    let prefix_root = tmp.path().join("pfx");
+    testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, None).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
+
+    // Starfield.esm marked DISABLED — it is implicitly active, so this is an attempt to
+    // disable a protected master.
+    let desired = vec![
+        plugin("Starfield.esm", PluginKind::Esm, false, 0),
+        plugin("Mod.esp", PluginKind::Esp, true, 1),
+    ];
+    let err = apply_load_order(STARFIELD, &install, &appdata_local, &desired).unwrap_err();
+    assert!(
+        matches!(err, LoadOrderError::ProtectedMaster(_)),
+        "disabling a protected master must be a typed rejection, got: {err:?}"
+    );
+}
+
+/// SFLO-01: `apply_load_order` writes an asterisk-format Plugins.txt bounded under the
+/// Starfield prefix AppData — enabled regular plugins as `*Name`, implicit masters omitted.
+#[test]
+fn starfield_asterisk() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
+    write_min_plugin(&data, "Starfield.esm", true);
+    write_min_plugin(&data, "Mod.esp", false);
+    write_min_plugin(&data, "Off.esp", false);
+
+    let prefix_root = tmp.path().join("pfx");
+    testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, None).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
+
+    // The game master is user-enabled (normal case) → never protected → guard dormant.
+    let desired = vec![
+        plugin("Starfield.esm", PluginKind::Esm, true, 0),
+        plugin("Mod.esp", PluginKind::Esp, true, 1),
+        plugin("Off.esp", PluginKind::Esp, false, 2),
+    ];
+    let written = apply_load_order(STARFIELD, &install, &appdata_local, &desired).unwrap();
+
+    // Bounded inside the prefix AppData (T-07-03 / T-02-11).
+    assert!(
+        written.starts_with(&appdata_local),
+        "plugins.txt {written:?} must be under the Starfield prefix AppData {appdata_local:?}"
+    );
+    let body = fs::read_to_string(&written).unwrap();
+    assert!(body.contains("*Mod.esp"), "active regular plugin is asterisk-listed:\n{body}");
+    assert!(
+        !body.contains("*Off.esp"),
+        "disabled regular plugin has no asterisk:\n{body}"
+    );
+    assert!(
+        !body.contains("Starfield.esm"),
+        "the implicit master is NOT written to the asterisk file:\n{body}"
+    );
+}
+
+/// SFLO-02: `propose_sort` over the bundled Starfield masterlist is DETERMINISTIC (same
+/// inputs → same order across runs) and carries the recorded masterlist snapshot date.
+#[test]
+fn starfield_sort_determinism() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
+    write_min_plugin(&data, "Starfield.esm", true);
+    write_min_plugin(&data, "Mod.esp", false);
+
+    let prefix_root = tmp.path().join("pfx");
+    testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, None).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
+    let app_data = tmp.path().join("appdata");
+    fs::create_dir_all(&app_data).unwrap();
+
+    let desired = vec![
+        plugin("Starfield.esm", PluginKind::Esm, true, 0),
+        plugin("Mod.esp", PluginKind::Esp, true, 1),
+    ];
+
+    let first = propose_sort(STARFIELD, &install, &appdata_local, &app_data, &desired).unwrap();
+    let second = propose_sort(STARFIELD, &install, &appdata_local, &app_data, &desired).unwrap();
+
+    assert_eq!(
+        first.proposed, second.proposed,
+        "propose_sort must be deterministic over the bundled masterlist"
+    );
+    assert_eq!(
+        first.masterlist_date, "2026-07-07",
+        "the recorded Starfield masterlist snapshot date is surfaced (SFLO-02)"
     );
 }

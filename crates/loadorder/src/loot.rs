@@ -44,6 +44,7 @@
 //! `header_only`), so every plugin in a load order must physically exist in the game `Data/`
 //! dir with at least a valid 24-byte TES4 header.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use libloot::{Game, GameType};
@@ -153,6 +154,48 @@ pub fn load_canonical_order(game: &mut Game) -> Result<Vec<String>, LoadOrderErr
     game.load_current_load_order_state()
         .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
     Ok(game.load_order().iter().map(|s| (*s).to_string()).collect())
+}
+
+/// Compute the protected / implicitly-active master set from an ALREADY-loaded game.
+///
+/// A plugin is protected iff libloot reports it active (`is_plugin_active`) AND NexTwist did
+/// NOT itself enable it (`enabled_names` = the plugins NexTwist writes as `*Name` lines). That
+/// captures exactly the game's hardcoded early-loaders — the game master, its hardcoded DLC,
+/// and Creation-Club `*.ccc` plugins — which libloot keeps active WITHOUT a `*` line (loot.rs
+/// header doc). It is 100% libloot-derived: there is NO base-master name literal here, so a
+/// user-enabled `*`-line ESM master (which SSE/FO4 users legitimately reorder) is never
+/// protected. The caller must have already run `load_current_load_order_state`.
+fn implicit_protected_set(game: &Game, enabled_names: &HashSet<String>) -> HashSet<String> {
+    game.load_order()
+        .iter()
+        .filter(|name| game.is_plugin_active(name) && !enabled_names.contains(**name))
+        .map(|name| (*name).to_string())
+        .collect()
+}
+
+/// The protected / implicitly-active master set for a game (SFLO-03), derived purely from
+/// libloot — never a hard-coded name list.
+///
+/// Opens the game via the existing [`open_game`] seam, loads the current load-order state,
+/// and returns every installed plugin libloot reports active that NexTwist did not itself
+/// enable (`enabled_names`). Those are the game's hardcoded early-loaders (game master,
+/// hardcoded DLC, Creation-Club `*.ccc` plugins), which the UI renders as locked rows and the
+/// engine refuses to reorder/disable. `early_loading_plugins()` is private in libloot 0.29.5,
+/// so `is_plugin_active` after a load is the only public proxy (07-RESEARCH Pattern 2).
+///
+/// # Errors
+/// * [`LoadOrderError::NoLocalAppData`] / unsupported appid via [`open_game`].
+/// * [`LoadOrderError::Loot`] if libloot fails to read the load-order state.
+pub fn protected_plugins(
+    appid: u32,
+    install_dir: &Path,
+    appdata_local: &Path,
+    enabled_names: &HashSet<String>,
+) -> Result<HashSet<String>, LoadOrderError> {
+    let mut game = open_game(appid, install_dir, appdata_local)?;
+    game.load_current_load_order_state()
+        .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
+    Ok(implicit_protected_set(&game, enabled_names))
 }
 
 /// Set the given order and persist it (libloot saves internally — no separate `save`).
@@ -334,6 +377,52 @@ pub fn apply_load_order(
     // which include the game master + hardcoded DLC + CCC early-loaders) defer to libloot.
     // NEVER hand-roll the early-loader order (RC1).
     let canonical = load_canonical_order(&mut game)?;
+
+    // Defensive protected-master guard (SFLO-03, defense-in-depth — NOT UI-only). The
+    // protected set is derived purely from libloot (`is_plugin_active` after the load) minus
+    // the plugins NexTwist itself enabled as `*` lines, so it is EXACTLY the game's implicit
+    // early-loaders and NEVER a user-enabled `*`-line ESM master (which SSE/FO4 users
+    // legitimately reorder). We reject BEFORE `set_order_and_save`:
+    //   (b) a protected master whose desired relative order diverges from libloot's canonical
+    //       order (checked first so a reorder attempt names the moved master), then
+    //   (a) a protected master the caller marked disabled.
+    // libloot already rejects reordering its pinned early-loader prefix with an opaque
+    // string; this makes that a typed, testable error raised deterministically first.
+    let enabled_names: HashSet<String> = plugins
+        .iter()
+        .filter(|p| p.enabled)
+        .map(|p| p.name.clone())
+        .collect();
+    let protected = implicit_protected_set(&game, &enabled_names);
+    if !protected.is_empty() {
+        let desired_protected: Vec<&str> = plugins
+            .iter()
+            .map(|p| p.name.as_str())
+            .filter(|n| protected.contains(*n))
+            .collect();
+        let canonical_protected: Vec<&str> = canonical
+            .iter()
+            .map(String::as_str)
+            .filter(|n| protected.contains(*n))
+            .collect();
+        if desired_protected != canonical_protected {
+            let offending = desired_protected
+                .iter()
+                .zip(canonical_protected.iter())
+                .find(|(d, c)| d != c)
+                .map(|(d, _)| (*d).to_string())
+                .or_else(|| desired_protected.first().map(|s| (*s).to_string()))
+                .unwrap_or_default();
+            return Err(LoadOrderError::ProtectedMaster(offending));
+        }
+        if let Some(p) = plugins
+            .iter()
+            .find(|p| !p.enabled && protected.contains(&p.name))
+        {
+            return Err(LoadOrderError::ProtectedMaster(p.name.clone()));
+        }
+    }
+
     let user_movable: Vec<String> = on_disk
         .iter()
         .filter(|p| !is_master_group(p.kind))
@@ -359,6 +448,11 @@ pub struct SortProposal {
     pub proposed: Vec<String>,
     /// Critical (Warn/Error) masterlist messages to surface above the proposal.
     pub warnings: Vec<String>,
+    /// The bundled masterlist's recorded snapshot date (SFLO-02 "masterlist from {date} —
+    /// may be stale" note). Empty when no snapshot date is recorded for the game (the
+    /// `include_str!`'d snapshot has no runtime file to stat — see
+    /// [`crate::masterlist::masterlist_snapshot_date`]).
+    pub masterlist_date: String,
 }
 
 /// Propose a LOOT-sorted order WITHOUT writing anything (D-12: propose-then-apply).
@@ -414,7 +508,14 @@ pub fn propose_sort(
         .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
 
     let warnings = critical_warnings(&game);
-    Ok(SortProposal { proposed, warnings })
+    let masterlist_date = crate::masterlist::masterlist_snapshot_date(appid)
+        .unwrap_or_default()
+        .to_string();
+    Ok(SortProposal {
+        proposed,
+        warnings,
+        masterlist_date,
+    })
 }
 
 /// Extract the masterlist's critical (Warn/Error) general messages for the review (A2).

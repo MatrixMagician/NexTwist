@@ -55,6 +55,21 @@ fn game_slug(appid: u32) -> Option<&'static str> {
     }
 }
 
+/// The recorded snapshot date (git commit date of the bundled `masterlist.yaml`) for a
+/// supported AppID, surfaced as the SFLO-02 "masterlist from {date} — may be stale" note.
+///
+/// The bundled snapshot is `include_str!`'d into the binary, so there is NO runtime file to
+/// `stat` for an mtime (07-RESEARCH Pitfall 3) — the date is recorded as a const here and
+/// bumped in lock-step whenever the bundled `assets/<slug>/masterlist.yaml` is refreshed.
+/// Only Starfield is dated this phase (its Phase-6 snapshot commit date); the other games
+/// return `None` (their note is out of scope until a bump records their dates).
+pub fn masterlist_snapshot_date(appid: u32) -> Option<&'static str> {
+    match appid {
+        STARFIELD => Some("2026-07-07"),
+        _ => None,
+    }
+}
+
 /// The bundled CC0 snapshot text for a supported AppID.
 fn bundled_snapshot(appid: u32) -> Option<&'static str> {
     match appid {
