@@ -28,5 +28,5 @@ pub use discover::{DetectedGame, detect_games};
 pub use error::SteamError;
 pub use resolve::{
     FALLOUT4, ResolvedGame, SKYRIM_SE, STARFIELD, SUPPORTED_APPIDS, add_game_by_folder,
-    installed_build, is_supported, resolve_from_root, resolve_game,
+    installed_build, is_supported, resolve_from_root, resolve_game, starfield_status_for,
 };

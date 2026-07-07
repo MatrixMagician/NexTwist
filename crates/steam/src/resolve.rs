@@ -189,6 +189,27 @@ pub fn installed_build(library_root: &Path, appid: u32) -> Option<u64> {
     app.buildid?.trim().parse::<u64>().ok()
 }
 
+/// The Steam library root that owns an install dir: `<root>/steamapps/common/<game>` →
+/// `<root>`. Returned by reference (an ancestor of `install_dir`); `None` if the path is
+/// too shallow to be a real Steam layout.
+fn library_root_of(install_dir: &Path) -> Option<&Path> {
+    install_dir.ancestors().nth(3)
+}
+
+/// Resolve the full Starfield detection status for a supported appid (SFDET-01/02/03).
+///
+/// The Tauri adapter (Plan 03) forwards this VERBATIM. Re-resolves the Steam library +
+/// Proton prefix on every call (never cached — paths move) and keeps ALL path construction
+/// in the engine (T-06-04: the adapter builds no paths). The library root is the ancestor
+/// of the resolved install dir, which [`crate::ce2::starfield_status`] uses to read the
+/// installed build for the advisory drift compare.
+pub fn starfield_status_for(appid: u32) -> Result<crate::ce2::StarfieldStatus, SteamError> {
+    let resolved = resolve_game(appid)?;
+    let library_root =
+        library_root_of(&resolved.install_dir).ok_or(SteamError::NotInstalled(appid))?;
+    Ok(crate::ce2::starfield_status(&resolved.prefix, library_root, appid))
+}
+
 /// Build a [`ResolvedGame`] from a library root + the app's `installdir`.
 ///
 /// install_dir = `<root>/steamapps/common/<installdir>`
@@ -536,6 +557,16 @@ mod tests {
         // Absent manifest → None (never panics, never errors).
         let empty = TempDir::new().unwrap();
         assert_eq!(installed_build(empty.path(), STARFIELD), None);
+    }
+
+    #[test]
+    fn library_root_is_install_dir_grandparent() {
+        // <root>/steamapps/common/<game> → <root> (the dir `starfield_status_for` hands
+        // `installed_build`, which then joins `steamapps/appmanifest_<appid>.acf`).
+        let install = Path::new("/games/steamapps/common/Starfield");
+        assert_eq!(library_root_of(install), Some(Path::new("/games")));
+        // Too shallow to be a Steam layout → None (surfaced as NotInstalled upstream).
+        assert_eq!(library_root_of(Path::new("/a")), None);
     }
 
     #[test]
