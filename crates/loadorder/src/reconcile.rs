@@ -56,8 +56,11 @@ pub fn reconcile_plugins_txt(
     protected: &HashSet<String>,
 ) -> ReconcileState {
     // On-disk ACTIVE plugins = the `*`-prefixed lines (opaque filenames), in file order.
+    // IN-03: all recorded-vs-on-disk matching is done on an ASCII-lowercased key (the
+    // plugins.txt convention) so a pure CASE difference under Wine case-folding (`MyMod.esp`
+    // vs `mymod.esp`) is NOT reported as drift; the original-cased name is kept for output.
     let on_disk: Vec<String> = parse_active_lines(on_disk_txt);
-    let on_disk_set: HashSet<&str> = on_disk.iter().map(String::as_str).collect();
+    let on_disk_set: HashSet<String> = on_disk.iter().map(|n| n.to_ascii_lowercase()).collect();
 
     // The user-intended active set = recorded enabled, EXCLUDING protected names (NexTwist
     // never writes implicit/protected plugins to the file — they are implicitly active).
@@ -66,14 +69,15 @@ pub fn reconcile_plugins_txt(
         .filter(|p| p.enabled && !protected.contains(&p.name))
         .map(|p| p.name.as_str())
         .collect();
-    let recorded_active_set: HashSet<&str> = recorded_active.iter().copied().collect();
+    let recorded_active_set: HashSet<String> =
+        recorded_active.iter().map(|n| n.to_ascii_lowercase()).collect();
 
     let mut drift: Vec<String> = Vec::new();
 
     // (1) On disk but NOT user-intended-active: expected iff protected (a `.ccc` entry, a
     //     re-added blueprint master); otherwise an unexpected plugin → real drift.
     for name in &on_disk {
-        if recorded_active_set.contains(name.as_str()) {
+        if recorded_active_set.contains(&name.to_ascii_lowercase()) {
             continue;
         }
         if !protected.contains(name) {
@@ -84,26 +88,29 @@ pub fn reconcile_plugins_txt(
     // (2) User-intended-active but ABSENT from disk: since protected names were already
     //     excluded from `recorded_active`, any missing one is a user mod that vanished → drift.
     for name in &recorded_active {
-        if !on_disk_set.contains(name) {
+        if !on_disk_set.contains(&name.to_ascii_lowercase()) {
             drift.push((*name).to_string());
         }
     }
 
     // (3) Relative-order divergence among the non-protected plugins present in BOTH: a
-    //     reordered user `.esp` is real drift (the game does not reorder user mods).
-    let disk_common: Vec<&str> = on_disk
+    //     reordered user `.esp` is real drift (the game does not reorder user mods). Compared
+    //     case-insensitively so a case-only difference is not a false reorder.
+    let disk_common: Vec<String> = on_disk
         .iter()
-        .map(String::as_str)
-        .filter(|n| recorded_active_set.contains(n))
+        .filter(|n| recorded_active_set.contains(&n.to_ascii_lowercase()))
+        .map(|n| n.to_ascii_lowercase())
         .collect();
-    let recorded_common: Vec<&str> = recorded_active
+    let recorded_common: Vec<String> = recorded_active
         .iter()
-        .copied()
-        .filter(|n| on_disk_set.contains(n))
+        .filter(|n| on_disk_set.contains(&n.to_ascii_lowercase()))
+        .map(|n| n.to_ascii_lowercase())
         .collect();
     if disk_common != recorded_common {
-        for n in &recorded_common {
-            if !drift.iter().any(|d| d == n) {
+        for n in &recorded_active {
+            if on_disk_set.contains(&n.to_ascii_lowercase())
+                && !drift.iter().any(|d| d.eq_ignore_ascii_case(n))
+            {
                 drift.push((*n).to_string());
             }
         }

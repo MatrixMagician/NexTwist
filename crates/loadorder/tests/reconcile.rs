@@ -100,6 +100,22 @@ fn reconcile_identical_and_empty_are_insync() {
     );
 }
 
+/// IN-03: a pure CASE difference between the recorded name and the on-disk `plugins.txt` name
+/// (Wine case-folding) is NOT drift — same plugins, same order, only casing differs → InSync.
+#[test]
+fn reconcile_case_only_difference_is_insync() {
+    let recorded = vec![
+        plugin("MyMod.esp", PluginKind::Esp, true),
+        plugin("Second.esp", PluginKind::Esp, true),
+    ];
+    // On disk the game rewrote the names lowercased, but same set and same relative order.
+    let on_disk = "*mymod.esp\n*second.esp\n";
+    assert_eq!(
+        reconcile_plugins_txt(&recorded, on_disk, &HashSet::new()),
+        ReconcileState::InSync
+    );
+}
+
 /// The serde wire shape the frontend depends on: `InSync` is the bare string `"InSync"`,
 /// `Drift(names)` is `{"Drift":[...]}` (default external tagging — NOT `{"InSync":null}`).
 #[test]
