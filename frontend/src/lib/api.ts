@@ -21,6 +21,27 @@ export interface Game {
   staging_dir: string;
 }
 
+/** CE2 first-launch config state (mirrors steam::Ce2ConfigState, externally-tagged serde).
+ *  Exactly one key is present; its value is the resolved (Ready) or expected (pending) path. */
+export type Ce2ConfigState = { Ready: string } | { FirstLaunchPending: string };
+
+/** Advisory version-drift signal (mirrors steam::DriftNotice). Present only when the
+ *  installed build is newer than the validated baseline — never blocks management. */
+export interface DriftNotice {
+  installed: number;
+  validated: number;
+  is_newer: boolean;
+}
+
+/** Aggregate Starfield detection status (mirrors steam::StarfieldStatus), forwarded
+ *  verbatim by the `starfield_status` command. */
+export interface StarfieldStatus {
+  ce2_state: Ce2ConfigState;
+  installed_build: number | null;
+  validated_build: number;
+  drift: DriftNotice | null;
+}
+
 /** A validated staged mod (mirrors extract::StagedMod); handed back to deploy(). */
 export interface StagedMod {
   staging_root: string;
@@ -393,6 +414,11 @@ export const addGameByFolder = (path: string, appid: number): Promise<Game> =>
   invoke("add_game_by_folder", { path, appid });
 
 export const listGames = (): Promise<Game[]> => invoke("list_games");
+
+/** Starfield CE2 first-launch state + advisory version-drift (SFDET-02/03). Re-invoked on
+ *  the UI's explicit "Re-check"; reads only, writes nothing. */
+export const starfieldStatus = (appid: number): Promise<StarfieldStatus> =>
+  invoke("starfield_status", { appid });
 
 export const installArchive = (appid: number, archive: string): Promise<StagedMod> =>
   invoke("install_archive", { appid, archive });
