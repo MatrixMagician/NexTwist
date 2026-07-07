@@ -378,50 +378,16 @@ pub fn apply_load_order(
     // NEVER hand-roll the early-loader order (RC1).
     let canonical = load_canonical_order(&mut game)?;
 
-    // Defensive protected-master guard (SFLO-03, defense-in-depth — NOT UI-only). The
-    // protected set is derived purely from libloot (`is_plugin_active` after the load) minus
-    // the plugins NexTwist itself enabled as `*` lines, so it is EXACTLY the game's implicit
-    // early-loaders and NEVER a user-enabled `*`-line ESM master (which SSE/FO4 users
-    // legitimately reorder). We reject BEFORE `set_order_and_save`:
-    //   (b) a protected master whose desired relative order diverges from libloot's canonical
-    //       order (checked first so a reorder attempt names the moved master), then
-    //   (a) a protected master the caller marked disabled.
-    // libloot already rejects reordering its pinned early-loader prefix with an opaque
-    // string; this makes that a typed, testable error raised deterministically first.
-    let enabled_names: HashSet<String> = plugins
-        .iter()
-        .filter(|p| p.enabled)
-        .map(|p| p.name.clone())
-        .collect();
-    let protected = implicit_protected_set(&game, &enabled_names);
-    if !protected.is_empty() {
-        let desired_protected: Vec<&str> = plugins
-            .iter()
-            .map(|p| p.name.as_str())
-            .filter(|n| protected.contains(*n))
-            .collect();
-        let canonical_protected: Vec<&str> = canonical
-            .iter()
-            .map(String::as_str)
-            .filter(|n| protected.contains(*n))
-            .collect();
-        if desired_protected != canonical_protected {
-            let offending = desired_protected
-                .iter()
-                .zip(canonical_protected.iter())
-                .find(|(d, c)| d != c)
-                .map(|(d, _)| (*d).to_string())
-                .or_else(|| desired_protected.first().map(|s| (*s).to_string()))
-                .unwrap_or_default();
-            return Err(LoadOrderError::ProtectedMaster(offending));
-        }
-        if let Some(p) = plugins
-            .iter()
-            .find(|p| !p.enabled && protected.contains(&p.name))
-        {
-            return Err(LoadOrderError::ProtectedMaster(p.name.clone()));
-        }
-    }
+    // NO NexTwist-side protected-master guard here (SFLO-03). A protected / implicitly-active
+    // master's RESTING state in NexTwist's model is `enabled == false` (it is active WITHOUT a
+    // `*` line — masters are never asterisk-written, libloot owns their activation), so any
+    // `!enabled`-based "disable" check fires on the normal state, not tampering. And the master
+    // request order carries no user intent (the UI locks masters and the merge name-sorts them),
+    // so comparing it to libloot's canonical order is a false positive, not a genuine divergence.
+    // Protection is delivered by libloot itself: `reconcile_order` below forces every master into
+    // libloot's `canonical` position unconditionally (a swapped/disabled master in the request
+    // cannot survive), libloot pins its early-loader prefix and rejects a genuine reorder, and it
+    // never asterisk-writes masters. The UI lock is the user-facing half. (CR-01)
 
     let user_movable: Vec<String> = on_disk
         .iter()

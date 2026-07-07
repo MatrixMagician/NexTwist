@@ -17,7 +17,6 @@ use std::path::Path;
 
 use loadorder::loot::{appdata_local_path, apply_load_order, propose_sort, protected_plugins};
 use loadorder::masterlist::{cache_path, ensure_masterlist};
-use loadorder::LoadOrderError;
 use nextwist_core::{Plugin, PluginKind};
 use tempfile::TempDir;
 
@@ -358,16 +357,55 @@ fn protected_plugins_flags_implicit_master_not_user_esp() {
     );
 }
 
-/// SFLO-03 (protected immutability): `apply_load_order` REJECTS a request that reorders a
-/// protected master relative to libloot's canonical order, with the typed
-/// `LoadOrderError::ProtectedMaster` — defense-in-depth in the engine, not UI-only.
+/// CR-01 (the REAL save flow, previously untested): a locked Starfield base master arrives at
+/// its RESTING representation — `enabled == false` (it is active WITHOUT a `*` line; NexTwist
+/// never asterisk-writes masters, libloot owns their activation) — included UNCHANGED in a
+/// normal desired list. This is exactly what `list_plugins` produces for a protected master and
+/// what the UI sends back unchanged, so it MUST save successfully with NO false `ProtectedMaster`
+/// rejection, and the asterisk `plugins.txt` is still written for the enabled regular plugins.
 #[test]
-fn protected_reorder_rejected() {
+fn starfield_locked_master_saves_at_resting_state() {
     let tmp = TempDir::new().unwrap();
     let install = tmp.path().join("install");
     let data = install.join("Data");
     fs::create_dir_all(&data).unwrap();
-    // Two Starfield implicitly-active masters (canonical order: Starfield.esm, Constellation.esm).
+    write_min_plugin(&data, "Starfield.esm", true);
+    write_min_plugin(&data, "Mod.esp", false);
+
+    let prefix_root = tmp.path().join("pfx");
+    testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, None).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
+
+    // The base master at its RESTING state (`enabled == false`, as `list_plugins` produces for a
+    // protected master), included UNCHANGED alongside an enabled regular plugin.
+    let desired = vec![
+        plugin("Starfield.esm", PluginKind::Esm, false, 0),
+        plugin("Mod.esp", PluginKind::Esp, true, 1),
+    ];
+
+    let written = apply_load_order(STARFIELD, &install, &appdata_local, &desired)
+        .expect("a locked master at its resting enabled==false state must save (CR-01)");
+
+    let body = fs::read_to_string(&written).unwrap();
+    assert!(body.contains("*Mod.esp"), "enabled regular plugin is asterisk-listed:\n{body}");
+    assert!(
+        !body.contains("Starfield.esm"),
+        "the implicit master is NOT written to the asterisk file:\n{body}"
+    );
+}
+
+/// CR-01 (a GENUINE reorder of a pinned master is still prevented — now by libloot itself, not a
+/// NexTwist name/enabled guard): a request that SWAPS two masters (Constellation before the
+/// Starfield.esm game master), both at their resting `enabled == false` state. `reconcile_order`
+/// forces every master into libloot's canonical position UNCONDITIONALLY, so the save SUCCEEDS
+/// but the persisted order keeps the game master pinned FIRST — the swap is neutralized, never
+/// honored. (There is no way to move a pinned master through `apply_load_order`.)
+#[test]
+fn starfield_pinned_master_reorder_is_neutralized() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
     write_min_plugin(&data, "Starfield.esm", true);
     write_min_plugin(&data, "Constellation.esm", true);
     write_min_plugin(&data, "Mod.esp", false);
@@ -376,44 +414,27 @@ fn protected_reorder_rejected() {
     testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, None).unwrap();
     let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
 
-    // Desired list SWAPS the two protected masters (Constellation before Starfield) — a
-    // reorder of the implicit set. They are not user-enabled, so they are protected.
+    // Request SWAPS the masters (Constellation before Starfield), both at resting state.
     let desired = vec![
         plugin("Constellation.esm", PluginKind::Esm, false, 0),
         plugin("Starfield.esm", PluginKind::Esm, false, 1),
         plugin("Mod.esp", PluginKind::Esp, true, 2),
     ];
-    let err = apply_load_order(STARFIELD, &install, &appdata_local, &desired).unwrap_err();
+
+    // Succeeds (no false rejection) — the swap is neutralized by reconcile_order, not rejected.
+    apply_load_order(STARFIELD, &install, &appdata_local, &desired)
+        .expect("save succeeds; the master swap is neutralized, not rejected (CR-01)");
+
+    // The persisted order keeps the game master pinned FIRST despite the swapped request.
+    let mut game = loadorder::loot::open_game(STARFIELD, &install, &appdata_local).unwrap();
+    game.load_current_load_order_state().unwrap();
+    let order: Vec<&str> = game.load_order();
+    let pos = |n: &str| order.iter().position(|x| *x == n);
+    let sf = pos("Starfield.esm").expect("Starfield.esm present");
+    let con = pos("Constellation.esm").expect("Constellation.esm present");
     assert!(
-        matches!(err, LoadOrderError::ProtectedMaster(_)),
-        "reordering a protected master must be a typed rejection, got: {err:?}"
-    );
-}
-
-/// SFLO-03 (protected immutability): `apply_load_order` REJECTS disabling a protected master.
-#[test]
-fn protected_disable_rejected() {
-    let tmp = TempDir::new().unwrap();
-    let install = tmp.path().join("install");
-    let data = install.join("Data");
-    fs::create_dir_all(&data).unwrap();
-    write_min_plugin(&data, "Starfield.esm", true);
-    write_min_plugin(&data, "Mod.esp", false);
-
-    let prefix_root = tmp.path().join("pfx");
-    testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, None).unwrap();
-    let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
-
-    // Starfield.esm marked DISABLED — it is implicitly active, so this is an attempt to
-    // disable a protected master.
-    let desired = vec![
-        plugin("Starfield.esm", PluginKind::Esm, false, 0),
-        plugin("Mod.esp", PluginKind::Esp, true, 1),
-    ];
-    let err = apply_load_order(STARFIELD, &install, &appdata_local, &desired).unwrap_err();
-    assert!(
-        matches!(err, LoadOrderError::ProtectedMaster(_)),
-        "disabling a protected master must be a typed rejection, got: {err:?}"
+        sf < con,
+        "the game master stays pinned before Constellation.esm despite the swap: {order:?}"
     );
 }
 
