@@ -161,6 +161,41 @@ pub fn fake_my_games_prefix(
     Ok(root.to_path_buf())
 }
 
+/// Write a minimal esplugin-parseable plugin file (a bare 24-byte TES4 header record) into
+/// `dir` under `name`, with the given raw TES4 header flags.
+///
+/// The header layout mirrors the Plan-02 spike fixture: `b"TES4"`, a zero subrecord-size,
+/// the 32-bit little-endian `flags`, then a zero form-id and 8 padding bytes. Callers pass
+/// the flag bits their game classifier reads — `0x1` = master, and for Starfield `0x400` =
+/// medium (see [`write_medium_plugin`]). This is the ONE shared plugin-fixture builder the
+/// loadorder integration tests reuse, so the header shape lives in exactly one place.
+pub fn write_plugin_header(dir: &Path, name: &str, flags: u32) -> io::Result<()> {
+    let mut bytes = Vec::with_capacity(24);
+    bytes.extend_from_slice(b"TES4");
+    bytes.extend_from_slice(&0u32.to_le_bytes()); // size_of_subrecords = 0
+    bytes.extend_from_slice(&flags.to_le_bytes()); // TES4 record header flags
+    bytes.extend_from_slice(&0u32.to_le_bytes()); // form_id
+    bytes.extend_from_slice(&[0u8; 8]); // version control + unknown (ignored)
+    fs::create_dir_all(dir)?;
+    fs::write(dir.join(name), &bytes)
+}
+
+/// Write a minimal master (`0x1`) or regular (`0x0`) plugin fixture — the non-medium
+/// convenience over [`write_plugin_header`].
+pub fn write_min_plugin(dir: &Path, name: &str, master: bool) -> io::Result<()> {
+    write_plugin_header(dir, name, if master { 0x1 } else { 0x0 })
+}
+
+/// Write a Starfield MEDIUM master fixture: a TES4 header with the master (`0x1`) AND the
+/// Starfield medium (`0x400`) flag set, so `esplugin::Plugin::is_medium_plugin()` returns
+/// true when parsed under `GameId::Starfield` (and false under SkyrimSE/Fallout4, which do
+/// not support the medium flag — verified `esplugin 6.1.4 plugin.rs:503-510`). A medium
+/// master is still a master (`is_master_file()` true → `PluginKind::Esm`), so `medium` is a
+/// separate boolean, never a fourth `PluginKind`.
+pub fn write_medium_plugin(dir: &Path, name: &str) -> io::Result<()> {
+    write_plugin_header(dir, name, 0x1 | 0x400)
+}
+
 fn write_tree(root: &Path, files: &[(&str, &[u8])]) -> io::Result<()> {
     for (rel, bytes) in files {
         let path = root.join(rel);
@@ -460,6 +495,30 @@ mod tests {
         let reg = fs::read_to_string(d3.path().join("user.reg")).unwrap();
         assert!(reg.contains("\"Personal\"=\"C:\\\\users\\\\steamuser\\\\Documents\""));
         assert!(reg.contains("User Shell Folders"));
+    }
+
+    #[test]
+    fn plugin_header_builders_set_the_expected_flags() {
+        let dir = TempDir::new().unwrap();
+        write_min_plugin(dir.path(), "Regular.esp", false).unwrap();
+        write_min_plugin(dir.path(), "Master.esm", true).unwrap();
+        write_medium_plugin(dir.path(), "Medium.esm").unwrap();
+
+        // The 24-byte TES4 header carries the flags at bytes [8..12) (little-endian).
+        let flags = |name: &str| -> u32 {
+            let b = fs::read(dir.path().join(name)).unwrap();
+            assert_eq!(&b[0..4], b"TES4", "valid TES4 magic");
+            assert_eq!(b.len(), 24, "minimal 24-byte header");
+            u32::from_le_bytes(b[8..12].try_into().unwrap())
+        };
+        assert_eq!(flags("Regular.esp"), 0x0, "regular plugin: no flags");
+        assert_eq!(flags("Master.esm") & 0x1, 0x1, "master flag set");
+        assert_eq!(flags("Medium.esm") & 0x1, 0x1, "medium master is still a master");
+        assert_eq!(
+            flags("Medium.esm") & 0x400,
+            0x400,
+            "Starfield medium flag (0x400) set"
+        );
     }
 
     #[test]

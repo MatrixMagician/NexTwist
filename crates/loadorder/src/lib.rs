@@ -24,4 +24,6 @@ pub use loot::{
     SortProposal,
 };
 pub use masterlist::ensure_masterlist;
-pub use scan::{esplugin_game_id, scan_plugins, scan_plugins_for};
+pub use scan::{
+    esplugin_game_id, scan_plugin_views_for, scan_plugins, scan_plugins_for, PluginView,
+};
