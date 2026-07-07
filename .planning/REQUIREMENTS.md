@@ -15,9 +15,9 @@ Each requirement maps to exactly one roadmap phase (see Traceability). Phase num
 
 ### Starfield Detection & Environment
 
-- [ ] **SFDET-01**: User can add Starfield (Steam AppID 1716740) as a managed Bethesda game, auto-detected under Steam/Proton with its install dir and Proton prefix resolved
-- [ ] **SFDET-02**: NexTwist resolves Starfield's CE2 config location (`Documents/My Games/Starfield` inside the Proton prefix), handling Wine case-folding and the not-yet-created (pre-first-launch) folder case
-- [ ] **SFDET-03**: NexTwist detects the installed Starfield game version and warns the user when a game update may have changed loose-file/load-order behavior (version drift)
+- [x] **SFDET-01**: User can add Starfield (Steam AppID 1716740) as a managed Bethesda game, auto-detected under Steam/Proton with its install dir and Proton prefix resolved
+- [x] **SFDET-02**: NexTwist resolves Starfield's CE2 config location (`Documents/My Games/Starfield` inside the Proton prefix), handling Wine case-folding and the not-yet-created (pre-first-launch) folder case
+- [x] **SFDET-03**: NexTwist detects the installed Starfield game version and warns the user when a game update may have changed loose-file/load-order behavior (version drift)
 
 ### Starfield Load Order
 
@@ -61,9 +61,9 @@ Each requirement maps to exactly one roadmap phase (see Traceability). Phase num
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SFDET-01 | Phase 6 — Starfield Detection & CE2 Path Resolution | Pending |
-| SFDET-02 | Phase 6 — Starfield Detection & CE2 Path Resolution | Pending |
-| SFDET-03 | Phase 6 — Starfield Detection & CE2 Path Resolution | Pending |
+| SFDET-01 | Phase 6 — Starfield Detection & CE2 Path Resolution | Complete |
+| SFDET-02 | Phase 6 — Starfield Detection & CE2 Path Resolution | Complete |
+| SFDET-03 | Phase 6 — Starfield Detection & CE2 Path Resolution | Complete |
 | SFLO-01 | Phase 7 — Starfield Load Order | Pending |
 | SFLO-02 | Phase 7 — Starfield Load Order | Pending |
 | SFLO-03 | Phase 7 — Starfield Load Order | Pending |

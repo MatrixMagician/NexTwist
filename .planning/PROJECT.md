@@ -115,6 +115,7 @@ Outcome legend: ✓ Good (validated, would do again) · ⚠️ Revisit (worked b
 | Headless `fomod` engine (quick-xml) with a **pure dry-run resolver** | Conflict preview / FOMOD plan computed with zero disk writes — the locked safety gate before any staging write | ✓ Good |
 | Collections add **zero new engine primitives** (compose download + FOMOD-replay + profile switch + purge) | Reuse the proven safe paths; one core per capability so entry points can't diverge | ✓ Good — pristine round-trip regression-locked, no network |
 | AppImage distribution via tag-triggered `release.yml`; code-signing deferred | Portable, no install friction; signing is a v2 cost | ✓ Good (signing ⚠️ deferred to v2) |
+| **Starfield CE2 uses two config dirs** — `plugins.txt` in `AppData/Local/Starfield`, `StarfieldCustom.ini` + first-launch marker in `Documents/My Games/Starfield` (Phase 6) | Corrected an internal-doc conflation by verifying against libloadorder source; drove a NEW `my_games_path` resolver (`crates/steam/ce2.rs`) distinct from the `appdata_folder_name` seam; first-launch is a typed SUCCESS enum, not an Err | ✓ Good — SFDET-01/02/03 shipped, 6/6 allow-list arms, zero core/DB/dep change; code-review-caught a `user.reg` path-traversal escape and hardened it (lexical `drive_c` containment) before Phase 8 builds INI writes on that path |
 
 ## Evolution
 
@@ -134,4 +135,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-07 — started milestone v1.1 Starfield Support (previous: v1.0 MVP shipped 2026-06-23, 5 phases, 40/40 requirements; see RETROSPECTIVE.md)*
+*Last updated: 2026-07-07 — Phase 6 (Starfield Detection & CE2 Path Resolution) complete; SFDET-01/02/03 shipped. (v1.0 MVP shipped 2026-06-23, 5 phases, 40/40 requirements; see RETROSPECTIVE.md)*
