@@ -49,7 +49,10 @@ Phase 6  Detection & CE2 path  ──┬──▶ Phase 7  Load order ──┐
   3. When `My Games/Starfield` does not yet exist (game not launched once), NexTwist detects this first-launch-not-done state and guides the user to launch the game once, rather than silently writing to a useless path.
   4. NexTwist reports the installed Starfield build and warns the user when it is newer than the last build the loose-file / load-order behavior was validated against (version drift).
 **Scope notes**: ~6 allow-list `match appid` arms across `steam`/`loadorder`/Tauri + a bundled `assets/starfield/masterlist.yaml`; new `steam::my_games_path` resolver mirroring the existing `appdata_local_path` seam. No `core` change, no DB migration. Avoids Pitfall 6 (wrong/absent/mis-cased prefix path); owns the version-drift signal for Pitfall 8.
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 06-01-PLAN.md — Steam detection core: allow-list AppID 1716740, `ce2.rs` My-Games resolver + `Ce2ConfigState` + drift compare, testkit fixtures (wave 1)
+- [ ] 06-02-PLAN.md — Loadorder Starfield allow-list arms + bundled `assets/starfield/masterlist.yaml` (wave 1)
+- [ ] 06-03-PLAN.md — Thin Tauri `starfield_status` command + Starfield game-view first-launch guidance/Re-check + drift notice (wave 2)
 
 ### Phase 7: Starfield Load Order
 **Goal**: Users can enable, order, and LOOT-sort Starfield plugins safely, with the CE2 medium-master tier and protected base masters handled correctly via libloot.
@@ -100,7 +103,7 @@ Phase 6  Detection & CE2 path  ──┬──▶ Phase 7  Load order ──┐
 | 3. NexusMods Login & Download | v1.0 | 3/3 | Complete | 2026-06-21 |
 | 4. Guided Installers & Collections | v1.0 | 4/4 | Complete | 2026-06-21 |
 | 5. AppImage Distribution | v1.0 | 2/2 | Complete | 2026-06-22 |
-| 6. Starfield Detection & CE2 Path Resolution | v1.1 | 0/? | Not started | - |
+| 6. Starfield Detection & CE2 Path Resolution | v1.1 | 0/3 | Planned | - |
 | 7. Starfield Load Order | v1.1 | 0/? | Not started | - |
 | 8. Reversible StarfieldCustom.ini Activation | v1.1 | 0/? | Not started | - |
 | 9. On-Hardware In-Game Verification | v1.1 | 0/? | Not started | - |
