@@ -80,23 +80,128 @@ pub struct StarfieldStatus {
 /// first-launch path). Never follows a symlink out of the prefix (`entry_ci` reads dir
 /// entries only) and never escapes `<prefix>/drive_c`.
 pub fn my_games_path(prefix: &Path) -> PathBuf {
-    unimplemented!()
+    let mut components = documents_components(prefix);
+    components.push("My Games".to_string());
+    components.push(STARFIELD_FOLDER.to_string());
+    resolve_cased(prefix, &components)
+}
+
+/// The path components (relative to `prefix`) of the Documents folder: either the
+/// `user.reg` `"Personal"` redirect (validated in-prefix) or the default steamuser tree.
+fn documents_components(prefix: &Path) -> Vec<String> {
+    read_personal_redirect(prefix).unwrap_or_else(default_documents_components)
+}
+
+/// The load-bearing default: `<prefix>/drive_c/users/steamuser/Documents`.
+fn default_documents_components() -> Vec<String> {
+    ["drive_c", "users", "steamuser", "Documents"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+/// Read `<prefix>/user.reg`, extract the `"Personal"` shell-folder value, and map it to
+/// in-prefix components. `None` (→ default fallback) on any absence, parse failure, or a
+/// value that would escape `<prefix>/drive_c` (T-06-01 traversal guard).
+fn read_personal_redirect(prefix: &Path) -> Option<Vec<String>> {
+    let raw = std::fs::read_to_string(prefix.join("user.reg")).ok()?;
+    let value = extract_personal(&raw)?;
+    windows_path_to_components(&value)
+}
+
+/// Pull the `"Personal"="..."` value from the `User Shell Folders` section of a Wine
+/// `user.reg`. Lenient line scan; un-escapes Wine's doubled backslashes.
+fn extract_personal(reg: &str) -> Option<String> {
+    let mut in_section = false;
+    for line in reg.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            in_section = t.to_ascii_lowercase().contains("user shell folders");
+            continue;
+        }
+        if in_section && let Some(rest) = t.strip_prefix("\"Personal\"") {
+            let rest = rest.trim_start().strip_prefix('=')?.trim_start();
+            let inner = rest.strip_prefix('"')?;
+            let end = inner.find('"')?;
+            return Some(inner[..end].replace("\\\\", "\\"));
+        }
+    }
+    None
+}
+
+/// Map a Windows `C:\users\...` path to in-prefix components rooted at `drive_c`.
+/// Rejects a non-`C:` drive and any `.`/`..`/empty segment (traversal guard).
+fn windows_path_to_components(value: &str) -> Option<Vec<String>> {
+    let mut parts = value.split('\\');
+    if !parts.next()?.eq_ignore_ascii_case("C:") {
+        return None;
+    }
+    let mut out = vec!["drive_c".to_string()];
+    for p in parts {
+        if p.is_empty() || p == "." || p == ".." {
+            return None;
+        }
+        out.push(p.to_string());
+    }
+    // A bare `C:` (no folder) is not a usable Documents redirect.
+    (out.len() > 1).then_some(out)
+}
+
+/// Walk `components` under `prefix`, matching each EXISTING component through [`entry_ci`]
+/// to recover its real on-disk casing; once a component is missing, the rest are appended
+/// in canonical casing (the expected first-launch path).
+fn resolve_cased(prefix: &Path, components: &[String]) -> PathBuf {
+    let mut current = prefix.to_path_buf();
+    let mut still_exists = true;
+    for comp in components {
+        current = if still_exists {
+            match entry_ci(&current, comp) {
+                Some(real) => real,
+                None => {
+                    still_exists = false;
+                    current.join(comp)
+                }
+            }
+        } else {
+            current.join(comp)
+        };
+    }
+    current
 }
 
 /// Classify the CE2 config dir: [`Ce2ConfigState::Ready`] if it exists and is non-empty,
 /// else [`Ce2ConfigState::FirstLaunchPending`] with the expected canonical path.
 pub fn resolve_ce2_config(prefix: &Path) -> Ce2ConfigState {
-    unimplemented!()
+    let path = my_games_path(prefix);
+    let non_empty = std::fs::read_dir(&path)
+        .map(|mut rd| rd.next().is_some())
+        .unwrap_or(false);
+    if non_empty {
+        Ce2ConfigState::Ready(path)
+    } else {
+        Ce2ConfigState::FirstLaunchPending(path)
+    }
 }
 
 /// Advisory drift compare (SFDET-03). `Some` only when `installed > validated > 0`.
 pub fn drift_notice(installed: Option<u64>, validated: u64) -> Option<DriftNotice> {
-    unimplemented!()
+    let installed = installed?;
+    (validated > 0 && installed > validated).then_some(DriftNotice {
+        installed,
+        validated,
+        is_newer: true,
+    })
 }
 
 /// Aggregate CE2 state + installed build + drift into the single typed status value.
 pub fn starfield_status(prefix: &Path, library_root: &Path, appid: u32) -> StarfieldStatus {
-    unimplemented!()
+    let installed_build = crate::resolve::installed_build(library_root, appid);
+    StarfieldStatus {
+        ce2_state: resolve_ce2_config(prefix),
+        installed_build,
+        validated_build: VALIDATED_BUILD,
+        drift: drift_notice(installed_build, VALIDATED_BUILD),
+    }
 }
 
 #[cfg(test)]
