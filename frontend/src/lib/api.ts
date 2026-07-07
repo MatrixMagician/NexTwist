@@ -96,19 +96,31 @@ export interface FileConflict {
 /** A plugin's master/light/regular classification (mirrors core::PluginKind). */
 export type PluginKind = "esm" | "esl" | "esp";
 
-/** A plugin entry (mirrors core::Plugin). `order` is the zero-based load position. */
+/** A plugin entry (mirrors loadorder::PluginView). `order` is the zero-based load position.
+ *  `medium` (CE2 medium-master tier) and `protected` (libloot implicitly-active base master)
+ *  are engine-supplied booleans — the UI renders them, never decides them. `savePluginOrder`
+ *  sends these back harmlessly (core::Plugin ignores the extra fields). */
 export interface PluginInfo {
   name: string;
   kind: PluginKind;
   enabled: boolean;
   order: number;
+  medium: boolean;
+  protected: boolean;
 }
 
-/** A LOOT sort proposal (mirrors loadorder::SortProposal). `proposed` writes nothing. */
+/** A LOOT sort proposal (mirrors loadorder::SortProposal). `proposed` writes nothing.
+ *  `masterlist_date` is the bundled masterlist snapshot date (Starfield only). */
 export interface SortProposal {
   proposed: string[];
   warnings: string[];
+  masterlist_date: string;
 }
+
+/** SFLO-04 on-launch reconciliation verdict (mirrors loadorder::ReconcileState, externally-
+ *  tagged serde). `"InSync"` is the bare string (NOT `{InSync:null}`) — the calm in-sync branch;
+ *  `{ Drift: [...] }` lists beyond-expected plugin names (the amber discrepancy branch). */
+export type ReconcileState = "InSync" | { Drift: string[] };
 
 /** A profile (mirrors core::Profile). Exactly one profile is active per game. */
 export interface Profile {
@@ -456,6 +468,10 @@ export const savePluginOrder = (appid: number, order: PluginInfo[]): Promise<str
 
 export const sortWithLoot = (appid: number): Promise<SortProposal> =>
   invoke("sort_with_loot", { appid });
+
+/** SFLO-04: classify the on-disk plugins.txt vs recorded intent (Starfield only). */
+export const reconcilePlugins = (appid: number): Promise<ReconcileState> =>
+  invoke("reconcile_plugins", { appid });
 
 export const listProfiles = (appid: number): Promise<Profile[]> =>
   invoke("list_profiles", { appid });
