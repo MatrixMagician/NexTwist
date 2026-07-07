@@ -1,300 +1,181 @@
 # Architecture Research
 
-**Domain:** Desktop mod manager (Rust + Tauri) deploying Windows-game mods into Steam Proton / Wine on Linux
-**Researched:** 2026-06-20
-**Confidence:** MEDIUM-HIGH (deployment + NexusMods.App model verified against primary sources; some Proton/case-folding details inferred from converging community sources)
+**Domain:** Integrating a new Bethesda game (Starfield, Creation Engine 2) into an existing Rust + Tauri Linux mod-manager engine
+**Researched:** 2026-07-07
+**Confidence:** HIGH for game registration + load order (verified against source + dep versions); MEDIUM for the reversible-INI design (primitives verified reusable; exact CE2 INI keys and libloot Starfield early-loader completeness need on-hardware verification)
 
-## Standard Architecture
+## TL;DR for the Roadmapper
 
-Mod managers (Vortex, Mod Organizer 2, NexusMods.App) all converge on the same fundamental split: **mods are never installed directly into the game; they live in a managed staging store, and a deployment engine projects them into the game folder in a way that can be exactly undone.** Everything else (UI, API client, profiles, load order) orbits that core.
+Adding Starfield is a **data-and-mapping extension, not a re-architecture**. Three facts drive everything:
 
-The single most important architectural decision for this project is to make the **pure-Rust core fully independent of Tauri** so the deployment engine, sync logic, and API client are unit-testable headless. Tauri commands are a thin adapter layer only.
+1. **`core::Game` is game-agnostic** — a plain struct keyed by `appid: u32`. No enum, no per-game variant. Nothing in `core` changes.
+2. **The store is fully appid-generic** — `managed_game`, `vanilla_backup`, `deployed_file`, journal, profiles all key on `appid`/`(appid, target_rel)` as opaque values. **No refinery migration is needed** (registry is data-driven; current migrations stop at V5).
+3. **The dependencies already support Starfield** — `libloot 0.29` has `GameType::Starfield`, `esplugin 6.1` has `GameId::Starfield` (with light-plugin support). **No dependency bump.**
 
-### System Overview
+"Supported game" is expressed as **allow-list `match appid` arms and `const` AppIDs duplicated across ~6 sites.** Adding Starfield = adding one arm/const at each. The one genuinely NEW capability is reversible `StarfieldCustom.ini` management — and it can **reuse the existing `backup.rs` + journal primitives verbatim**, because those primitives are path-generic; only the deploy *engine orchestration* is bounded to `Data/`.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Tauri Frontend (Webview)                       │
-│   Mod list · Conflicts UI · Load order · Profiles · Downloads     │
-│   Login flow · Collection installer · Deploy/Purge buttons        │
-└───────────────▲───────────────────────────────────┬──────────────┘
-        events / │ emit (progress, state)            │ invoke()
-        channels │                                    ▼
-┌───────────────┴───────────────────────────────────────────────────┐
-│            Tauri Command Layer (thin adapter)                      │
-│   #[tauri::command] fns · State<Mutex<AppState>> · event emitters  │
-├────────────────────────────────────────────────────────────────────┤
-│                     Rust Core (pure, testable)                     │
-│  ┌────────────┐ ┌──────────────┐ ┌───────────┐ ┌────────────────┐ │
-│  │ NexusMods  │ │  Download    │ │  Archive   │ │ Game / Profile │ │
-│  │ API Client │ │  Manager     │ │ Extractor  │ │   Registry     │ │
-│  │ (OAuth/    │ │ (CDN, queue, │ │ (-> staging│ │ (Proton/Steam  │ │
-│  │  GraphQL,  │ │  resume)     │ │  store)    │ │  discovery)    │ │
-│  │  nxm://)   │ └──────┬───────┘ └─────┬──────┘ └───────┬────────┘ │
-│  └─────┬──────┘        │               │                │          │
-│        │               ▼               ▼                │          │
-│        │        ┌──────────────────────────────┐        │          │
-│        │        │      Mod Staging Store        │        │          │
-│        │        │  (per-mod extracted trees)    │        │          │
-│        │        └──────────────┬───────────────┘        │          │
-│        │                       ▼                         │          │
-│        │        ┌──────────────────────────────┐        │          │
-│        │        │      DEPLOYMENT ENGINE        │◄───────┘          │
-│        │        │  conflict resolver · linker   │                   │
-│        │        │  three-way synchronizer       │                   │
-│        │        │  deploy / purge / verify      │                   │
-│        │        └──────────────┬───────────────┘                   │
-│        │                       │ writes links + records             │
-├────────┴───────────────────────┼───────────────────────────────────┤
-│                  Persistence (SQLite + on-disk store)              │
-│  ┌─────────────┐  ┌─────────────────┐  ┌────────────────────────┐ │
-│  │  Database   │  │  Deploy Manifest │  │  Staging files on disk │ │
-│  │ (games,     │  │ (every file      │  │  + downloads cache     │ │
-│  │  profiles,  │  │  written, hash,  │  │                        │ │
-│  │  mods, LO)  │  │  source, method) │  │                        │ │
-│  └─────────────┘  └─────────────────┘  └────────────────────────┘ │
-└────────────────────────────────────────────────────────────────────┘
-        │                                              ▲
-        ▼ resolve install dir / prefix                 │ launch via Steam
-┌────────────────────────────────────────────────────────────────────┐
-│              Target: Steam Proton / Wine game                      │
-│  steamapps/common/<Game>/Data/ (plugins, meshes, textures)         │
-│  steamapps/compatdata/<appid>/pfx/.../AppData/.../plugins.txt       │
-└────────────────────────────────────────────────────────────────────┘
-```
+---
 
-### Component Responsibilities
-
-| Component | Responsibility | Typical Implementation |
-|-----------|----------------|------------------------|
-| Tauri Frontend | All UI: mod list, conflict resolution, load-order drag/drop, profiles, download queue, login, collection install wizard | Web UI (React/Svelte/Solid) talking to backend only via `invoke` + event listeners |
-| Tauri Command Layer | Thin sync/async boundary: marshals JSON ↔ Rust, holds `State<Mutex<AppState>>`, emits progress events | `#[tauri::command]` async fns; no business logic |
-| NexusMods API Client | OAuth login, GraphQL (v2) + REST (v1) queries, `nxm://` URL parsing, resolve CDN download URLs, fetch Collection revisions, rate-limit handling | `reqwest` + `serde`; OAuth via system browser + loopback/`oauth2` crate |
-| Download Manager | Queue, resumable HTTP downloads from CDN mirrors, hash verification, write to downloads cache | `reqwest` streaming + `tokio`; progress via channels/events |
-| Archive Extractor | Unpack `.zip`/`.7z`/`.rar` mod archives into a clean per-mod staging tree; apply FOMOD/installer scripts | `sevenz-rust`/`zip`/`unrar`; FOMOD XML parser |
-| Mod Staging Store | Canonical, immutable-per-mod extracted file trees; source of truth for deployment; survives enable/disable | Content-addressed or per-mod directories under app data |
-| Game / Profile Registry | Discover Steam libraries + Proton prefixes, identify supported games (Bethesda first), resolve install dir vs prefix paths, manage per-game profiles | Parse `libraryfolders.vdf` + `appmanifest_*.acf`; path resolver |
-| **Deployment Engine** | Resolve conflicts by load order, link staging → game dir, record a manifest of every file written, deploy/purge/verify, three-way sync | Hardlink/symlink/copy strategies behind a trait; manifest in DB |
-| Database | Persist games, profiles, mods, files, conflicts, load order, collection revisions | SQLite (`sqlx`/`rusqlite`) — relational fits this normalized model |
-| Deploy Manifest | Exact record of deployed state for reversible purge | Table(s) in SQLite, or per-deploy JSON keyed by profile |
-
-## Recommended Project Structure
+## Existing Architecture (integrate WITH this)
 
 ```
-nextwist/
-├── src-tauri/                      # Tauri shell + command adapter ONLY
-│   ├── src/
-│   │   ├── main.rs                 # builder, manage(AppState), nxm:// handler reg
-│   │   ├── commands/               # #[tauri::command] thin wrappers
-│   │   │   ├── auth.rs             # login/logout
-│   │   │   ├── mods.rs             # list/install/enable/disable
-│   │   │   ├── deploy.rs           # deploy/purge/verify
-│   │   │   ├── profiles.rs
-│   │   │   └── downloads.rs
-│   │   └── state.rs                # AppState (holds core services)
-│   └── tauri.conf.json             # deep-link plugin for nxm://, AppImage cfg
-├── crates/
-│   ├── core/                       # pure domain types, no I/O frameworks
-│   │   ├── model.rs                # Game, Profile, Mod, FileEntry, Conflict, LoadOrder
-│   │   └── error.rs
-│   ├── deploy/                     # DEPLOYMENT ENGINE (the crown jewel)
-│   │   ├── method/                 # trait DeploymentMethod
-│   │   │   ├── hardlink.rs
-│   │   │   ├── symlink.rs
-│   │   │   └── copy.rs
-│   │   ├── manifest.rs             # record/load deployed-file manifest
-│   │   ├── conflict.rs             # winner-by-load-order resolution
-│   │   ├── sync.rs                 # three-way sync (orig/applied/current)
-│   │   └── casefold.rs             # Proton case-mapping
-│   ├── nexus/                      # API client: oauth, graphql, rest, nxm parse
-│   ├── download/                   # resumable download manager
-│   ├── extract/                    # archive + FOMOD extraction -> staging
-│   ├── steam/                      # Proton/Steam discovery + path resolution
-│   └── store/                      # SQLite persistence + staging store
-└── frontend/                       # web UI (framework of choice)
+┌──────────────────────── Tauri shell (src-tauri/) — thin adapters ────────────────────────┐
+│  commands/{games,mods,deploy,conflicts,plugins,profiles,collections}.rs  lib.rs (startup) │
+│  appid_for_domain()  require_game()  recover_on_launch()-per-game-before-UI               │
+└───────────────────────────────────────────┬───────────────────────────────────────────────┘
+                                             │ speaks core::Game only
+┌──────────────────────────── headless crates/* engine (ZERO Tauri deps) ───────────────────┐
+│  core   Game{appid,name,install_dir,prefix,staging_dir}  ManagedMod Profile Plugin FileEntry│
+│  steam  resolve_game/detect_games (allow-list) · appdata paths · casing.rs                 │
+│  extract  archive → validated Data/-rooted staging tree                                    │
+│  loadorder  libloot seam: game_type_for · appdata_folder_name · game_id_for · game_slug    │
+│  deploy  CROWN JEWEL: probe→method-ladder→journal(intent-before-act)→backup→purge          │
+│          engine.rs {deploy, deploy_winners, redeploy_winners, purge, recover_on_launch}    │
+│          backup.rs {backup_vanilla_if_absent, restore_vanilla}  ← PATH-GENERIC             │
+│          profile.rs {switch_profile}                                                       │
+│  store  SQLite facade: managed_game · deployed_file · journal · vanilla_backup · profiles  │
+│         (no rusqlite in public API; all keyed on appid — GAME-AGNOSTIC)                     │
+└────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Structure Rationale
+---
 
-- **`src-tauri/` holds zero business logic.** Every command is a 3–10 line wrapper that calls into a `crates/` service and emits events. This keeps the safety-critical deployment logic testable without spinning up a webview, and lets you fuzz/property-test the engine on temp dirs in CI.
-- **`crates/deploy/` is isolated and dependency-light.** It only knows about staging trees, target dirs, and a manifest — not about NexusMods or Tauri. The reversibility guarantee (the product's Core Value) lives here and must be the most heavily tested crate.
-- **`crates/steam/` quarantines all Proton/Steam-layout knowledge** so the deployment engine receives already-resolved absolute paths (install dir + prefix AppData) and doesn't itself reason about `compatdata`.
+## Question 1 — Game model & the exact extension points
 
-## Architectural Patterns
+### How a supported game is represented
 
-### Pattern 1: Staging Store + Manifest-Driven Deploy/Purge (NON-NEGOTIABLE)
+- **`core::Game`** (`crates/core/src/model.rs:18-30`): a plain struct `{ appid: u32, name, install_dir, prefix, staging_dir }`. **No enum, no per-game type.** Serde round-trips any appid. → **NO CHANGE.**
+- **Store registry** (`crates/store/src/registry.rs`): `add_managed_game(&Game)` / `get_game(appid)` / `list_managed_games()` — pure upsert on the `managed_game` table, appid opaque. `vanilla_backup` (`vanilla.rs`), `deployed_file`, journal all key on `appid`/`(appid, target_rel)` generically. → **NO CHANGE, NO MIGRATION.**
+- **"Supported"** = an **allow-list of `const` AppIDs + `match appid` arms**, duplicated across crates (each redefines its own `SKYRIM_SE = 489830` / `FALLOUT4 = 377160`).
 
-**What:** Mods are extracted once into a per-mod staging tree. Deployment *links* (never moves the only copy of) staging files into the game folder, and records **every** path it creates in a manifest. Purge reads the manifest and deletes exactly those paths — nothing discovered by scanning. This is the Vortex model and directly satisfies "non-destructive + fully reversible."
+### The exact sites to add Starfield (`appid 1716740`)
 
-**When to use:** Always. This is the foundation of the entire product.
+| # | File / function | Current | Add for Starfield | Kind |
+|---|-----------------|---------|-------------------|------|
+| 1 | `steam/src/resolve.rs` — `SKYRIM_SE`/`FALLOUT4` consts, `SUPPORTED_APPIDS`, `default_name()`, `expected_exe()` | 489830 / 377160; exes `SkyrimSE.exe`/`Fallout4.exe` | `STARFIELD = 1716740`; add to `SUPPORTED_APPIDS`; name `"Starfield"`; exe `"Starfield.exe"` | modify (mapping) |
+| 2 | `steam/src/discover.rs` — `detect_games()` | iterates `SUPPORTED_APPIDS` | automatic once #1 adds the const | no code change |
+| 3 | `loadorder/src/loot.rs` — `game_type_for()`, `appdata_folder_name()` (+ local `SKYRIM_SE`/`FALLOUT4` consts) | `GameType::SkyrimSE`/`Fallout4`; folders `"Skyrim Special Edition"`/`"Fallout4"` | `1716740 => GameType::Starfield`; folder `"Starfield"` | modify (mapping) |
+| 4 | `loadorder/src/scan.rs` — `game_id_for()` (+ local consts) | `GameId::SkyrimSE`/`Fallout4` | `1716740 => GameId::Starfield` | modify (mapping) |
+| 5 | `loadorder/src/masterlist.rs` — `game_slug()`, `bundled_snapshot()`, snapshot `include_str!`s | slugs `"skyrimse"`/`"fallout4"`; `assets/{skyrimse,fallout4}/masterlist.yaml` | slug `"starfield"`; ship `assets/starfield/masterlist.yaml` (CC0, `loot/starfield`); add arm | modify + **new asset** |
+| 6 | `src-tauri/src/commands/mod.rs` — `appid_for_domain()` | `"skyrimspecialedition"`/`"fallout4"` → appid | `"starfield" => Some(1716740)` (Nexus domain slug) | modify (mapping) |
 
-**Trade-offs:** Costs extra bookkeeping and disk (staging is a second copy), but hardlinks make the *deployed* copy free, and the manifest is what makes "return game to pristine" provable rather than hopeful.
+**Resolved paths for Starfield** (all follow existing patterns):
+- Install: `steamapps/common/Starfield`; prefix `steamapps/compatdata/1716740/pfx` (both derived by existing `steam::resolve`).
+- `plugins.txt` (asterisk format): `<prefix>/drive_c/users/steamuser/AppData/Local/Starfield/Plugins.txt` — produced by the **existing** `appdata_local_path(prefix, "Starfield")`.
+- `StarfieldCustom.ini`: `<prefix>/drive_c/users/steamuser/Documents/My Games/Starfield/StarfieldCustom.ini` — **NEW path root** (`Documents/My Games`, not `AppData/Local`); see Q3.
 
-**Example:**
-```rust
-// Conceptual: manifest is the source of truth for what to undo
-struct DeployedFile {
-    target: RelPath,        // path inside game/prefix
-    source_mod: ModId,      // which staged mod won
-    method: DeployMethod,   // Hardlink | Symlink | Copy
-    hash: u64,              // xxhash64 of source at deploy time
-    pre_existing: bool,     // was there a vanilla file here? (back it up!)
-}
-// purge(): for each DeployedFile -> remove link; if pre_existing, restore backup
-```
+**Ponytail note — optional consolidation:** these mappings are duplicated across three `loadorder` modules (each with its own `SKYRIM_SE`/`FALLOUT4` const). Adding a third game is the moment a single `struct GameProfile { appid, game_type, game_id, appdata_folder, loot_slug, exe, nexus_domain }` table pays for itself. It is **not required** — three match arms work — but if the roadmap wants one, do it as a small refactor folded into game registration, not a separate epic. Recommend: **add the arms now, keep a `// ponytail:` note that a 4th game should trigger the table.**
 
-### Pattern 2: Three-Way Synchronizer (from NexusMods.App)
+---
 
-**What:** NexusMods.App tracks three disk states: **original** (vanilla, before any mods), **last-applied** (what we last deployed), and **current** (what's actually on disk now). The synchronizer diffs these to decide what to add/remove and — critically — to detect files the *user or game patcher* changed outside the manager, so it never blindly clobbers or orphans them. NexusMods.App implements this on its immutable temporal DB (MnemonicDB: `[Entity,Attribute,Value,Tx,Assert/Retract]` tuples; `conn.AsOf(txId)` recovers any past state). You don't need MnemonicDB — SQLite + recorded transaction snapshots reproduce the same three-state diff.
+## Question 2 — Load order: where the game-specific config is chosen
 
-**When to use:** For deploy and for "verify"/"detect external changes" before re-deploying.
+**Everything lives in `crates/loadorder`.** The generic sort/apply machinery (`apply_load_order`, `propose_sort`, `reconcile_order`, `asterisk_plugins_txt`, `masters_first_order`) is already game-agnostic and takes `appid` + resolved paths. Only the four mappings in Q1 rows 3–5 select per-game behaviour:
 
-**Trade-offs:** More complex than naive purge-all-then-redeploy, but it's what prevents data loss when Proton/the game writes into `Data/` or when a user hand-edits a file. Phase this in: ship simple deploy/purge first, add full three-way sync second.
+- `loot::game_type_for(appid)` → `libloot::GameType` (the game handle).
+- `loot::appdata_folder_name(appid)` → the `AppData/Local/<folder>` segment for `plugins.txt`.
+- `scan::game_id_for(appid)` → `esplugin::GameId` (header master/light classification).
+- `masterlist::game_slug(appid)` + bundled snapshot → the LOOT masterlist repo/asset.
 
-### Pattern 3: Pluggable Deployment Method Trait
+**What must change:** add the Starfield arm to each (done in Q1). **No new load-order logic.** Two Starfield facts confirm the existing code already handles it:
 
-**What:** A `DeploymentMethod` trait with `deploy_file`, `remove_file`, `is_applicable(staging_fs, game_fs)`. Implementations: Hardlink (preferred), Symlink (cross-filesystem), Copy (fallback). The engine picks the best applicable method per (staging, target) pair — exactly Vortex's `IDeploymentMethod` design.
+1. **Asterisk `Plugins.txt` format** — Starfield uses the same `*Enabled.esm` asterisk method as SkyrimSE/FO4; `asterisk_plugins_txt` applies unchanged.
+2. **Large early-loader / CCC set** — Starfield ships many implicitly-active plugins (game master + hardcoded list + Creation-Club `*.ccc`). `reconcile_order` was **built to defer the early-loader prefix to libloot's canonical order** (it exists precisely because FO4's DLC list broke a hand-rolled master sort — see `loot.rs` RC1 comment). This is exactly the shape Starfield needs. No new handling.
 
-**When to use:** Always — Linux/Proton makes the choice situational (see Integration Points).
+**Flag for verification (Phase 7 UAT):** confirm libloot 0.29.x's Starfield masterlist branch (`v0.29`) exists on `loot/starfield` and that its early-loader handling matches the installed game version — Starfield's plugin list has churned across game updates. `ba2` v3 archive awareness is a plugin-content concern, not a load-order-code concern; note it but it does not change this crate.
 
-**Trade-offs:** A trait indirection, but it isolates the messy per-filesystem correctness logic and lets you add overlayfs later without touching callers.
+---
 
-## Data Flow
+## Question 3 — NEW component: reversible `StarfieldCustom.ini` management
 
-### Core Loop (login → purge)
+This is the **only genuinely new capability.** Requirement: on activate, add the CE2 loose-file keys to `StarfieldCustom.ini`; on purge, restore the file **byte-for-byte** (or delete it if we created it) under the same reversibility guarantee as deployment.
 
-```
-[Login]  UI invoke(login) → nexus::oauth (system browser, loopback) → JWT (premium claim) → store
+### Why the existing `deploy()`/`purge()` engine can't cover it directly
 
-[nxm:// or Collection]
-  OS hands nxm://gameId/modId/fileId?key&expires  → deep-link plugin → command
-       → nexus::resolve_download_urls() → CDN mirror list
-  (Collection: nexus graphql collectionRevision → list of {mod,file} → enqueue each)
+- `resolve_target` / `guard_within_root` / `deploy_root` bound every deployed path to `<install_dir>/Data`. The INI lives in the **Proton prefix's `Documents/My Games/Starfield`**, outside that root.
+- Deployed files are *linked from a mod staging tree*; the INI content is *generated by NexTwist* (merge `[Archive]` keys), so there is no source file to link.
 
-[Download]  download::enqueue(url) → resumable fetch → downloads cache → verify hash
-       → emit progress events to UI
+### Why the existing PRIMITIVES cover it perfectly (the reuse win)
 
-[Extract]   extract::unpack(archive) (+FOMOD choices) → staging store per-mod tree
-       → store::insert Mod + FileEntry rows
+`backup::backup_vanilla_if_absent(store, game, target, target_rel)` and `backup::restore_vanilla(...)` (`crates/deploy/src/backup.rs`) are **path-generic** — they take an arbitrary absolute `target` and an opaque `target_rel` key, content-address the original with blake3 into `<staging>/../originals/<appid>/<hash>`, and record `(appid, target_rel, hash)` in the `vanilla_backup` ledger. They are **not** bounded to `Data/`. The content-addressed originals store + `vanilla_backup` table already give byte-for-byte restore of a pre-existing INI, deduped and idempotent. The `journal` (`begin_deploy`/`finish_deploy`/`begin_purge`/`finish_purge` + `replay`) is likewise keyed on an opaque `target_rel` string.
 
-[Resolve conflicts]  deploy::conflict::resolve(profile.load_order)
-       → for each target path, highest-priority mod wins → Conflict rows for UI
+### Recommendation — a small `gameconfig` module INSIDE `crates/deploy` (NOT a new crate)
 
-[Deploy]   deploy::sync(original, last_applied, current)
-       → choose method per file → write links → back up pre-existing vanilla files
-       → record DeployedFile manifest rows (atomic w.r.t. DB tx)
+A new crate would be ceremony: the logic needs `store`, `core`, `backup`, and `journal` — all already siblings in `deploy`. A new `crates/deploy/src/gameconfig.rs` (sibling of `backup.rs`) is the laziest correct home and keeps it under the crown-jewel's test harness.
 
-[Manage order]  UI reorders → load_order rows updated → re-run resolve + deploy
-       (only the delta of changed winners is re-linked)
-
-[Launch]   Steam launches game (manager does NOT replace launcher)
-
-[Purge]    deploy::purge(manifest) → remove every recorded link
-       → restore backed-up vanilla files → game folder pristine
-```
-
-### State Management (Tauri)
+**Public surface (~120 LOC incl. the idempotent INI merge + one self-check):**
 
 ```
-AppState { nexus: NexusClient, store: Db, jobs: JobRegistry, ... }
-   managed as State<Mutex<AppState>>  (tokio::Mutex — guards held across await)
-
-UI ──invoke(cmd)──► command fn ──► core service (returns Result)
-UI ◄──emit("download://progress" | "deploy://progress" | "state://changed")── spawned tokio task
+gameconfig::activate_loose_files(store, game)   // no-op unless is_starfield(game.appid)
+gameconfig::deactivate_loose_files(store, game) // no-op unless is_starfield(game.appid)
 ```
-Long operations (download, extract, deploy) run as spawned `tokio` tasks that push progress via `app.emit` / Channels, so the UI stays responsive and commands return immediately with a job id.
 
-### Key Data Flows
+**`activate` sequence** (mirrors `deploy_one_file`, reusing its primitives):
+1. Resolve INI path from `game.prefix` via a **new tiny `steam` helper** `my_games_path(prefix, "Starfield")` — a 5-line sibling of `appdata_local_path`.
+2. `journal::begin_deploy(...)` with a **sentinel key** (e.g. `"@gameconfig/StarfieldCustom.ini"` — cannot collide with any `Data/`-relative path). Durable intent BEFORE the write.
+3. `backup::backup_vanilla_if_absent(store, game, &ini, &sentinel_key)` — **REUSED VERBATIM.** Backs up any existing INI byte-for-byte (or returns `false` = pure-add when absent). This is the reversibility guarantee, unchanged.
+4. Idempotent INI key-merge: ensure `[Archive]` `bInvalidateOlderFiles=1` and `sResourceDataDirsFinal=STRINGS\` (the ~40 LOC of genuinely new code; leaves any other user keys intact so a re-run is a no-op).
+5. `journal::finish_deploy(store, jid, appid, FileEntry{ target_rel: sentinel, source_mod: 0, method: Copy, hash, pre_existing: backed })` — the `pre_existing` bool is the one bit purge needs to decide restore-vs-delete. **Reuses `FileEntry` unchanged; no new table.**
 
-1. **Path resolution:** `steam` crate parses `libraryfolders.vdf` → finds each library's `steamapps/` → `appmanifest_<appid>.acf` gives `installdir` (→ `steamapps/common/<Game>` for `Data/`), and `steamapps/compatdata/<appid>/pfx/drive_c/users/steamuser/AppData/Local/<Game>/` for `plugins.txt`/load order. Engine receives both resolved absolute roots.
-2. **Reversibility flow:** every write goes through the manifest; every read for purge comes *only* from the manifest — disk scanning is used to *detect drift*, never to decide what to delete.
+**`deactivate` sequence** (its own tiny loop, because the INI is outside the Data/ purge root):
+1. Read the recorded INI entry (by sentinel key); `journal::begin_purge`.
+2. If `pre_existing`: `backup::restore_vanilla(...)` → **REUSED VERBATIM**, restoring exact original bytes. Else (pure-add): `method::remove_if_present(&ini)` to return to absent.
+3. Drop the manifest row + `journal::finish_purge`. Crash mid-edit is replayed by `recover_on_launch` because we used the same journal.
 
-## Scaling Considerations
+**No migration required:** the sentinel key rides in the existing `vanilla_backup` / journal / `deployed_file` tables as opaque text. (An explicit `active_gameconfig` table would be *clearer* but is not needed for correctness — recommend skipping it; add only if a second game-config file appears.)
 
-Scale here is "size of a single user's load order," not number of users (desktop app).
+### Exact lifecycle integration points (single choke, inherited by every entry point)
 
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| Small load order (<50 mods) | Naive full purge+redeploy is fine; SQLite trivial |
-| Large (500–2000 mods, 100k+ files — typical Skyrim) | Deploy only the *delta* of changed conflict winners; index DiskState by (location, relpath) for range queries; batch hardlink syscalls; hash with xxhash64 not SHA |
-| Huge collections / frequent reorders | Cache conflict resolution; incremental sync via three-way diff so a load-order tweak relinks only affected files |
+Route the two calls through the engine functions, gated on `is_starfield`, so **all** command entry points (deploy, purge, conflicts, profile switch, collections) inherit the behaviour without per-caller edits — the "fix it once where all callers route through" move:
 
-### Scaling Priorities
+| Hook | Function (`crates/deploy/src/engine.rs`) | Add | Covers |
+|------|-------------------------------------------|-----|--------|
+| Activate | end of `deploy()` and `deploy_winners()` | `gameconfig::activate_loose_files(store, game)?` | single-mod deploy, conflict winner set, `redeploy_winners`, `switch_profile` (its `deploy_winners` step), collections apply |
+| Deactivate | end of `purge()` | `gameconfig::deactivate_loose_files(store, game)?` | standalone purge, `redeploy_winners`'s purge, `switch_profile`'s purge, collection uninstall |
+| Replay | `recover_on_launch()` | already replays the journal rows; ensure the sentinel op is handled in `journal::replay` | crash mid-INI-edit |
 
-1. **First bottleneck:** redeploying everything on each change. Fix with delta deployment driven by the three-way synchronizer.
-2. **Second bottleneck:** hashing/IO on huge mod sets. Fix with xxhash64, parallel extraction, and storing file hashes so re-verify is incremental.
+Net effect is correct and idempotent: a profile switch = `purge`(deactivate) → `deploy_winners`(activate) = net active; standalone `purge` = deactivate. Non-Starfield games short-circuit to a no-op. **Do not** wire these into the thin `src-tauri/commands/*` adapters — keep the logic in the engine (honours the zero-logic-in-adapters boundary).
 
-## Anti-Patterns
+**Flag for on-hardware verification (Phase 8/9):** the exact CE2 loose-file keys have been finicky across Starfield patches (`sResourceDataDirsFinal` contents, whether `StarfieldCustom.ini` vs `Starfield.ini`, `bInvalidateOlderFiles` behaviour). The owner has Starfield on Proton — verify the chosen keys actually make a loose-file mod load in-game before locking the merge logic. This is the one place a minimal model can be wrong against the real game.
 
-### Anti-Pattern 1: Copying mods directly into the game folder
-**What people do:** Extract mods straight into `steamapps/common/<Game>/Data`.
-**Why it's wrong:** Destroys the vanilla state, makes uninstall guesswork, and corrupts the base install (violates the Core Value). Steam "verify integrity" will fight you.
-**Do this instead:** Staging store + manifest-driven linking; the game folder only ever contains links + backed-up originals.
+---
 
-### Anti-Pattern 2: Purging by directory scan instead of by manifest
-**What people do:** Delete everything in `Data/` that "looks like a mod."
-**Why it's wrong:** Deletes user/game-created files and vanilla content; can't distinguish managed from unmanaged.
-**Do this instead:** Purge only files recorded in the manifest; restore pre-existing backups; use scanning solely to *warn* about external drift.
+## Question 4 — Suggested build order (phases, with dependencies)
 
-### Anti-Pattern 3: Ignoring case-sensitivity until it breaks
-**What people do:** Deploy mod files with their archive casing onto ext4.
-**Why it's wrong:** Bethesda games/mods reference paths in mixed case; Linux ext4/btrfs are case-sensitive, so Wine lookups fail and assets silently don't load.
-**Do this instead:** Detect/handle case at deploy time — prefer placing the game tree on an ext4 dir with the `casefold` (+F) attribute, or normalize casing and maintain a case map. Make this a first-class concern in `deploy/casefold.rs`.
+```
+Phase 6  Game registration + detection   ──┬──▶ Phase 7  Load order (Starfield)
+  (no deps)                                 │
+                                            └──▶ Phase 8  Reversible INI activation
+                                                            │
+                        Phase 9  On-hardware in-game verification ◀── (7 AND 8)
+```
 
-### Anti-Pattern 4: Business logic inside Tauri commands
-**What people do:** Put deployment/sync logic in `#[tauri::command]` functions.
-**Why it's wrong:** Untestable without a webview; couples safety-critical code to the UI.
-**Do this instead:** Commands are thin; logic lives in `crates/` and is unit/property-tested headless.
+| Phase | Scope | Depends on | Done-when (verifiable) |
+|-------|-------|-----------|------------------------|
+| **6 — Game registration & detection** | Add `STARFIELD = 1716740` across the 6 allow-list sites (Q1 rows 1,3,4,5,6); name/exe; ship `assets/starfield/masterlist.yaml`. Store already generic. | none | `detect_games()` lists Starfield; `add_managed_game` + `get_game(1716740)` round-trip; resolve yields correct install/prefix. |
+| **7 — Load order** | Verify the four mappings drive a full plugin scan → LOOT sort → `apply_load_order` for Starfield. | 6 (needs a resolved `Game`) | `Plugins.txt` written (asterisk) at `AppData/Local/Starfield`; `propose_sort` returns a Starfield-masterlist order; early-loader prefix accepted by libloot (no `"load order interaction failed"`). |
+| **8 — Reversible INI activation** | New `deploy::gameconfig` module + `steam::my_games_path`; wire activate/deactivate into `deploy`/`deploy_winners`/`purge`/`recover_on_launch`; reuse `backup.rs` + journal. | 6 (needs prefix path); **soft-after 7** (cleaner once a real Starfield deploy exists to hook) | round-trip-pristine test (reuse `testkit` blake3 assertions) proves INI restored byte-for-byte on purge, and deleted when created pure-add; crash-injection replay via `recover_on_launch` converges. |
+| **9 — On-hardware in-game verification** | Owner deploys a real Starfield mod on Proton; confirm it loads AND is visible in-game; confirm the INI keys are correct. | 7 AND 8 | a real loose-file + plugin mod is visible in-game; purge leaves the game + INI pristine. |
 
-## Integration Points
+**Dependency notes:**
+- 7 and 8 are **independent after 6** and *could* run in parallel; recommend 8 lands after 7 so its lifecycle hook is exercised against a working Starfield deployment (lower integration risk than wiring the hook blind).
+- 9 is a **gate**, not code — it validates the CE2 domain assumptions (INI keys, loose-file loading, `ba2` v3) that Phases 7–8 encode. The owner's live Proton install is the only way to close the MEDIUM-confidence items.
 
-### External Services
+---
 
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| NexusMods API | OAuth 2.0 (system browser → JWT w/ premium claim) for v2 GraphQL; legacy v1 REST + personal API key. `getDownloadURLs` returns CDN mirrors. | Non-premium users can't auto-download — must click through manual confirm. Respect rate limits (handle RateLimitError). Register OS handler for `nxm://`. |
-| `nxm://` protocol | Tauri deep-link plugin registers the scheme; URL carries `gameId/modId/fileId` (+ `key`/`expires` for premium). | One-click installs from the website depend on this. AppImage must install a `.desktop` MIME handler. |
-| Collections (NexusMods) | GraphQL `collectionRevision` → ordered list of mod+file refs + metadata; install loop downloads/extracts/deploys each. | Revisions are versioned; store the revision id so a collection can be updated/reverted. |
-| Steam / Proton | Filesystem discovery only (no Steam API needed for v1): `libraryfolders.vdf`, `appmanifest_*.acf`, `compatdata/<appid>/pfx`. | Launch is delegated to Steam; manager does not launch the game itself. |
+## Anti-patterns to avoid (project-specific)
 
-### Internal Boundaries
-
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| Frontend ↔ Command layer | `invoke` (req/resp) + `emit`/Channels (progress) | Only boundary the UI knows |
-| Command layer ↔ Core crates | Direct Rust calls returning `Result` | Commands own no logic |
-| Deploy engine ↔ Steam resolver | Engine receives resolved absolute roots (install dir + prefix AppData) | Engine stays Proton-agnostic |
-| Deploy engine ↔ Store | Manifest read/write inside DB transactions | Atomicity = no half-deployed state recorded |
-
-## Suggested Build Order (component dependencies)
-
-Driven by dependency edges and by front-loading the Core Value (safe reversible deploy). Each step is independently demonstrable.
-
-1. **`core` model + `store` (SQLite) + `steam` discovery.** Foundation: define Game/Profile/Mod/FileEntry/LoadOrder; detect Steam libraries and resolve a Bethesda game's install dir + prefix paths. *Demo: app lists detected games and their resolved paths.* (No deps.)
-2. **Mod Staging Store + `extract`.** Manually point at an archive → extract into staging → rows in DB. *Demo: a mod appears in the list, its files enumerated.* (Deps: 1.)
-3. **Deployment Engine — deploy + purge + manifest (single method first).** The crown jewel. Hardlink with copy fallback, full manifest, vanilla backup, exact purge. *Demo: deploy one mod, see links in `Data/`, purge, folder pristine.* (Deps: 1, 2.) **Build the most tests here.**
-4. **Conflict resolution + load order.** Multiple mods, winner-by-priority, conflict UI data, reorder→redeploy. (Deps: 3.)
-5. **Three-way synchronizer + symlink method + casefold handling.** Delta deploys, external-change detection, Proton case correctness. (Deps: 3, 4.)
-6. **NexusMods API client + OAuth + download manager.** Login, `getDownloadURLs`, resumable downloads into cache → feed step 2's extractor. (Deps: 2.)
-7. **`nxm://` handler.** One-click installs wired to steps 6→2→3. (Deps: 6.)
-8. **Collections installer.** GraphQL revision → batch the 6→2→3→4 loop. (Deps: 6, 7, 4.)
-9. **Profiles (multi-profile switching) + AppImage packaging.** Per-game profile switch re-runs resolve+deploy; package + register MIME handler. (Deps: 3–8.)
-
-Steps 1–5 deliver the differentiating safety story end-to-end before any NexusMods networking exists — which de-risks the project, since the API surface is replaceable but the deployment correctness is the reason to exist.
+| Anti-pattern | Why bad here | Instead |
+|--------------|--------------|---------|
+| A new `crates/gameconfig` crate for the INI | Ceremony for ~120 LOC that needs `store`/`core`/`backup`/`journal` — all already in `deploy`; a new crate also escapes the crown-jewel test harness | `crates/deploy/src/gameconfig.rs` reusing `backup.rs` + journal |
+| Hand-rolling INI backup/restore | Re-implements the proven content-addressed vanilla ledger; risks the reversibility guarantee | Call `backup::backup_vanilla_if_absent` / `restore_vanilla` verbatim (they're path-generic) |
+| Generalizing `resolve_target`/`deploy_root` to reach outside `Data/` | Touches the crown-jewel path guard for one file; widens the containment invariant that protects every deploy | Keep the INI on its own tiny activate/deactivate path with a sentinel key; leave the Data/ guard untouched |
+| A refinery migration for Starfield | Registry + ledgers are appid-generic; nothing schema-shaped changes | No migration; add data (const/arm) only |
+| Bumping libloot/esplugin for Starfield | Both 0.29/6.1 already expose Starfield variants | Add the `match` arms; no version change |
+| Wiring INI calls into `src-tauri/commands/*` | Violates the zero-logic-in-adapters boundary and forgets an entry point | Hook the engine `deploy`/`deploy_winners`/`purge` once; all commands inherit it |
 
 ## Sources
 
-- [Vortex Mod Deployment — DeepWiki](https://deepwiki.com/Nexus-Mods/Vortex/3.2-mod-deployment) (MEDIUM-HIGH: derived from Vortex source)
-- [Vortex Install Manager — DeepWiki](https://deepwiki.com/Nexus-Mods/Vortex/3.1-install-manager)
-- [Vortex Nexus API — DeepWiki](https://deepwiki.com/Nexus-Mods/Vortex/6.1-nexus-api)
-- [NexusMods.App — Disk State Storage ADR (0016)](https://nexus-mods.github.io/NexusMods.App/developers/decisions/backend/0016-disk-state-storage/) (HIGH: official ADR)
-- [MnemonicDB docs](https://nexus-mods.github.io/NexusMods.MnemonicDB/) and [repo](https://github.com/Nexus-Mods/NexusMods.MnemonicDB) (HIGH: official)
-- [Nexus Mods Deployment Methods wiki](https://wiki.nexusmods.com/index.php/Deployment_Methods) (MEDIUM)
-- [Tauri v2 State Management](https://v2.tauri.app/develop/state-management/) (HIGH: official)
-- [Locate Steam Play game files on Linux](https://linuxhint.com/locate_linux_steam_game_file/) and [Single Proton prefix guide](https://steamcommunity.com/sharedfiles/filedetails/?id=3378517770) (MEDIUM: community)
-- [ext4 casefold / Wine case-insensitivity (kernel + archinstall discussion)](https://github.com/archlinux/archinstall/issues/380) (MEDIUM: converging community/kernel sources)
-- [Nexus Mods GraphQL API](https://graphql.nexusmods.com/) and [node-nexus-api](https://github.com/Nexus-Mods/node-nexus-api) (MEDIUM-HIGH)
-
----
-*Architecture research for: Rust + Tauri Proton/Wine mod manager (NexTwist)*
-*Researched: 2026-06-20*
+- Direct source read (HIGH): `crates/core/src/model.rs`, `crates/store/src/{registry,vanilla}.rs`, `crates/steam/src/{resolve,discover}.rs`, `crates/loadorder/src/{lib,loot,scan,masterlist}.rs`, `crates/deploy/src/{lib,engine,backup,profile}.rs`, `src-tauri/src/commands/{deploy,profiles}.rs`, migrations `V1..V5`.
+- Dependency capability (HIGH): installed `libloot 0.29` `GameType::Starfield` and `esplugin 6.1` `GameId::Starfield` (source-inspected in `~/.cargo`).
+- Starfield AppID 1716740, `Documents/My Games/Starfield/StarfieldCustom.ini`, CE2 loose-file `[Archive]` keys, `loot/starfield` masterlist (MEDIUM — community/modding knowledge; the INI keys and libloot Starfield early-loader completeness are flagged for on-hardware verification in Phase 9).
