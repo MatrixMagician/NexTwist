@@ -135,9 +135,20 @@ fn extract_personal(reg: &str) -> Option<String> {
         }
         if in_section && let Some(rest) = t.strip_prefix("\"Personal\"") {
             let rest = rest.trim_start().strip_prefix('=')?.trim_start();
+            // Optional Wine type tag before the quote: `str(2):` (REG_EXPAND_SZ,
+            // Wine's default for shell-folder redirects) or `str:`.
+            let rest = rest
+                .strip_prefix("str(2):")
+                .or_else(|| rest.strip_prefix("str:"))
+                .unwrap_or(rest)
+                .trim_start();
             let inner = rest.strip_prefix('"')?;
             let end = inner.find('"')?;
-            return Some(inner[..end].replace("\\\\", "\\"));
+            let value = inner[..end].replace("\\\\", "\\");
+            // Expand a leading %USERPROFILE% to the steamuser home so a genuine
+            // REG_EXPAND_SZ redirect resolves (still passes through the
+            // windows_path_to_components traversal guard downstream).
+            return Some(value.replace("%USERPROFILE%", "C:\\users\\steamuser"));
         }
     }
     None
@@ -343,6 +354,29 @@ mod tests {
                 "resolved path for {value:?} must stay under <prefix>/drive_c"
             );
         }
+    }
+
+    #[test]
+    fn documents_redirect_str2_userprofile_form_is_expanded() {
+        // ME-01: Wine's REG_EXPAND_SZ form `str(2):"%USERPROFILE%\Documents"`
+        // is the default for a genuine Documents redirect and must be honored.
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path().to_path_buf();
+        std::fs::create_dir_all(
+            root.join("drive_c/users/steamuser/Documents/My Games/Starfield"),
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("user.reg"),
+            "[Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Explorer\\\\User Shell Folders]\n\"Personal\"=str(2):\"%USERPROFILE%\\\\Documents\"\n",
+        )
+        .unwrap();
+        let resolved = my_games_path(&root);
+        assert_eq!(
+            resolved,
+            root.join("drive_c/users/steamuser/Documents/My Games/Starfield"),
+            "str(2)/%USERPROFILE% redirect must resolve to the expanded in-prefix path"
+        );
     }
 
     #[test]
