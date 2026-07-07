@@ -83,7 +83,21 @@ pub fn my_games_path(prefix: &Path) -> PathBuf {
     let mut components = documents_components(prefix);
     components.push("My Games".to_string());
     components.push(STARFIELD_FOLDER.to_string());
-    resolve_cased(prefix, &components)
+    let resolved = resolve_cased(prefix, &components);
+    // Load-bearing last-line invariant (T-06-01): whatever the redirect
+    // produced, the final My Games path MUST stay under <prefix>/drive_c. This
+    // is a lexical, canonicalize-free containment check — safe because the
+    // component guard already rejects `..`, so no `..` can appear in the
+    // resolved path to defeat `starts_with`. Any escape falls back to the
+    // default steamuser Documents tree.
+    if resolved.starts_with(prefix.join("drive_c")) {
+        resolved
+    } else {
+        let mut fallback = default_documents_components();
+        fallback.push("My Games".to_string());
+        fallback.push(STARFIELD_FOLDER.to_string());
+        resolve_cased(prefix, &fallback)
+    }
 }
 
 /// The path components (relative to `prefix`) of the Documents folder: either the
@@ -130,7 +144,10 @@ fn extract_personal(reg: &str) -> Option<String> {
 }
 
 /// Map a Windows `C:\users\...` path to in-prefix components rooted at `drive_c`.
-/// Rejects a non-`C:` drive and any `.`/`..`/empty segment (traversal guard).
+/// Rejects a non-`C:` drive and any segment that is not a single plain path
+/// component — `.`/`..`/empty, an embedded `/`, or an absolute `/…` segment —
+/// all of which could let `resolve_cased`'s `Path::join` escape drive_c
+/// (T-06-01 traversal guard). `my_games_path` re-checks lexical containment.
 fn windows_path_to_components(value: &str) -> Option<Vec<String>> {
     let mut parts = value.split('\\');
     if !parts.next()?.eq_ignore_ascii_case("C:") {
@@ -138,7 +155,19 @@ fn windows_path_to_components(value: &str) -> Option<Vec<String>> {
     }
     let mut out = vec!["drive_c".to_string()];
     for p in parts {
-        if p.is_empty() || p == "." || p == ".." {
+        // Reject empty / dot-dirs AND any segment that is not a single plain
+        // path component. A '/' inside a segment, a leading '/' (absolute), or
+        // any non-Normal component would let `Path::join` in resolve_cased
+        // escape drive_c / the prefix root (verified: `C:\/etc` → `/etc`,
+        // `C:\foo/../../etc\bar` → out of drive_c). Backslash `..` is caught
+        // here; the `/`-embedded and absolute forms are caught by the '/' and
+        // component-count checks.
+        if p.is_empty()
+            || p == "."
+            || p == ".."
+            || p.contains('/')
+            || Path::new(p).components().count() != 1
+        {
             return None;
         }
         out.push(p.to_string());
@@ -280,6 +309,40 @@ mod tests {
             root.join("drive_c/users/steamuser/Documents/My Games/Starfield"),
             "traversal Personal must fall back to the default path"
         );
+    }
+
+    #[test]
+    fn documents_redirect_forward_slash_and_absolute_are_rejected() {
+        // HI-01 regression (LO-02): the `/`-embedded, absolute-`/`, and
+        // mixed-separator vectors that the old backslash-only guard let escape
+        // must ALL fall back to the default and stay under drive_c. These MUST
+        // fail against the pre-fix guard.
+        for value in [
+            "C:\\users/../../../etc", // forward-slash traversal inside one backslash segment
+            "C:\\/etc",               // absolute unix segment (would become /etc)
+            "C:\\foo/../../etc\\bar",  // mixed-separator escape out of drive_c
+        ] {
+            let dir = tempfile::TempDir::new().unwrap();
+            let root = dir.path().to_path_buf();
+            std::fs::write(
+                root.join("user.reg"),
+                format!(
+                    "[Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Explorer\\\\User Shell Folders]\n\"Personal\"=\"{}\"\n",
+                    value.replace('\\', "\\\\")
+                ),
+            )
+            .unwrap();
+            let resolved = my_games_path(&root);
+            assert_eq!(
+                resolved,
+                root.join("drive_c/users/steamuser/Documents/My Games/Starfield"),
+                "traversal vector {value:?} must fall back to the default path"
+            );
+            assert!(
+                resolved.starts_with(root.join("drive_c")),
+                "resolved path for {value:?} must stay under <prefix>/drive_c"
+            );
+        }
     }
 
     #[test]
