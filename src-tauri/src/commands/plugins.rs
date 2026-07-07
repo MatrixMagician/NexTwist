@@ -299,6 +299,65 @@ pub async fn sort_with_loot(
     .map_err(boundary_err)
 }
 
+/// Reconcile the on-disk `plugins.txt` against the recorded plugin state (SFLO-04).
+///
+/// Thin adapter: under one held lock it resolves the managed game + active profile, reads the
+/// recorded per-profile plugin state, reads the on-disk asterisk `plugins.txt` from the prefix
+/// AppData (an absent file → empty string, NOT an error — a never-launched/unwritten game
+/// reconciles cleanly), computes the libloot-derived protected set, and forwards EXACTLY ONE
+/// call to `loadorder::reconcile_plugins_txt`. All classification lives in the engine.
+///
+/// `deploy::verify` / `VerifyReport` is a SEPARATE surface and is deliberately untouched:
+/// `plugins.txt` lives in the prefix AppData, never seen by the `Data/`-hash verify walk
+/// (07-RESEARCH Pitfall 4).
+///
+/// `protected_plugins` opens a libloot game but does no blocking HTTP (unlike `sort_with_loot`'s
+/// masterlist fetch), so — like `save_plugin_order` — it is called directly under the lock.
+#[tauri::command]
+pub async fn reconcile_plugins(
+    state: State<'_, Mutex<AppState>>,
+    appid: u32,
+) -> Result<loadorder::ReconcileState, String> {
+    let guard = state.lock().await;
+    let game = guard
+        .store
+        .get_game(appid)
+        .map_err(boundary_err)?
+        .ok_or_else(|| format!("game {appid} is not managed"))?;
+    let profile_id = guard
+        .store
+        .active_profile(appid)
+        .map_err(boundary_err)?
+        .map(|p| p.id)
+        .ok_or_else(|| format!("game {appid} has no active profile"))?;
+    let recorded = guard.store.list_plugin_state(profile_id).map_err(boundary_err)?;
+
+    let folder = loadorder::appdata_folder_name(appid)
+        .ok_or_else(|| format!("game {appid} is not supported"))?;
+    let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
+
+    // An absent Plugins.txt is treated as empty (never-launched game reconciles cleanly), NOT
+    // an error; any other read error is a real boundary error.
+    let on_disk_txt = match std::fs::read_to_string(appdata_local.join("Plugins.txt")) {
+        Ok(txt) => txt,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(boundary_err(e)),
+    };
+
+    // Protected set from the live libloot probe (data-driven EXPECTED set); enabled_names =
+    // the recorded state's enabled plugins (what NexTwist itself writes as `*` lines).
+    let enabled_names: std::collections::HashSet<String> = recorded
+        .iter()
+        .filter(|p| p.enabled)
+        .map(|p| p.name.clone())
+        .collect();
+    let protected =
+        loadorder::protected_plugins(appid, &game.install_dir, &appdata_local, &enabled_names)
+            .map_err(boundary_err)?;
+
+    Ok(loadorder::reconcile_plugins_txt(&recorded, &on_disk_txt, &protected))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

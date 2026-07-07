@@ -144,6 +144,7 @@ pub fn run() {
             commands::plugins::set_plugin_enabled,
             commands::plugins::save_plugin_order,
             commands::plugins::sort_with_loot,
+            commands::plugins::reconcile_plugins,
             commands::profiles::list_profiles,
             commands::profiles::create_profile,
             commands::profiles::switch_profile,
