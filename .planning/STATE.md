@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: MVP
-current_phase: 0
-status: Awaiting next milestone
-stopped_at: Milestone v1.0 (MVP) completed and archived 2026-06-23 — all 5 phases shipped, 40/40 requirements satisfied, tagged v1.0.
-last_updated: "2026-06-23T15:15:00.000Z"
-last_activity: 2026-06-23
-last_activity_desc: Milestone v1.0 completed and archived
+milestone: v1.1
+milestone_name: Starfield Support
+status: planning
+last_updated: "2026-07-07T16:41:39.686Z"
+last_activity: 2026-07-07
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 21
-  completed_plans: 21
-  percent: 100
-current_phase_name: "— (milestone v1.0 complete)"
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -28,13 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-23 after v1.0)
 
 ## Current Position
 
-Phase: Milestone v1.0 (MVP) complete and archived
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-23 — Milestone v1.0 completed, archived, and tagged
-
-Shipped: 5 phases, 21 plans, 26 tasks · 40/40 v1 requirements · 4 of 5 phases carry a SECURITY.md (Phases 1/2/4/5, threats_open: 0); Phase 3 verified inline in 03-VERIFICATION (no standalone SECURITY.md — optional `/gsd-secure-phase 3` follow-up).
-Full history: `.planning/milestones/v1.0-ROADMAP.md`, `v1.0-REQUIREMENTS.md`, `v1.0-MILESTONE-AUDIT.md`; `.planning/MILESTONES.md`; `.planning/RETROSPECTIVE.md`.
+Status: Defining requirements
+Last activity: 2026-07-07 — Milestone v1.1 started
 
 ## Accumulated Context
 
@@ -58,6 +51,7 @@ Items acknowledged and deferred at the v1.0 milestone close on 2026-06-23:
 | uat | Phase 04 — `04-UAT.md` | partial (accepted) | FOMOD wizard PASSED; live Collection download BLOCKED by the same external Nexus policy. Documented `known_limitation`. |
 
 **Non-blocking follow-ups (carry to v2/next):**
+
 - Nexus-policy-compliant Collection ingest / manifest-import path (the engine already works on an already-fetched manifest).
 - Profile-management UI + confirmation modal (accidental-loss protections are already enforced in the headless engine).
 - Optional: visible mod-content in-game re-test now that the install-archive double-nesting bug is fixed (commit 2fa9821).

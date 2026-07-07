@@ -6,6 +6,19 @@ NexTwist is a Rust + Tauri desktop application that brings Vortex/Mod-Organizer-
 
 **Shipped in v1.0 (2026-06-23):** Steam/Proton game detection (Skyrim SE, Fallout 4); a reversible deployment engine (non-destructive deploy, byte-for-byte pristine purge, crash-safe journaled recovery, verify/repair); file-level conflict resolution, plugin load order via libloot/LOOT, and per-game profiles; NexusMods OAuth2/API-key login with secure keyring storage, in-app Premium downloads and `nxm://` one-click handoff; guided FOMOD installers; the Collection lifecycle (apply pinned choices + load order + deploy + reversible uninstall, over a fetched manifest); and a license-clean Linux AppImage as the distribution channel.
 
+## Current Milestone: v1.1 Starfield Support
+
+**Goal:** Bring full, safe mod management to Starfield — a Creation Engine 2 Bethesda game — reusing the v1.0 reversible-deployment engine while adding the CE2-specific handling required for mods to actually load in-game.
+
+**Target features:**
+- Starfield detection under Proton (Steam AppID 1716740) — install dir, Proton prefix, and the CE2 `My Games/Starfield` AppData path
+- Plugin load order for Starfield: asterisk-format `plugins.txt` at the correct CE2 prefix location, LOOT sort via libloot's Starfield masterlist
+- Reversible loose-file activation — auto-manage `StarfieldCustom.ini` (`bInvalidateOlderFiles` / `sResourceDataDirsFinal`) under the same non-destructive + byte-for-byte reversible guarantee as deployment
+- `.ba2` v3 archive awareness where relevant
+- On-hardware verification: a real Starfield mod deploys AND is visible in-game
+
+**Key context:** Game-support extension, not a re-architecture — reuse the headless `crates/*` engine (deploy ladder, journal, conflicts, profiles). The safety guarantee (non-destructive, reversible, conflict-aware) must extend to the new INI-management path. Owner has Starfield on Proton for live verification. Phase numbering continues from v1.0 (starts at Phase 6).
+
 ## Core Value
 
 Mods must install and uninstall **safely**: deployment is non-destructive (the base game install is never directly corrupted), fully reversible (any mod or the whole load order can be removed leaving the game pristine), and conflict-aware (the user always knows and controls which mods overwrite which files). If everything else fails, this must hold.
@@ -121,4 +134,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-23 after v1.0 milestone (MVP shipped — 5 phases, 40/40 requirements; see RETROSPECTIVE.md)*
+*Last updated: 2026-07-07 — started milestone v1.1 Starfield Support (previous: v1.0 MVP shipped 2026-06-23, 5 phases, 40/40 requirements; see RETROSPECTIVE.md)*
