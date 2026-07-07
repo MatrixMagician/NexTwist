@@ -21,10 +21,10 @@ Each requirement maps to exactly one roadmap phase (see Traceability). Phase num
 
 ### Starfield Load Order
 
-- [ ] **SFLO-01**: User can enable/disable and order Starfield plugins, written as asterisk-format `plugins.txt` at the CE2 prefix location
-- [ ] **SFLO-02**: User can auto-sort the Starfield load order via LOOT using libloot's Starfield masterlist
-- [ ] **SFLO-03**: NexTwist never reorders, disables, or writes Starfield's protected base masters, and correctly classifies the CE2 "medium master" tier — both determined via libloot, not hard-coded
-- [ ] **SFLO-04**: Verify/repair treats the game's on-launch rewrite of `plugins.txt` (e.g. `.ccc` entries, stripped implicit ESMs) as expected, deriving intent from recorded plugin state rather than a raw on-disk diff
+- [x] **SFLO-01**: User can enable/disable and order Starfield plugins, written as asterisk-format `plugins.txt` at the CE2 prefix location
+- [x] **SFLO-02**: User can auto-sort the Starfield load order via LOOT using libloot's Starfield masterlist
+- [x] **SFLO-03**: NexTwist never reorders, disables, or writes Starfield's protected base masters, and correctly classifies the CE2 "medium master" tier — both determined via libloot, not hard-coded
+- [x] **SFLO-04**: Verify/repair treats the game's on-launch rewrite of `plugins.txt` (e.g. `.ccc` entries, stripped implicit ESMs) as expected, deriving intent from recorded plugin state rather than a raw on-disk diff
 
 ### Reversible Loose-File Activation (StarfieldCustom.ini)
 
@@ -64,10 +64,10 @@ Each requirement maps to exactly one roadmap phase (see Traceability). Phase num
 | SFDET-01 | Phase 6 — Starfield Detection & CE2 Path Resolution | Complete |
 | SFDET-02 | Phase 6 — Starfield Detection & CE2 Path Resolution | Complete |
 | SFDET-03 | Phase 6 — Starfield Detection & CE2 Path Resolution | Complete |
-| SFLO-01 | Phase 7 — Starfield Load Order | Pending |
-| SFLO-02 | Phase 7 — Starfield Load Order | Pending |
-| SFLO-03 | Phase 7 — Starfield Load Order | Pending |
-| SFLO-04 | Phase 7 — Starfield Load Order | Pending |
+| SFLO-01 | Phase 7 — Starfield Load Order | Complete |
+| SFLO-02 | Phase 7 — Starfield Load Order | Complete |
+| SFLO-03 | Phase 7 — Starfield Load Order | Complete |
+| SFLO-04 | Phase 7 — Starfield Load Order | Complete |
 | SFINI-01 | Phase 8 — Reversible StarfieldCustom.ini Activation | Pending |
 | SFINI-02 | Phase 8 — Reversible StarfieldCustom.ini Activation | Pending |
 | SFINI-03 | Phase 8 — Reversible StarfieldCustom.ini Activation | Pending |
