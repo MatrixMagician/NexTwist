@@ -273,16 +273,20 @@ pub fn drift_notice(installed: Option<u64>, validated: u64) -> Option<DriftNotic
 | A3 | The game creates `Documents/My Games/Starfield` (and its INI/Plugins.txt) on **first launch**, absent before. | Q4 | Low — consistent across all Bethesda CE/CE2 titles and community reports; the first-launch state is advisory guidance, and a wrong guess only shows/hides a "launch once" hint. |
 | A4 | Bundling a `loot/starfield@v0.29` `masterlist.yaml` snapshot is legally safe (CC0-1.0, same as SSE/FO4). | Masterlist | Low — the SSE/FO4 snapshots are already bundled under this assumption; confirm the LICENSE in `loot/starfield` is CC0 when fetching the snapshot (it is, historically, for all `loot/*` masterlists). |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+Both questions are resolved-by-recommendation for Phase 6; their remaining unknowns are inherently deferred to Phase 9 (no live Proton prefix on this host). The recommendations are implemented in the Phase 6 plans.
 
 1. **Does any real Proton Starfield prefix redirect Documents away from `steamuser/Documents`?**
    - What we know: libloadorder assumes it does not (uses the default derivation). Proton defaults keep it in-prefix.
    - What's unclear: Whether the owner's prefix (or Steam Deck / custom setups) ever repoints "Personal".
    - Recommendation: Implement the `user.reg` read as defensive with default fallback; **confirm on the owner's live prefix in Phase 9**.
+   - **RESOLVED:** Implemented in 06-01 Task 3 as a traversal-guarded, defensive `user.reg` "Personal" read with the default `steamuser/Documents` path as the load-bearing fallback. Live-prefix confirmation is deferred to Phase 9 (SFVER-01) — no further closure possible on this host.
 
 2. **Exact `buildid` value of the "last-validated build" constant.**
    - What we know: It must be a real build the owner validates in Phase 9; Phase 6 ships a placeholder + the comparison logic.
    - Recommendation: Seed `VALIDATED_BUILD` with the current installed build at Phase 9 time; Phase 6 can seed it with the build present on the owner's machine now (or `0` to suppress the notice until Phase 9 sets it). Document it as "update in Phase 9."
+   - **RESOLVED:** Implemented in 06-01 Task 3 as `VALIDATED_BUILD = 0` (baseline unset → `drift_notice` returns `None`, notice dormant). Phase 9 sets the real baseline. The compare logic ships and is unit-tested now.
 
 ## Environment Availability
 
