@@ -345,15 +345,16 @@ pub async fn reconcile_plugins(
     };
 
     // Protected set from the live libloot probe (data-driven EXPECTED set); enabled_names =
-    // the recorded state's enabled plugins (what NexTwist itself writes as `*` lines).
+    // the recorded state's enabled plugins (what NexTwist itself writes as `*` lines). IN-02:
+    // degrade gracefully via the same `protected_set` helper `list_plugins` uses — a probe
+    // failure (unresolvable prefix / libloot hiccup) logs and treats protected as EMPTY rather
+    // than hard-failing this advisory reconciliation surface with a scary error toast.
     let enabled_names: std::collections::HashSet<String> = recorded
         .iter()
         .filter(|p| p.enabled)
         .map(|p| p.name.clone())
         .collect();
-    let protected =
-        loadorder::protected_plugins(appid, &game.install_dir, &appdata_local, &enabled_names)
-            .map_err(boundary_err)?;
+    let protected = protected_set(&game, appid, &enabled_names);
 
     Ok(loadorder::reconcile_plugins_txt(&recorded, &on_disk_txt, &protected))
 }
