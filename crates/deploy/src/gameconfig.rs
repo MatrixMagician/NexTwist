@@ -105,6 +105,10 @@ pub enum IniOutcome {
     Restored,
     /// The INI was never activated by NexTwist — restore was a safe no-op.
     NotActive,
+    /// The on-disk INI carries a UTF-16/UTF-32 BOM the byte-oriented editor refuses to edit
+    /// (SFINI-03 / WR-02). Nothing was written — the user's file is left byte-for-byte
+    /// intact rather than corrupted with a mixed-encoding UTF-8 block appended.
+    UnsupportedEncoding,
 }
 
 /// How the on-disk StarfieldCustom.ini has drifted from its recorded-active state while
@@ -137,6 +141,9 @@ pub(crate) mod editor {
         Write(Vec<u8>),
         /// A non-empty user `sResourceDataDirsFinal` blocked the merge under `Block`.
         Conflict(String),
+        /// A UTF-16/UTF-32 BOM was detected: this byte-oriented editor cannot safely parse
+        /// or edit a multi-byte-encoded INI, so it refuses to touch it (WR-02).
+        Unsupported,
     }
 
     /// Length (in bytes) of a leading byte-order mark: UTF-8 (EF BB BF), UTF-16 LE
@@ -150,6 +157,17 @@ pub(crate) mod editor {
         } else {
             0
         }
+    }
+
+    /// A multi-byte Unicode BOM (UTF-16 LE/BE or UTF-32 LE/BE) this byte-oriented editor
+    /// cannot safely parse or edit — every ASCII char is interleaved with NUL, so
+    /// `[Archive]` / `sResourceDataDirsFinal=` never match and a UTF-8 block would corrupt
+    /// the file. The only encodings we own are UTF-8 and BOM-less ANSI/UTF-8; refuse the
+    /// rest (WR-02). (UTF-32 LE `FF FE 00 00` shares the UTF-16 LE `FF FE` prefix.)
+    pub(crate) fn is_unsupported_bom(bytes: &[u8]) -> bool {
+        bytes.starts_with(&[0xFF, 0xFE]) // UTF-16 LE / UTF-32 LE
+            || bytes.starts_with(&[0xFE, 0xFF]) // UTF-16 BE
+            || bytes.starts_with(&[0x00, 0x00, 0xFE, 0xFF]) // UTF-32 BE
     }
 
     /// Split `body` into raw lines, EACH INCLUDING its trailing terminator (`\r\n`, `\n`,
@@ -291,6 +309,13 @@ pub(crate) mod editor {
             );
             return MergePlan::Write(s.into_bytes());
         };
+        // Refuse a UTF-16/UTF-32-encoded INI: the byte-oriented merge below would fail to
+        // match `[Archive]` / `sResourceDataDirsFinal=` (they are NUL-interleaved) and would
+        // append a UTF-8 block, corrupting the file and silently overriding the user's real
+        // value. Never edit what we cannot safely parse (WR-02).
+        if is_unsupported_bom(bytes) {
+            return MergePlan::Unsupported;
+        }
         let bom_len = detect_bom(bytes);
         let bom = &bytes[..bom_len];
         let body = &bytes[bom_len..];
@@ -420,6 +445,11 @@ pub fn ensure_ini_active(
         editor::MergePlan::Conflict(current_value) => {
             return Ok(IniOutcome::Blocked { current_value });
         }
+        // A UTF-16/UTF-32 INI we refuse to edit: write nothing, take no provenance row, and
+        // leave the user's file byte-for-byte intact (WR-02).
+        editor::MergePlan::Unsupported => {
+            return Ok(IniOutcome::UnsupportedEncoding);
+        }
         editor::MergePlan::Write(bytes) => bytes,
     };
 
@@ -508,6 +538,9 @@ pub fn ini_drift(store: &Store, game: &Game) -> Result<Option<IniDrift>, DeployE
     match editor::plan_merge(Some(&current), IniConflictResolution::Block) {
         // A pre-existing non-empty user value is a recorded/blocked state, not repairable drift.
         editor::MergePlan::Conflict(_) => Ok(None),
+        // A UTF-16/UTF-32 INI we refuse to edit is likewise not repairable drift — surface as
+        // clear so repair never appends a UTF-8 block into it (WR-02).
+        editor::MergePlan::Unsupported => Ok(None),
         // Planning is a no-op against the current bytes → already exactly active.
         editor::MergePlan::Write(bytes) if bytes == current => Ok(None),
         editor::MergePlan::Write(_) => Ok(Some(IniDrift::Changed)),
@@ -628,6 +661,7 @@ mod editor_tests {
         match plan_merge(current, r) {
             MergePlan::Write(b) => b,
             MergePlan::Conflict(v) => panic!("unexpected conflict: {v}"),
+            MergePlan::Unsupported => panic!("unexpected unsupported encoding"),
         }
     }
 
@@ -715,10 +749,31 @@ mod editor_tests {
         let input = b"[Archive]\nsResourceDataDirsFinal=Textures\\\n";
         match plan_merge(Some(input), Block) {
             MergePlan::Conflict(v) => assert_eq!(v, "Textures\\"),
-            MergePlan::Write(_) => panic!("must block a non-empty user value"),
+            _ => panic!("must block a non-empty user value"),
         }
         // detect_conflict agrees.
         assert_eq!(detect_conflict(Some(input)).as_deref(), Some("Textures\\"));
+    }
+
+    #[test]
+    fn utf16_and_utf32_bom_are_refused_utf8_is_editable() {
+        // A UTF-16 LE INI with a REAL user value (properly NUL-interleaved) must be refused,
+        // not parsed as ASCII and appended-to (WR-02).
+        let mut le = vec![0xFF, 0xFE];
+        for u in "[Archive]\r\nsResourceDataDirsFinal=Mods\r\n".encode_utf16() {
+            le.extend_from_slice(&u.to_le_bytes());
+        }
+        assert!(matches!(plan_merge(Some(&le), Block), MergePlan::Unsupported));
+        // UTF-16 BE and UTF-32 BE too.
+        assert!(matches!(plan_merge(Some(&[0xFE, 0xFF, 0x00, b'x']), Block), MergePlan::Unsupported));
+        assert!(matches!(
+            plan_merge(Some(&[0x00, 0x00, 0xFE, 0xFF, 0x00]), Block),
+            MergePlan::Unsupported
+        ));
+        // A UTF-8 BOM file is still editable (NOT refused).
+        let mut utf8 = vec![0xEF, 0xBB, 0xBF];
+        utf8.extend_from_slice(b"[Archive]\r\nsResourceDataDirsFinal=\r\n");
+        assert!(matches!(plan_merge(Some(&utf8), Block), MergePlan::Write(_)));
     }
 
     #[test]

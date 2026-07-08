@@ -278,6 +278,54 @@ fn ini_conflict_blocks() {
 }
 
 // ---------------------------------------------------------------------------
+// WR-02 — a UTF-16-BOM INI is refused (no write), the user's bytes stay intact.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn ini_utf16_bom_is_refused_no_write() {
+    let dir = TempDir::new().unwrap();
+    let (store, game) = sf_fixture(dir.path(), MyGamesOpts::default());
+
+    // A real UTF-16 LE INI carrying a user sResourceDataDirsFinal value (NUL-interleaved).
+    let mut original = vec![0xFF, 0xFE];
+    for u in "[Archive]\r\nsResourceDataDirsFinal=Mods\r\n".encode_utf16() {
+        original.extend_from_slice(&u.to_le_bytes());
+    }
+    seed_ini(&game, &original);
+
+    // The deploy tail runs ensure under Block. It must REFUSE the UTF-16 file (write
+    // nothing) rather than append a UTF-8 [Archive] block and corrupt it.
+    deploy_loose_mod(&store, &game);
+
+    assert_eq!(
+        fs::read(ini_path(&game)).unwrap(),
+        original,
+        "a UTF-16 INI must never be edited (no mixed-encoding UTF-8 block appended)"
+    );
+    assert!(
+        game.install_dir.join("Data/meshes/x.nif").exists(),
+        "the deploy itself still succeeded despite the refused INI"
+    );
+    // Refused → no provenance row taken (we never touched it), so a later restore is a safe
+    // no-op and can never delete the user's file.
+    assert!(
+        store.vanilla_for(game.appid, Path::new(INI_FILENAME)).unwrap().is_none(),
+        "a refused UTF-16 INI takes no vanilla row"
+    );
+    // verify treats it as not-drift (repair must never clobber it).
+    assert!(
+        verify(&store, &game).unwrap().pristine,
+        "a refused UTF-16 INI is not repairable drift"
+    );
+    repair(&store, &game).unwrap();
+    assert_eq!(
+        fs::read(ini_path(&game)).unwrap(),
+        original,
+        "repair must never edit a UTF-16 INI"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // SFINI-04 — deploy×2 / profile-switch / crash-replay all converge to one [Archive].
 // ---------------------------------------------------------------------------
 
