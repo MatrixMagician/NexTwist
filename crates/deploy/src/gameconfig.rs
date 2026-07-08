@@ -107,6 +107,18 @@ pub enum IniOutcome {
     NotActive,
 }
 
+/// How the on-disk StarfieldCustom.ini has drifted from its recorded-active state while
+/// loose files are deployed (SFINI-05) — the INI analogue of `verify`'s Data/ drift
+/// buckets. `Missing` = the INI should be active but is absent; `Changed` = present but no
+/// longer carrying NexTwist's exact activation. A user-blocked conflict is NOT drift.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IniDrift {
+    /// The INI should be active (loose files deployed) but is absent on disk.
+    Missing,
+    /// The INI is present but no longer carries NexTwist's exact activation.
+    Changed,
+}
+
 // ---------------------------------------------------------------------------
 // The surgical std-only INI byte editor (pure — NO file I/O lives here).
 // ---------------------------------------------------------------------------
@@ -466,6 +478,35 @@ pub fn preview_ini_activation(game: &Game) -> Result<IniActivationPreview, Deplo
         lines: editor::owned_lines(),
         conflict: editor::detect_conflict(current.as_deref()),
     })
+}
+
+/// Detect whether the StarfieldCustom.ini has drifted from its recorded-active state, for
+/// `verify`/`repair` participation (SFINI-05). The caller gates on Starfield; ALL INI/path
+/// logic stays here (T-08-03) so `verify.rs` never touches `my_games_path` /
+/// `resolve_target` / `guard_within_root`.
+///
+/// The INI should be active exactly when loose files are deployed (`list_deployed_files`
+/// non-empty — the SAME signal `verify` keys off). Given that: a pre-existing non-empty
+/// user value is a recorded/blocked state (NOT drift → clear), an absent target is
+/// [`IniDrift::Missing`], a present-but-not-exactly-active target is [`IniDrift::Changed`],
+/// and an already-active file is clear. When no loose files are deployed there is no drift
+/// (a prior purge already restored the INI to provenance).
+pub fn ini_drift(store: &Store, game: &Game) -> Result<Option<IniDrift>, DeployError> {
+    if store.list_deployed_files(game.appid)?.is_empty() {
+        return Ok(None);
+    }
+    let target = resolve_ini_target(game)?;
+    if !path_exists(&target) {
+        return Ok(Some(IniDrift::Missing));
+    }
+    let current = fs::read(&target).map_err(|e| DeployError::io(&target, e))?;
+    match editor::plan_merge(Some(&current), IniConflictResolution::Block) {
+        // A pre-existing non-empty user value is a recorded/blocked state, not repairable drift.
+        editor::MergePlan::Conflict(_) => Ok(None),
+        // Planning is a no-op against the current bytes → already exactly active.
+        editor::MergePlan::Write(bytes) if bytes == current => Ok(None),
+        editor::MergePlan::Write(_) => Ok(Some(IniDrift::Changed)),
+    }
 }
 
 /// The shared restore body used by BOTH [`restore_ini`] and the `KIND_INI` journal replay.

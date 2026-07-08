@@ -42,8 +42,8 @@ pub use casefold::normalize_to_canonical;
 pub use conflict::{resolve, ModInput, WinnerFile};
 pub use error::DeployError;
 pub use gameconfig::{
-    ensure_ini_active, preview_ini_activation, restore_ini, IniActivationPreview,
-    IniConflictResolution, IniOutcome, INI_FILENAME,
+    ensure_ini_active, ini_drift, preview_ini_activation, restore_ini, IniActivationPreview,
+    IniConflictResolution, IniDrift, IniOutcome, INI_FILENAME,
 };
 pub use profile::{switch_profile, SwitchReport};
 pub use method::{apply_idempotent, choose_method, DeploymentMethod};

@@ -15,8 +15,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use deploy::{
-    deploy, journal, preview_ini_activation, purge, recover_on_launch, redeploy_winners,
-    StagedFiles, WinnerFile, INI_FILENAME,
+    deploy, journal, preview_ini_activation, purge, recover_on_launch, redeploy_winners, repair,
+    verify, StagedFiles, WinnerFile, INI_FILENAME,
 };
 use nextwist_core::Game;
 use store::Store;
@@ -417,5 +417,113 @@ fn nonstarfield_deploy_touches_no_ini() {
             .unwrap()
             .is_none(),
         "a non-Starfield deploy takes no StarfieldCustom.ini vanilla row"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// SFINI-05 — verify()/repair() treat the INI like a deployed file.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn ini_verify_pristine_when_active() {
+    let dir = TempDir::new().unwrap();
+    let (store, game) = sf_fixture(dir.path(), MyGamesOpts::default());
+    deploy_loose_mod(&store, &game); // auto-activates the INI
+    assert!(
+        verify(&store, &game).unwrap().pristine,
+        "verify is pristine when the INI is active and the Data/ files intact"
+    );
+}
+
+#[test]
+fn ini_verify_detects_removed_ini() {
+    let dir = TempDir::new().unwrap();
+    let (store, game) = sf_fixture(dir.path(), MyGamesOpts::default());
+    deploy_loose_mod(&store, &game);
+    let baseline = fs::read(ini_path(&game)).unwrap();
+    assert!(verify(&store, &game).unwrap().pristine);
+
+    // Delete the INI on disk while the loose files are still deployed → drift.
+    fs::remove_file(ini_path(&game)).unwrap();
+    assert!(
+        !verify(&store, &game).unwrap().pristine,
+        "a removed StarfieldCustom.ini is drift while loose files are deployed"
+    );
+
+    repair(&store, &game).unwrap();
+    assert!(ini_path(&game).exists(), "repair re-activated the INI");
+    assert!(
+        verify(&store, &game).unwrap().pristine,
+        "pristine again after repair"
+    );
+    assert_eq!(
+        fs::read(ini_path(&game)).unwrap(),
+        baseline,
+        "the restored INI is byte-identical to the post-activation baseline"
+    );
+}
+
+#[test]
+fn ini_verify_detects_key_stripped_ini() {
+    let dir = TempDir::new().unwrap();
+    let (store, game) = sf_fixture(dir.path(), MyGamesOpts::default());
+    deploy_loose_mod(&store, &game);
+    let baseline = fs::read(ini_path(&game)).unwrap();
+
+    // Strip the two owned keys out of the on-disk INI → drift.
+    fs::write(ini_path(&game), b"[Archive]\r\n").unwrap();
+    assert!(
+        !verify(&store, &game).unwrap().pristine,
+        "a key-stripped StarfieldCustom.ini is drift"
+    );
+
+    repair(&store, &game).unwrap();
+    let restored = fs::read(ini_path(&game)).unwrap();
+    assert_eq!(archive_count(&restored), 1, "repair leaves exactly one [Archive]");
+    assert_eq!(restored, baseline, "repair restores both owned keys byte-identically");
+    assert!(verify(&store, &game).unwrap().pristine);
+}
+
+#[test]
+fn ini_verify_conflict_is_not_drift() {
+    let dir = TempDir::new().unwrap();
+    let (store, game) = sf_fixture(dir.path(), MyGamesOpts::default());
+
+    // A pre-existing non-empty user value: blocked at deploy, left as-is.
+    let original = b"[Archive]\r\nsResourceDataDirsFinal=Mods\\\r\n";
+    seed_ini(&game, original);
+    deploy_loose_mod(&store, &game);
+    assert_eq!(fs::read(ini_path(&game)).unwrap(), original);
+
+    // A user-blocked value is a recorded state, NOT repairable drift.
+    assert!(
+        verify(&store, &game).unwrap().pristine,
+        "a user-blocked conflict is not verify drift"
+    );
+    repair(&store, &game).unwrap();
+    assert_eq!(
+        fs::read(ini_path(&game)).unwrap(),
+        original,
+        "repair must never clobber a user-blocked value"
+    );
+}
+
+#[test]
+fn ini_verify_ignores_nonstarfield() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let prefix = fake_my_games_prefix(&root.join("prefix"), "Starfield", MyGamesOpts::default())
+        .unwrap();
+    let (store, game) = game_with_prefix(root, SKYRIM_SE, prefix);
+
+    deploy_loose_mod(&store, &game);
+    assert!(
+        verify(&store, &game).unwrap().pristine,
+        "a non-Starfield game never reports INI drift"
+    );
+    repair(&store, &game).unwrap();
+    assert!(
+        !steam::my_games_path(&game.prefix).join(INI_FILENAME).exists(),
+        "repair never creates an INI for a non-Starfield game"
     );
 }
