@@ -34,7 +34,7 @@ Phase 6  Detection & CE2 path  ──┬──▶ Phase 7  Load order ──┐
 
 - [x] **Phase 6: Starfield Detection & CE2 Path Resolution** — Detect Starfield under Proton; resolve the CE2 `My Games/Starfield` config path (case-folded, first-launch-aware) + version-drift signal (completed 2026-07-07)
 - [x] **Phase 7: Starfield Load Order** — Asterisk `plugins.txt` at the CE2 path + LOOT sort via `GameType::Starfield`; protected base masters + medium-master tier handled via libloot (completed 2026-07-07)
-- [ ] **Phase 8: Reversible StarfieldCustom.ini Activation** — Reversible loose-file activation (provenance-driven restore-vs-delete, surgical byte-fidelity merge, journaled idempotency) upholding the byte-for-byte safety guarantee
+- [x] **Phase 8: Reversible StarfieldCustom.ini Activation** — Reversible loose-file activation (provenance-driven restore-vs-delete, surgical byte-fidelity merge, journaled idempotency) upholding the byte-for-byte safety guarantee (completed 2026-07-08)
 - [ ] **Phase 9: On-Hardware In-Game Verification** — Prove a real Starfield mod deploys AND is visible/loaded in-game on the owner's live Proton install; surface the deployed-vs-loaded distinction
 
 ## Phase Details
@@ -92,12 +92,12 @@ Phase 6  Detection & CE2 path  ──┬──▶ Phase 7  Load order ──┐
   5. The INI activation participates in the same reversibility guarantee as deployment — covered by crash recovery (`recover_on_launch`) and verify/repair, and regression-locked by a testkit reversibility suite (extending `DIR_SENTINEL`) across both provenance branches.
 
 **Scope notes**: New `crates/deploy/src/gameconfig.rs` (~120 LOC) reusing `backup::backup_vanilla_if_absent` / `restore_vanilla` + the journal verbatim, wired at the single engine choke point (end of `deploy`/`deploy_winners`/`purge` + `recover_on_launch`), gated on `is_starfield`. INI rides its own sentinel key outside the `Data/` deploy root — leave the deploy-root path guard untouched. Avoids Pitfalls 1–4 (absence-restore, clobbering, byte-fidelity, idempotency). **Warrants its own SECURITY.md** (`/gsd-plan-phase --research-phase 8` recommended).
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 **UI hint**: yes
 
 - [x] 08-01-PLAN.md — Engine core: std-only surgical INI editor + `IniConflict` error + journaled `ensure_ini_active`/`restore_ini`/`preview_ini_activation` + `KIND_INI` begin/replay reusing backup+journal verbatim (wave 1)
 - [x] 08-02-PLAN.md — `is_starfield`-gated choke wiring (deploy/deploy_winners/purge tails) + reversibility integration suite `tests/ini_activation.rs` (both provenance branches, idempotency, crash recovery) (wave 2)
-- [ ] 08-03-PLAN.md — Thin Tauri preview/apply adapter + Starfield-view no-silent-edit preview modal + amber conflict box, existing classes only (wave 2)
+- [x] 08-03-PLAN.md — Thin Tauri preview/apply adapter + Starfield-view no-silent-edit preview modal + amber conflict box, existing classes only (wave 2)
 
 ### Phase 9: On-Hardware In-Game Verification
 
@@ -126,5 +126,5 @@ Phase 6  Detection & CE2 path  ──┬──▶ Phase 7  Load order ──┐
 | 5. AppImage Distribution | v1.0 | 2/2 | Complete | 2026-06-22 |
 | 6. Starfield Detection & CE2 Path Resolution | v1.1 | 3/3 | Complete    | 2026-07-07 |
 | 7. Starfield Load Order | v1.1 | 3/3 | Complete    | 2026-07-07 |
-| 8. Reversible StarfieldCustom.ini Activation | v1.1 | 2/3 | In Progress|  |
+| 8. Reversible StarfieldCustom.ini Activation | v1.1 | 3/3 | Complete   | 2026-07-08 |
 | 9. On-Hardware In-Game Verification | v1.1 | 0/? | Not started | - |
