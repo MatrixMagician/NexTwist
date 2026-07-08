@@ -42,6 +42,29 @@ export interface StarfieldStatus {
   drift: DriftNotice | null;
 }
 
+/** How to resolve a pre-existing non-empty user `sResourceDataDirsFinal` on activation
+ *  (mirrors deploy::IniConflictResolution, externally-tagged serde — a bare string). */
+export type IniConflictResolution = "Block" | "UseNexTwist";
+
+/** Read-only preview of what loose-file activation would do (mirrors
+ *  deploy::IniActivationPreview). `conflict` is the user's non-empty current value that
+ *  would block auto-activation, or null. Never writes. */
+export interface IniActivationPreview {
+  will_create: boolean;
+  will_edit: boolean;
+  lines: string[];
+  conflict: string | null;
+}
+
+/** Outcome of an INI activation/restore op (mirrors deploy::IniOutcome, externally-tagged
+ *  serde). Unit variants are bare strings; `Blocked` carries the user's current value. */
+export type IniOutcome =
+  | "Activated"
+  | "AlreadyActive"
+  | { Blocked: { current_value: string } }
+  | "Restored"
+  | "NotActive";
+
 /** A validated staged mod (mirrors extract::StagedMod); handed back to deploy(). */
 export interface StagedMod {
   staging_root: string;
@@ -431,6 +454,16 @@ export const listGames = (): Promise<Game[]> => invoke("list_games");
  *  the UI's explicit "Re-check"; reads only, writes nothing. */
 export const starfieldStatus = (appid: number): Promise<StarfieldStatus> =>
   invoke("starfield_status", { appid });
+
+/** Preview loose-file (StarfieldCustom.ini) activation — read-only, writes nothing (SFINI-01). */
+export const previewIniActivation = (appid: number): Promise<IniActivationPreview> =>
+  invoke("preview_ini_activation", { appid });
+
+/** Apply loose-file activation, resolving a pre-existing user value per `resolution` (SFINI-03). */
+export const applyIniActivation = (
+  appid: number,
+  resolution: IniConflictResolution,
+): Promise<IniOutcome> => invoke("apply_ini_activation", { appid, resolution });
 
 export const installArchive = (appid: number, archive: string): Promise<StagedMod> =>
   invoke("install_archive", { appid, archive });

@@ -132,6 +132,8 @@ pub fn run() {
             commands::games::add_game_by_folder,
             commands::games::list_games,
             commands::games::starfield_status,
+            commands::gameconfig::preview_ini_activation,
+            commands::gameconfig::apply_ini_activation,
             commands::mods::install_archive,
             commands::deploy::deploy,
             commands::deploy::purge,
