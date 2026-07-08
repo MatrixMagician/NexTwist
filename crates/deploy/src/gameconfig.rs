@@ -433,8 +433,13 @@ pub fn ensure_ini_active(
     // 1. Durable intent BEFORE any write (crash → replayed to provenance).
     let jid = journal::begin_ini(store, game.appid, sentinel)?;
     // 2. Capture provenance: original bytes for a pre-existing file, else an absence marker.
+    //    Stamp CreatedByNexTwist ONLY when no provenance exists yet. An existing real-hash
+    //    (PreExisting) row is authoritative and must never be downgraded to ABSENCE_MARKER —
+    //    e.g. a PreExisting INI deleted on disk then re-activated (repair/deploy) still has
+    //    its row; downgrading it would make a later purge DELETE a user file whose original
+    //    bytes we still hold, instead of restoring them (CR-01).
     let pre_existing = backup::backup_vanilla_if_absent(store, game, &target, sentinel)?;
-    if !pre_existing {
+    if !pre_existing && store.vanilla_for(game.appid, sentinel)?.is_none() {
         store.record_vanilla(game.appid, sentinel, ABSENCE_MARKER)?;
     }
     // 3. Atomic write (temp + rename) — never a half-written INI (T-08-04).

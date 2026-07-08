@@ -463,6 +463,52 @@ fn ini_verify_detects_removed_ini() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// CR-01 — a PreExisting INI, deleted on disk then re-activated (repair/deploy),
+// must NEVER have its real-hash provenance downgraded to the absence marker;
+// purge must restore the user's ORIGINAL bytes, not delete the file.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn ini_reactivation_of_absent_preexisting_preserves_original_on_purge() {
+    let dir = TempDir::new().unwrap();
+    let (store, game) = sf_fixture(dir.path(), MyGamesOpts::default());
+
+    // A pre-existing user INI (real-hash provenance on first activation).
+    let mut original = BOM.to_vec();
+    original.extend_from_slice(
+        b"; user config\r\n[Display]\r\niSize=1080\r\n[Archive]\r\nsResourceDataDirsFinal=\r\n",
+    );
+    seed_ini(&game, &original);
+    let pristine = snapshot_tree(&game.prefix).unwrap();
+
+    deploy_loose_mod(&store, &game); // activation records the real vanilla hash (PreExisting).
+
+    // The user deletes StarfieldCustom.ini on disk (a routine "reset my INI" step) and does
+    // NOT relaunch the game, so it is not regenerated.
+    fs::remove_file(ini_path(&game)).unwrap();
+    assert!(
+        !verify(&store, &game).unwrap().pristine,
+        "an absent-but-should-be-active INI is drift"
+    );
+
+    // Repair re-activates while the file is absent. This must NOT downgrade the PreExisting
+    // provenance to the CreatedByNexTwist absence marker (CR-01).
+    repair(&store, &game).unwrap();
+    assert!(ini_path(&game).exists(), "repair re-created the INI");
+
+    // Purge must restore the user's ORIGINAL bytes, never delete the file.
+    purge(&store, &game).unwrap();
+    assert_eq!(
+        fs::read(ini_path(&game)).unwrap(),
+        original,
+        "the user's PreExisting INI is restored byte-for-byte, never deleted (CR-01)"
+    );
+    let after = snapshot_tree(&game.prefix).unwrap();
+    assert_trees_identical(&pristine, &after);
+    assert!(store.pending_ops().unwrap().is_empty());
+}
+
 #[test]
 fn ini_verify_detects_key_stripped_ini() {
     let dir = TempDir::new().unwrap();
