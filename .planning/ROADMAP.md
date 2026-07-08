@@ -126,5 +126,5 @@ Phase 6  Detection & CE2 path  ──┬──▶ Phase 7  Load order ──┐
 | 5. AppImage Distribution | v1.0 | 2/2 | Complete | 2026-06-22 |
 | 6. Starfield Detection & CE2 Path Resolution | v1.1 | 3/3 | Complete    | 2026-07-07 |
 | 7. Starfield Load Order | v1.1 | 3/3 | Complete    | 2026-07-07 |
-| 8. Reversible StarfieldCustom.ini Activation | v1.1 | 3/3 | Complete   | 2026-07-08 |
+| 8. Reversible StarfieldCustom.ini Activation | v1.1 | 3/3 | Complete    | 2026-07-08 |
 | 9. On-Hardware In-Game Verification | v1.1 | 0/? | Not started | - |
