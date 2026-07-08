@@ -5,14 +5,15 @@ milestone_name: Starfield Support
 current_phase: 8
 current_phase_name: Reversible StarfieldCustom.ini Activation
 status: executing
-last_updated: "2026-07-08T09:06:20.473Z"
-last_activity: 2026-07-07
-last_activity_desc: Phase 7 complete, transitioned to Phase 8
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-07-08T09:32:11.628Z"
+last_activity: 2026-07-08
+last_activity_desc: Phase 8 execution started
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 9
+  completed_plans: 7
   percent: 50
 ---
 
@@ -23,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-23 after v1.0)
 
 **Core value:** Mods install and uninstall safely — non-destructive, fully reversible, conflict-aware deployment into Proton/Wine games on Linux. This guarantee must extend verbatim to Starfield and to the new `StarfieldCustom.ini` write target.
-**Current focus:** Phase 06 — starfield-detection-ce2-path-resolution
+**Current focus:** Phase 8 — Reversible StarfieldCustom.ini Activation
 
 ## Current Position
 
-Phase: 8 — Reversible StarfieldCustom.ini Activation
-Plan: Not started
+Phase: 8 (Reversible StarfieldCustom.ini Activation) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-07 — Phase 7 complete, transitioned to Phase 8
+Last activity: 2026-07-08 — Phase 8 execution started
 
 ## Accumulated Context
 
@@ -50,6 +51,7 @@ Full decision log lives in PROJECT.md (Key Decisions) and the archived `mileston
 - **Starfield is a data-and-mapping extension, not a re-architecture** — no `core` change, no DB migration, no dependency/MSRV bump (libloot 0.29.5 already exposes `GameType::Starfield`, esplugin 6.1.4 `GameId::Starfield`). Only new crate is a small INI editor (`rust-ini`, optional).
 - **Reversible-INI work isolated in Phase 8** (highest-risk new safety surface): new `crates/deploy/src/gameconfig.rs` reusing `backup.rs` + journal verbatim, wired at one engine choke point; carries its own SECURITY.md + a testkit reversibility suite. Purge must restore **absence** (provenance: pre-existing vs created-by-NexTwist).
 - **Phase 9 is an on-hardware validation gate**, not a code phase — closes the MEDIUM-confidence CE2 INI-key / loose-file / masterlist assumptions on the owner's live Proton install (`deployed OK ≠ loaded in-game`).
+- [Phase ?]: 08-01: three-valued INI provenance in vanilla_backup (no row / ABSENCE_MARKER / real hash) so restore never deletes a user's untouched StarfieldCustom.ini (T-08-05); added store::remove_vanilla, no migration
 
 ### Deferred Items
 
@@ -86,3 +88,15 @@ None blocking. v1.1-relevant watch items:
 
 - Plan the first Starfield phase with `/gsd-plan-phase 6` (Starfield Detection & CE2 Path Resolution).
 - Phase 8 (reversible INI) is the highest-risk surface — plan it with `/gsd-plan-phase --research-phase 8` and expect its own SECURITY.md.
+
+## Performance Metrics
+
+| Phase | Plan | Duration | Notes |
+|-------|------|----------|-------|
+| Phase 08 P01 | 40min | 2 tasks | 5 files |
+
+## Session
+
+**Last session:** 2026-07-08T09:32:02.251Z
+**Stopped at:** Completed 08-01-PLAN.md
+**Resume file:** None
