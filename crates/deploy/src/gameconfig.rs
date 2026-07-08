@@ -17,7 +17,16 @@
 //! something no INI *parser* crate round-trips (RESEARCH rejected `rust-ini` on exactly
 //! these grounds).
 
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use nextwist_core::Game;
 use serde::{Deserialize, Serialize};
+use store::Store;
+
+use crate::backup;
+use crate::error::DeployError;
+use crate::journal;
 
 // ============================================================================
 // CE2 loose-file activation recipe — ASSUMPTION A1 (MEDIUM confidence).
@@ -44,6 +53,14 @@ const VAL_RESOURCE_DIRS: &str = "";
 /// vanilla-ledger sentinel key. Deliberately has NO `Data/` prefix so it can never
 /// collide with a `Data/`-rooted deploy-manifest relpath (Pitfall 2).
 pub const INI_FILENAME: &str = "StarfieldCustom.ini";
+
+/// Reserved `vanilla_backup.hash` value meaning "NexTwist CREATED this INI — it did not
+/// pre-exist". Not a 64-char blake3 hex, so provenance is three-valued and never inferred
+/// from disk (SFINI-02, T-08-05):
+///   * NO row              → NexTwist never activated → restore is a safe no-op.
+///   * this ABSENCE_MARKER → CreatedByNexTwist        → restore deletes + prunes.
+///   * a real blake3 hash  → PreExisting               → restore copies original bytes back.
+const ABSENCE_MARKER: &str = "nextwist:created-absent";
 
 // ---------------------------------------------------------------------------
 // Public serde types the op wrappers + Tauri boundary use.
@@ -94,9 +111,7 @@ pub enum IniOutcome {
 // The surgical std-only INI byte editor (pure — NO file I/O lives here).
 // ---------------------------------------------------------------------------
 
-// ponytail: the op wrappers (Task 2) are the only non-test callers of this module; keep
-// the pure editor self-contained. The module-level allow is removed once they land.
-#[allow(dead_code)]
+// The pure editor is consumed by the op wrappers below (and its unit tests).
 pub(crate) mod editor {
     use super::{
         INI_SECTION, IniConflictResolution, KEY_INVALIDATE, KEY_RESOURCE_DIRS, VAL_INVALIDATE,
@@ -364,6 +379,200 @@ pub(crate) mod editor {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Journaled op wrappers — reuse backup + journal VERBATIM, changing only WHERE the
+// target resolves (the Proton-prefix `My Games/Starfield`, never `Data/`).
+// ---------------------------------------------------------------------------
+
+/// Ensure loose-file loading is active for `game`, journaled + provenance-captured.
+///
+/// Blocks (writes nothing, returns [`IniOutcome::Blocked`]) on a pre-existing non-empty
+/// user `sResourceDataDirsFinal` under [`IniConflictResolution::Block`]; overwrites it only
+/// under `UseNexTwist` (after backing up the whole original file). Idempotent — a second
+/// call converges to [`IniOutcome::AlreadyActive`] with byte-identical output.
+pub fn ensure_ini_active(
+    store: &Store,
+    game: &Game,
+    resolution: IniConflictResolution,
+) -> Result<IniOutcome, DeployError> {
+    let target = resolve_ini_target(game)?; // T-08-01: re-verify drive_c containment.
+    refuse_symlink(&target)?; // T-08-02: never write through a symlink we do not own.
+
+    let current: Option<Vec<u8>> = if path_exists(&target) {
+        Some(fs::read(&target).map_err(|e| DeployError::io(&target, e))?)
+    } else {
+        None
+    };
+
+    let bytes = match editor::plan_merge(current.as_deref(), resolution) {
+        editor::MergePlan::Conflict(current_value) => {
+            return Ok(IniOutcome::Blocked { current_value });
+        }
+        editor::MergePlan::Write(bytes) => bytes,
+    };
+
+    // Already exactly active → nothing to write (and DO NOT re-capture provenance, which
+    // would mis-record our own file as a pre-existing vanilla original).
+    if current.as_deref() == Some(bytes.as_slice()) {
+        return Ok(IniOutcome::AlreadyActive);
+    }
+
+    let sentinel = Path::new(INI_FILENAME);
+    // 1. Durable intent BEFORE any write (crash → replayed to provenance).
+    let jid = journal::begin_ini(store, game.appid, sentinel)?;
+    // 2. Capture provenance: original bytes for a pre-existing file, else an absence marker.
+    let pre_existing = backup::backup_vanilla_if_absent(store, game, &target, sentinel)?;
+    if !pre_existing {
+        store.record_vanilla(game.appid, sentinel, ABSENCE_MARKER)?;
+    }
+    // 3. Atomic write (temp + rename) — never a half-written INI (T-08-04).
+    atomic_write(&target, &bytes)?;
+    // 4. Flip the intent to done.
+    store.mark_done(jid)?;
+    Ok(IniOutcome::Activated)
+}
+
+/// Restore the INI to its recorded provenance (SFINI-02): original bytes for a
+/// PreExisting file, or delete + prune NexTwist-created empty dirs for a CreatedByNexTwist
+/// file. A safe no-op when NexTwist never activated the INI (never touches a user file).
+pub fn restore_ini(store: &Store, game: &Game) -> Result<IniOutcome, DeployError> {
+    let target = resolve_ini_target(game)?;
+    // Gate: no provenance row ⇒ we never activated ⇒ leave any user file untouched.
+    if store
+        .vanilla_for(game.appid, Path::new(INI_FILENAME))?
+        .is_none()
+    {
+        return Ok(IniOutcome::NotActive);
+    }
+    let jid = journal::begin_ini(store, game.appid, Path::new(INI_FILENAME))?;
+    restore_ini_at(store, game, &target)?;
+    store.mark_done(jid)?;
+    Ok(IniOutcome::Restored)
+}
+
+/// Read-only preview of what activation would do (SFINI-01) — writes nothing, touches no
+/// store. Reports will-create vs will-edit, the exact two lines, and any conflict.
+pub fn preview_ini_activation(game: &Game) -> Result<IniActivationPreview, DeployError> {
+    let target = resolve_ini_target(game)?;
+    let exists = path_exists(&target);
+    let current = if exists {
+        Some(fs::read(&target).map_err(|e| DeployError::io(&target, e))?)
+    } else {
+        None
+    };
+    Ok(IniActivationPreview {
+        will_create: !exists,
+        will_edit: exists,
+        lines: editor::owned_lines(),
+        conflict: editor::detect_conflict(current.as_deref()),
+    })
+}
+
+/// The shared restore body used by BOTH [`restore_ini`] and the `KIND_INI` journal replay.
+///
+/// Drives the bytes-vs-absence decision ONLY from the recorded `vanilla_backup` row (never
+/// inferred from disk): a real hash → copy original bytes back; the [`ABSENCE_MARKER`] →
+/// remove our file + prune the dirs we created; no row → safe no-op. Drops the provenance
+/// row at the end so a future user file is never mistaken for ours. Idempotent.
+pub(crate) fn restore_ini_at(
+    store: &Store,
+    game: &Game,
+    target: &Path,
+) -> Result<(), DeployError> {
+    let sentinel = Path::new(INI_FILENAME);
+    let Some(hash) = store.vanilla_for(game.appid, sentinel)? else {
+        return Ok(()); // Never activated (or already restored) → never touch a user file.
+    };
+    crate::method::remove_if_present(target).map_err(|e| DeployError::io(target, e))?;
+    if hash == ABSENCE_MARKER {
+        // CreatedByNexTwist: file removed above; prune the dirs we may have created.
+        prune_created_dirs(target);
+    } else {
+        // PreExisting: copy the exact original bytes back.
+        backup::restore_vanilla(store, game, target, sentinel)?;
+    }
+    // Provenance consumed → reset to "never activated" (closes a future-user-file window).
+    store.remove_vanilla(game.appid, sentinel)?;
+    Ok(())
+}
+
+/// Resolve the INI target via the Phase-6 hardened resolver and RE-VERIFY `drive_c`
+/// containment at the write site (T-08-01) — never trust a cached path. NEVER touches the
+/// `Data/`-root guard (`resolve_target`/`guard_within_root`).
+fn resolve_ini_target(game: &Game) -> Result<PathBuf, DeployError> {
+    let target = steam::my_games_path(&game.prefix).join(INI_FILENAME);
+    verify_contained(&target, &game.prefix)?;
+    Ok(target)
+}
+
+/// Lexical `<prefix>/drive_c` containment check (canonicalize-free — the resolver already
+/// rejects `..`). Extracted so it is unit-testable with a crafted escaping target.
+fn verify_contained(target: &Path, prefix: &Path) -> Result<(), DeployError> {
+    if target.starts_with(prefix.join("drive_c")) {
+        Ok(())
+    } else {
+        Err(DeployError::PathEscape(target.to_path_buf()))
+    }
+}
+
+/// Refuse to write through a symlink at the INI target that we do not own (T-08-02),
+/// mirroring `backup.rs`'s `symlink_metadata` discipline. We only ever place a regular
+/// file (via temp + rename), so any symlink here is foreign.
+fn refuse_symlink(target: &Path) -> Result<(), DeployError> {
+    match fs::symlink_metadata(target) {
+        Ok(meta) if meta.file_type().is_symlink() => Err(DeployError::NotPristine(format!(
+            "refusing to write {INI_FILENAME} through a symlink at {}",
+            target.display()
+        ))),
+        _ => Ok(()),
+    }
+}
+
+/// Write `bytes` to `target` atomically (sibling temp + `rename`) so a crash mid-write
+/// never leaves a half-written INI (T-08-04). Creates the parent dir chain if absent
+/// (the first-launch CreatedByNexTwist case restore later prunes).
+fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), DeployError> {
+    let parent = target
+        .parent()
+        .ok_or_else(|| DeployError::PathEscape(target.to_path_buf()))?;
+    fs::create_dir_all(parent).map_err(|e| DeployError::io(parent, e))?;
+    let tmp = parent.join(format!(".{INI_FILENAME}.nxtmp"));
+    fs::write(&tmp, bytes).map_err(|e| DeployError::io(&tmp, e))?;
+    fs::rename(&tmp, target).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        DeployError::io(target, e)
+    })
+}
+
+/// Bottom-up prune the `My Games/<game>` dir chain NexTwist may have created for a
+/// first-launch prefix, bounded STRICTLY below the resolved Documents dir (never removes
+/// Documents or above). `remove_dir` refuses a non-empty (game-populated) dir, so a dir the
+/// game created is never removed (Pitfall 4). Prune failures are benign — never fail a
+/// restore because a dir could not be cleaned up.
+fn prune_created_dirs(target: &Path) {
+    // target = <Documents>/My Games/<game>/StarfieldCustom.ini
+    // documents = target.parent(<game>).parent(My Games).parent(Documents)
+    let Some(documents) = target.parent().and_then(Path::parent).and_then(Path::parent) else {
+        return;
+    };
+    let mut dir = target.parent().map(Path::to_path_buf);
+    while let Some(d) = dir {
+        if d == documents || !d.starts_with(documents) {
+            break; // Reached (or above) the Documents boundary — stop.
+        }
+        if fs::remove_dir(&d).is_err() {
+            break; // Non-empty (game-populated) or already gone — leave it intact.
+        }
+        dir = d.parent().map(Path::to_path_buf);
+    }
+}
+
+/// `symlink_metadata`-based existence (a dangling symlink still "exists" here), matching
+/// `backup.rs`'s discipline.
+fn path_exists(p: &Path) -> bool {
+    fs::symlink_metadata(p).is_ok()
+}
+
 #[cfg(test)]
 mod editor_tests {
     use super::IniConflictResolution::{Block, UseNexTwist};
@@ -488,6 +697,203 @@ mod editor_tests {
         assert_eq!(
             owned_lines(),
             vec!["bInvalidateOlderFiles=1".to_string(), "sResourceDataDirsFinal=".to_string()]
+        );
+    }
+}
+
+#[cfg(test)]
+mod wrapper_tests {
+    use super::*;
+    use nextwist_core::Game;
+    use std::path::Path;
+    use store::Store;
+    use tempfile::TempDir;
+    use testkit::{MyGamesOpts, fake_my_games_prefix};
+
+    const STARFIELD: u32 = 1716740;
+
+    /// A store + game whose prefix is a fresh fake Proton `My Games/Starfield` tree.
+    /// `opts` shapes the seeded INI (marker = a pre-existing StarfieldCustom.ini).
+    fn fixture(dir: &TempDir, opts: MyGamesOpts<'_>) -> (Store, Game) {
+        let root = dir.path();
+        let prefix = fake_my_games_prefix(&root.join("prefix"), "Starfield", opts).unwrap();
+        let store = Store::open(&root.join("d.db")).unwrap();
+        let game = Game {
+            appid: STARFIELD,
+            name: "Starfield".into(),
+            install_dir: root.join("install"),
+            prefix,
+            staging_dir: root.join("staging"),
+        };
+        (store, game)
+    }
+
+    fn ini_path(game: &Game) -> PathBuf {
+        steam::my_games_path(&game.prefix).join(INI_FILENAME)
+    }
+
+    #[test]
+    fn preview_absent_reports_will_create_and_writes_nothing() {
+        let dir = TempDir::new().unwrap();
+        let (_store, game) = fixture(&dir, MyGamesOpts::default());
+        let p = preview_ini_activation(&game).unwrap();
+        assert!(p.will_create && !p.will_edit);
+        assert_eq!(p.lines, editor::owned_lines());
+        assert!(p.conflict.is_none());
+        assert!(!ini_path(&game).exists(), "preview must not write");
+    }
+
+    #[test]
+    fn preview_existing_empty_reports_will_edit_no_conflict() {
+        let dir = TempDir::new().unwrap();
+        let (_store, game) =
+            fixture(&dir, MyGamesOpts { marker: Some(INI_FILENAME), ..Default::default() });
+        std::fs::write(ini_path(&game), b"[Archive]\r\nsResourceDataDirsFinal=\r\n").unwrap();
+        let p = preview_ini_activation(&game).unwrap();
+        assert!(p.will_edit && !p.will_create);
+        assert!(p.conflict.is_none());
+    }
+
+    #[test]
+    fn preview_conflict_reports_value_no_write() {
+        let dir = TempDir::new().unwrap();
+        let (_store, game) =
+            fixture(&dir, MyGamesOpts { marker: Some(INI_FILENAME), ..Default::default() });
+        let original = b"[Archive]\r\nsResourceDataDirsFinal=Mods\\\r\n";
+        std::fs::write(ini_path(&game), original).unwrap();
+        let p = preview_ini_activation(&game).unwrap();
+        assert_eq!(p.conflict.as_deref(), Some("Mods\\"));
+        assert_eq!(std::fs::read(ini_path(&game)).unwrap(), original, "preview writes nothing");
+    }
+
+    #[test]
+    fn ensure_creates_new_ini_and_is_idempotent_no_pending() {
+        let dir = TempDir::new().unwrap();
+        let (store, game) = fixture(&dir, MyGamesOpts::default());
+        assert_eq!(
+            ensure_ini_active(&store, &game, IniConflictResolution::Block).unwrap(),
+            IniOutcome::Activated
+        );
+        let written = std::fs::read(ini_path(&game)).unwrap();
+        assert_eq!(written, b"[Archive]\r\nbInvalidateOlderFiles=1\r\nsResourceDataDirsFinal=\r\n");
+        // Intent-before-act fully resolved.
+        assert!(store.pending_ops().unwrap().is_empty());
+        // Second call converges without a rewrite.
+        assert_eq!(
+            ensure_ini_active(&store, &game, IniConflictResolution::Block).unwrap(),
+            IniOutcome::AlreadyActive
+        );
+        assert_eq!(std::fs::read(ini_path(&game)).unwrap(), written);
+        assert!(store.pending_ops().unwrap().is_empty());
+    }
+
+    #[test]
+    fn ensure_blocks_nonempty_user_value_and_use_nextwist_overwrites() {
+        let dir = TempDir::new().unwrap();
+        let (store, game) =
+            fixture(&dir, MyGamesOpts { marker: Some(INI_FILENAME), ..Default::default() });
+        let original = b"[Archive]\r\nsResourceDataDirsFinal=Mods\\\r\n";
+        std::fs::write(ini_path(&game), original).unwrap();
+        // Block → surfaced, NOTHING written, Ok (not Err).
+        assert_eq!(
+            ensure_ini_active(&store, &game, IniConflictResolution::Block).unwrap(),
+            IniOutcome::Blocked { current_value: "Mods\\".into() }
+        );
+        assert_eq!(std::fs::read(ini_path(&game)).unwrap(), original);
+        assert!(store.pending_ops().unwrap().is_empty());
+        // UseNexTwist → overwrite (after backing up the whole original).
+        assert_eq!(
+            ensure_ini_active(&store, &game, IniConflictResolution::UseNexTwist).unwrap(),
+            IniOutcome::Activated
+        );
+        let after = String::from_utf8(std::fs::read(ini_path(&game)).unwrap()).unwrap();
+        assert!(after.contains("sResourceDataDirsFinal=\r\n") && !after.contains("Mods"));
+    }
+
+    #[test]
+    fn restore_preexisting_restores_original_bytes() {
+        let dir = TempDir::new().unwrap();
+        let (store, game) =
+            fixture(&dir, MyGamesOpts { marker: Some(INI_FILENAME), ..Default::default() });
+        let original = b"; user config\r\n[Display]\r\niSize=1080\r\n[Archive]\r\nsResourceDataDirsFinal=\r\n";
+        std::fs::write(ini_path(&game), original).unwrap();
+        ensure_ini_active(&store, &game, IniConflictResolution::Block).unwrap();
+        assert_ne!(std::fs::read(ini_path(&game)).unwrap(), original, "activation edited it");
+        assert_eq!(restore_ini(&store, &game).unwrap(), IniOutcome::Restored);
+        assert_eq!(
+            std::fs::read(ini_path(&game)).unwrap(),
+            original,
+            "PreExisting INI restored byte-for-byte"
+        );
+        assert!(store.pending_ops().unwrap().is_empty());
+    }
+
+    #[test]
+    fn restore_created_deletes_file_and_prunes_created_dir() {
+        // A truly-first-launch prefix: no My Games/Starfield dir exists yet.
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let store = Store::open(&root.join("d.db")).unwrap();
+        let game = Game {
+            appid: STARFIELD,
+            name: "Starfield".into(),
+            install_dir: root.join("install"),
+            prefix: root.join("prefix"),
+            staging_dir: root.join("staging"),
+        };
+        ensure_ini_active(&store, &game, IniConflictResolution::Block).unwrap();
+        let ini = ini_path(&game);
+        assert!(ini.exists(), "activation created the INI (and its dirs)");
+        assert_eq!(restore_ini(&store, &game).unwrap(), IniOutcome::Restored);
+        assert!(!ini.exists(), "CreatedByNexTwist INI deleted on restore");
+        assert!(!ini.parent().unwrap().exists(), "NexTwist-created Starfield dir pruned");
+        // Documents (the boundary) is never removed.
+        let documents = ini.parent().unwrap().parent().unwrap().parent().unwrap();
+        assert!(documents.exists(), "Documents boundary dir preserved");
+    }
+
+    #[test]
+    fn restore_is_a_safe_noop_when_never_activated() {
+        // A user's own INI that NexTwist never touched must survive a restore untouched.
+        let dir = TempDir::new().unwrap();
+        let (store, game) =
+            fixture(&dir, MyGamesOpts { marker: Some(INI_FILENAME), ..Default::default() });
+        let user_bytes = b"[Archive]\r\nsResourceDataDirsFinal=MyMods\\\r\n";
+        std::fs::write(ini_path(&game), user_bytes).unwrap();
+        assert_eq!(restore_ini(&store, &game).unwrap(), IniOutcome::NotActive);
+        assert_eq!(
+            std::fs::read(ini_path(&game)).unwrap(),
+            user_bytes,
+            "a never-activated user INI must NEVER be deleted or altered"
+        );
+    }
+
+    #[test]
+    fn ensure_refuses_to_write_through_a_symlink() {
+        let dir = TempDir::new().unwrap();
+        let (store, game) =
+            fixture(&dir, MyGamesOpts { marker: Some("x"), ..Default::default() });
+        let ini = ini_path(&game);
+        let elsewhere = dir.path().join("outside.ini");
+        std::fs::write(&elsewhere, b"x").unwrap();
+        std::os::unix::fs::symlink(&elsewhere, &ini).unwrap();
+        assert!(
+            ensure_ini_active(&store, &game, IniConflictResolution::Block).is_err(),
+            "must refuse to write through a foreign symlink (T-08-02)"
+        );
+        // The symlink target is untouched.
+        assert_eq!(std::fs::read(&elsewhere).unwrap(), b"x");
+    }
+
+    #[test]
+    fn verify_contained_refuses_an_escaping_target() {
+        let prefix = Path::new("/tmp/prefix");
+        let ok = prefix.join("drive_c/users/steamuser/Documents/x.ini");
+        assert!(verify_contained(&ok, prefix).is_ok());
+        let escape = Path::new("/etc/passwd");
+        assert!(
+            matches!(verify_contained(escape, prefix), Err(DeployError::PathEscape(_))),
+            "a target outside <prefix>/drive_c must be refused (T-08-01)"
         );
     }
 }
