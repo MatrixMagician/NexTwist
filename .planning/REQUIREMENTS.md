@@ -32,7 +32,7 @@ Each requirement maps to exactly one roadmap phase (see Traceability). Phase num
 - [x] **SFINI-02**: NexTwist records the INI's provenance (pre-existing vs created-by-NexTwist) and, on purge, restores it exactly — restoring original bytes if it pre-existed, or deleting the file and any emptied parent directories if NexTwist created it (restore-ABSENCE)
 - [x] **SFINI-03**: NexTwist merges its edits surgically into an existing `StarfieldCustom.ini` without clobbering the user's other keys/sections, preserving byte fidelity (line endings, BOM)
 - [x] **SFINI-04**: INI activation is journaled and idempotent — an interrupted or repeated deploy/purge leaves the INI in a correct, recoverable state
-- [ ] **SFINI-05**: The INI edit participates in the same reversibility guarantee as deployment — covered by crash recovery (`recover_on_launch`) and verify/repair
+- [x] **SFINI-05**: The INI edit participates in the same reversibility guarantee as deployment — covered by crash recovery (`recover_on_launch`) and verify/repair
 
 ### In-Game Verification
 
@@ -72,7 +72,7 @@ Each requirement maps to exactly one roadmap phase (see Traceability). Phase num
 | SFINI-02 | Phase 8 — Reversible StarfieldCustom.ini Activation | Complete |
 | SFINI-03 | Phase 8 — Reversible StarfieldCustom.ini Activation | Complete |
 | SFINI-04 | Phase 8 — Reversible StarfieldCustom.ini Activation | Complete |
-| SFINI-05 | Phase 8 — Reversible StarfieldCustom.ini Activation | Pending |
+| SFINI-05 | Phase 8 — Reversible StarfieldCustom.ini Activation | Complete |
 | SFVER-01 | Phase 9 — On-Hardware In-Game Verification | Pending |
 | SFVER-02 | Phase 9 — On-Hardware In-Game Verification | Pending |
 
