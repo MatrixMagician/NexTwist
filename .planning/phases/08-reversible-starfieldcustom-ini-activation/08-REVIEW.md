@@ -22,7 +22,7 @@ findings:
   warning: 2
   info: 2
   total: 5
-status: issues_found
+status: resolved
 ---
 
 # Phase 8: Code Review Report
@@ -30,7 +30,9 @@ status: issues_found
 **Reviewed:** 2026-07-08T10:06:51Z
 **Depth:** deep
 **Files Reviewed:** 13
-**Status:** issues_found
+**Status:** resolved
+
+> **Resolution (2026-07-08):** CR-01, WR-01, WR-02 fixed (each reproduced RED before the fix), atomic commits `d45b221` (CR-01 provenance-downgrade + purge-restore regression test), `93d68c1` (WR-01 purge journals `KIND_INI` restore intent before the `Data/` loop → crash-window recovery), `f3db65e` (WR-02 UTF-16 BOM refused via `IniOutcome::UnsupportedEncoding`, no write). Full-workspace gate green (45 suites / 0 failed, clippy `-D warnings` clean). IN-01 (dead `IniConflict` variant) and IN-02 (frontend `VerifyReport` omits `ini_drift`) left as-is — IN-02 is Phase-9-scoped.
 
 ## Summary
 
