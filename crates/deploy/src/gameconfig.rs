@@ -545,7 +545,7 @@ pub(crate) fn restore_ini_at(
 /// Resolve the INI target via the Phase-6 hardened resolver and RE-VERIFY `drive_c`
 /// containment at the write site (T-08-01) — never trust a cached path. NEVER touches the
 /// `Data/`-root guard (`resolve_target`/`guard_within_root`).
-fn resolve_ini_target(game: &Game) -> Result<PathBuf, DeployError> {
+pub(crate) fn resolve_ini_target(game: &Game) -> Result<PathBuf, DeployError> {
     let target = steam::my_games_path(&game.prefix).join(INI_FILENAME);
     verify_contained(&target, &game.prefix)?;
     Ok(target)

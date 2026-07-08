@@ -15,8 +15,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use deploy::{
-    deploy, journal, preview_ini_activation, purge, recover_on_launch, redeploy_winners, repair,
-    verify, StagedFiles, WinnerFile, INI_FILENAME,
+    deploy, journal, preview_ini_activation, purge, purge_with_abort_before_ini, recover_on_launch,
+    redeploy_winners, repair, verify, DeployError, StagedFiles, WinnerFile, INI_FILENAME,
 };
 use nextwist_core::Game;
 use store::Store;
@@ -357,6 +357,57 @@ fn ini_crash_recovery_consistent() {
         );
         assert!(store.pending_ops().unwrap().is_empty());
     }
+}
+
+// ---------------------------------------------------------------------------
+// WR-01 — a crash in the window between the last Data/ finish_purge and the INI
+// restore leaves a pending KIND_INI intent that recover_on_launch replays.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn ini_purge_crash_window_recovers_via_journal() {
+    let dir = TempDir::new().unwrap();
+    let (store, game) = sf_fixture(dir.path(), MyGamesOpts::default());
+
+    let mut original = BOM.to_vec();
+    original.extend_from_slice(b"; user\r\n[Archive]\r\nsResourceDataDirsFinal=\r\n");
+    seed_ini(&game, &original);
+    let pristine = snapshot_tree(&game.prefix).unwrap();
+
+    deploy_loose_mod(&store, &game); // activates the INI (PreExisting, real-hash row).
+    assert_ne!(fs::read(ini_path(&game)).unwrap(), original, "activation edited the INI");
+
+    // Crash in the WR-01 window: the Data/ purge loop has completed and the INI-restore
+    // intent is journaled, but the INI has not yet been restored.
+    let err = purge_with_abort_before_ini(&store, &game).unwrap_err();
+    assert!(matches!(err, DeployError::Aborted(_)), "aborted in the window: {err:?}");
+    assert!(
+        store.list_deployed_files(game.appid).unwrap().is_empty(),
+        "the Data/ manifest is already emptied (the loop completed before the crash)"
+    );
+    assert_ne!(
+        fs::read(ini_path(&game)).unwrap(),
+        original,
+        "the INI is still activated (its restore did not run)"
+    );
+    assert!(
+        !store.pending_ops().unwrap().is_empty(),
+        "a pending KIND_INI intent survives the crash so recovery can complete the restore"
+    );
+
+    // Recovery ALONE (no explicit re-purge) must restore the stranded INI to provenance.
+    recover_on_launch(&store, &game).unwrap();
+    assert_eq!(
+        fs::read(ini_path(&game)).unwrap(),
+        original,
+        "recover_on_launch restored the stranded INI byte-for-byte (WR-01)"
+    );
+    let after = snapshot_tree(&game.prefix).unwrap();
+    assert_trees_identical(&pristine, &after);
+    assert!(
+        store.pending_ops().unwrap().is_empty(),
+        "recovery leaves zero pending rows"
+    );
 }
 
 // ---------------------------------------------------------------------------
