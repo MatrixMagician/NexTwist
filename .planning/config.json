@@ -73,6 +73,5 @@
   "graphify": {
     "enabled": true,
     "auto_update": true
-  },
-  "resolve_model_ids": "omit"
+  }
 }
