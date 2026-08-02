@@ -17,8 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   definition of how a NexusMods session authenticates and how the shared rate limiter is
   wired, replacing copies in the download and Collection adapters.
 - **FOMOD wizard projection moved into the engine** — `fomod::wizard::project` owns the
-  spec's `order` attribute (steps/groups/plugins) and the authored type-state; the Tauri
-  adapter is now pure serde field renaming.
+  spec's `order` attribute (steps/groups/plugins) and the authored type-state, and
+  serializes straight to the webview. The adapter's six mirrored DTO types are gone
+  (`commands/fomod.rs` 691 → 502 lines), with the wire shape pinned by a test.
 - **Plugin state merge moved into the engine** — `loadorder::merge_plugin_state` /
   `enabled_names` now own the D-07/D-13 merge (stored enable/order + protected stamping +
   display sort) that the Tauri adapter previously hand-rolled.
@@ -38,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`deploy_collection` / `uninstall_collection` accepted a Collection belonging to a
+  different game** — uninstall purges one game's install and then deletes the Collection's
+  staged trees, so a mismatched pair could purge one game while destroying another's staged
+  mods. Both commands now refuse the mismatch up front.
 - Two stray NUL bytes in `frontend/src/routes/+page.svelte` made git treat the file as
   binary, so every diff and code review of the UI showed only `Bin`.
 - `uninstall_collection` re-queried every mod for the game once per collection member

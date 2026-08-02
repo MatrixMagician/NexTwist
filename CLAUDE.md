@@ -68,9 +68,11 @@ do not put real logic in the command adapters.
 - **extract** — the untrusted-archive → validated read-only staging-tree transform
   (zip + 7z + shell-out RAR), with zip-slip / symlink-write-through defense.
 - **fomod** — the full FOMOD 5.x `ModuleConfig.xml` engine as a pure transform (parse →
-  condition → resolve). `resolve` is a **pure dry-run**: it returns an ordered
-  file-install plan without touching disk, so the plan can be conflict-previewed before
-  it is applied. Malformed input returns a specific `FomodError`, never a silent
+  condition → resolve), plus `wizard::project` for the ordered step/group/option tree a UI
+  renders (the spec's `order` attribute is engine truth; the projection serializes straight
+  to the webview, so the shell mirrors no types). `resolve` is a **pure dry-run**: it returns
+  an ordered file-install plan without touching disk, so the plan can be conflict-previewed
+  before it is applied. Malformed input returns a specific `FomodError`, never a silent
   mis-install.
 - **nexus** — headless NexusMods client: OAuth2+PKCE, API-key validation, REST v1 +
   GraphQL v2 metadata, download links, streaming download, `governor` rate limiting with

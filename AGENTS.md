@@ -71,9 +71,12 @@ property-testable in CI without a webview. Honor the boundary: do not pull
 - **extract** — untrusted archive → validated read-only staging tree (zip + 7z +
   shell-out RAR), with zip-slip and symlink-write-through defense.
 - **fomod** — the full FOMOD 5.x `ModuleConfig.xml` engine as a pure transform: parse →
-  condition → resolve. `resolve` is a **pure dry-run** producing an ordered file-install
-  plan without touching disk; the plan is conflict-previewed before it is applied. A
-  malformed construct returns a specific `FomodError`, never a silent mis-install.
+  condition → resolve, plus `wizard::project` for the ordered step/group/option tree a UI
+  renders (the spec's `order` attribute is engine truth, not a UI preference; the projection
+  serializes straight to the webview, so the shell mirrors no types). `resolve` is a **pure
+  dry-run** producing an ordered file-install plan without touching disk; the plan is
+  conflict-previewed before it is applied. A malformed construct returns a specific
+  `FomodError`, never a silent mis-install.
 - **nexus** — headless NexusMods client: OAuth2+PKCE exchange, API-key validation, REST
   v1 + GraphQL v2 metadata, download-link generation, streaming download, `governor` rate
   limiting with reactive `X-RL-*` backoff. Async `reqwest`, redirects disabled,
