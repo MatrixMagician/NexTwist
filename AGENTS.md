@@ -104,7 +104,8 @@ idempotency — that is the reversibility guarantee, and it is what the
 
 `src-tauri/src/lib.rs` builds the app, resolves the OS app-data dir, runs startup
 recovery, and registers adapters from `src-tauri/src/commands/` (games, mods, deploy,
-conflicts, plugins, profiles). Commands lock `AppState` and call the engine. The frontend
+conflicts, plugins, profiles, plus collections, downloads, fomod, gameconfig, and nexus).
+Commands lock `AppState` and call the engine. The frontend
 is SvelteKit (Svelte 5 runes) built as a static SPA into `frontend/build` and embedded via
 `frontendDist`. New commands need a matching binding in `frontend/src/lib/api.ts`.
 
