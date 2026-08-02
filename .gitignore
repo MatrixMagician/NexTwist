@@ -32,3 +32,4 @@ src-tauri/gen
 
 # Editor-local config
 .vscode/
+__pycache__/
