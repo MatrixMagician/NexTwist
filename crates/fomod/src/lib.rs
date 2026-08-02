@@ -32,6 +32,7 @@ pub mod error;
 pub mod model;
 pub mod parse;
 pub mod resolve;
+pub mod wizard;
 
 pub use condition::{FlagSet, InstalledFiles, eval, plugin_type_state};
 pub use error::FomodError;
@@ -42,3 +43,4 @@ pub use model::{
 };
 pub use parse::{parse_module_config, resolve_source_path};
 pub use resolve::{FileInstall, Selection, resolve, validate_selection};
+pub use wizard::{WizardGroup, WizardOption, WizardProjection, WizardStep, authored_type, project};

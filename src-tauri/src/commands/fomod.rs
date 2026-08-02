@@ -29,8 +29,7 @@ use std::path::{Path, PathBuf};
 
 use extract::ArchiveFormat;
 use fomod::{
-    FomodModule, GroupType, OrderKind, PluginType, Selection, parse_module_config, resolve,
-    validate_selection,
+    FomodModule, GroupType, PluginType, Selection, parse_module_config, resolve, validate_selection,
 };
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -394,89 +393,42 @@ fn extract_to_temp(archive: &Path) -> Result<(TempDir, PathBuf), extract::Extrac
     Ok((temp, tree_root))
 }
 
-/// Project a parsed [`FomodModule`] into the serializable wizard shape, applying the
-/// authored `order` to steps/groups/options exactly as the engine would.
+/// Map the engine's [`fomod::WizardProjection`] onto the serializable wire shape.
+///
+/// Pure serde plumbing: `fomod::wizard::project` owns the FOMOD `order` rule and the
+/// authored type-state, so this adapter only renames the fields the webview consumes and
+/// flattens the flag tuples into the `[name, value]` arrays JSON carries.
 fn project_module(module: &FomodModule) -> FomodProjection {
-    let mut steps = Vec::new();
-    if let Some(step_list) = &module.steps {
-        let mut ordered: Vec<_> = step_list.steps.iter().collect();
-        sort_by_order(&mut ordered, step_list.order, |s| &s.name);
-        for step in ordered {
-            let mut groups = Vec::new();
-            if let Some(group_list) = &step.groups {
-                let mut og: Vec<_> = group_list.groups.iter().collect();
-                sort_by_order(&mut og, group_list.order, |g| &g.name);
-                for group in og {
-                    let mut options = Vec::new();
-                    if let Some(plugin_list) = &group.plugins {
-                        let mut pl: Vec<_> = plugin_list.plugins.iter().collect();
-                        sort_by_order(&mut pl, plugin_list.order, |p| &p.name);
-                        for plugin in pl {
-                            let flags = plugin
-                                .condition_flags
-                                .as_ref()
-                                .map(|cf| {
-                                    cf.flags
-                                        .iter()
-                                        .map(|f| [f.name.clone(), f.value.clone()])
-                                        .collect()
-                                })
-                                .unwrap_or_default();
-                            options.push(OptionProjection {
-                                name: plugin.name.clone(),
-                                description: plugin.description.clone(),
-                                image: plugin.image.as_ref().map(|i| i.path.clone()),
-                                default_type: default_type_of(plugin).into(),
-                                flags,
-                            });
-                        }
-                    }
-                    groups.push(GroupProjection {
-                        name: group.name.clone(),
-                        group_type: group.group_type.into(),
-                        options,
-                    });
-                }
-            }
-            steps.push(StepProjection {
-                name: step.name.clone(),
-                conditional: step.visible.is_some(),
-                groups,
-            });
-        }
-    }
+    let projected = fomod::project(module);
     FomodProjection {
-        module_name: module.module_name.clone(),
-        steps,
-    }
-}
-
-/// The authored default type-state of a plugin (static `<type>` or `<dependencyType>`
-/// default). The LIVE type after choices is recomputed by the engine in `resolve_fomod`;
-/// this is the initial render value (Optional when a descriptor is absent — never silently
-/// disables an option).
-fn default_type_of(plugin: &fomod::Plugin) -> PluginType {
-    match &plugin.type_descriptor {
-        Some(td) => td
-            .static_type
-            .as_ref()
-            .map(|t| t.name)
-            .or_else(|| td.dependency_type.as_ref().map(|d| d.default_type.name))
-            .unwrap_or(PluginType::Optional),
-        None => PluginType::Optional,
-    }
-}
-
-/// Sort a slice of element refs by the FOMOD `order` attribute (Ascending/Descending by
-/// name, or Explicit = document order preserved).
-fn sort_by_order<T, F>(items: &mut [&T], order: OrderKind, key: F)
-where
-    F: Fn(&T) -> &String,
-{
-    match order {
-        OrderKind::Explicit => {}
-        OrderKind::Ascending => items.sort_by(|a, b| key(a).cmp(key(b))),
-        OrderKind::Descending => items.sort_by(|a, b| key(b).cmp(key(a))),
+        module_name: projected.module_name,
+        steps: projected
+            .steps
+            .into_iter()
+            .map(|step| StepProjection {
+                name: step.name,
+                conditional: step.conditional,
+                groups: step
+                    .groups
+                    .into_iter()
+                    .map(|group| GroupProjection {
+                        name: group.name,
+                        group_type: group.group_type.into(),
+                        options: group
+                            .options
+                            .into_iter()
+                            .map(|opt| OptionProjection {
+                                name: opt.name,
+                                description: opt.description,
+                                image: opt.image,
+                                default_type: opt.default_type.into(),
+                                flags: opt.flags.into_iter().map(|(n, v)| [n, v]).collect(),
+                            })
+                            .collect(),
+                    })
+                    .collect(),
+            })
+            .collect(),
     }
 }
 
