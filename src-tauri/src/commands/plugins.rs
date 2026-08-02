@@ -67,13 +67,12 @@ fn merged_plugins_locked(
     // EMPTY — v1.0 `list_plugins` succeeded from scan+store alone, so a probe failure must
     // never break the list view (no SSE/FO4 regression).
     //
-    // The enable/order/protected merge itself is `loadorder::merge_plugin_state` (pure and
-    // unit-tested in the engine); this adapter only gathers its three inputs. The probe needs
-    // the post-store enabled set, so merge once with an empty protected set to settle
-    // `enabled`, probe, then merge again to stamp `protected`.
-    let settled = loadorder::merge_plugin_state(merged, &stored, &Default::default());
+    // The merge rules themselves are the engine's (pure + unit-tested); this adapter only
+    // gathers the inputs and sequences the two phases the probe forces: settle `enabled`
+    // from the store first, because the probe needs the post-merge enabled set, then stamp.
+    let settled = loadorder::merge_plugin_state(merged, &stored);
     let protected = protected_set(&game, appid, &loadorder::enabled_names(&settled));
-    Ok(loadorder::merge_plugin_state(settled, &stored, &protected))
+    Ok(loadorder::stamp_protected(settled, &protected))
 }
 
 /// Compute the implicitly-active protected-master set from the live libloot probe, degrading
