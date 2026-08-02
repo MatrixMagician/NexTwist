@@ -1,4 +1,4 @@
-//! profile_switch (PROF-02/PROF-03) — BLOCKING-PRISTINE.
+//! profile_switch — BLOCKING-PRISTINE.
 //!
 //! The profile slice's safety gate: switching the active profile must reconcile the
 //! deployment THROUGH the existing journaled safe engine — `switch_profile` does
@@ -13,7 +13,7 @@
 //! pristine** (testkit DIR_SENTINEL harness, empty-dir shape included) — the game stays
 //! restorable to vanilla no matter how many times the user switches.
 //!
-//! PROF-03 is proven by asserting A->B->A reproduces profile A's EXACT deployed set
+//! Per-profile state is proven by asserting A->B->A reproduces profile A's EXACT deployed set
 //! (each profile preserves its own membership + per-profile ranks).
 
 use std::collections::BTreeMap;
@@ -94,7 +94,7 @@ fn add_mod(store: &Store, appid: u32, name: &str, root: &std::path::Path, rank: 
         .unwrap()
 }
 
-/// PROF-02 + PROF-03 (BLOCKING-PRISTINE): switching the active profile reconciles
+/// BLOCKING-PRISTINE: switching the active profile reconciles
 /// deployment through the safe engine, each profile preserves its own enabled set/ranks
 /// (A->B->A reproduces A's exact deployed set), and the install stays byte-for-byte
 /// reversible to pristine across the switches.
@@ -169,7 +169,7 @@ fn profile_switch_round_trips_pristine_across_switches() {
             prof_a
         );
     }
-    // Capture A's exact deployed set (target_rel + bytes) for the PROF-03 reproduction check.
+    // Capture A's exact deployed set (target_rel + bytes) for the reproduction check.
     let a_deployed_snapshot = snapshot_tree(&fx.install).unwrap();
 
     // --- Switch to B: purges A to pristine then deploys B's exclusive set. ---
@@ -214,7 +214,7 @@ fn profile_switch_round_trips_pristine_across_switches() {
         );
     }
 
-    // --- Switch back to A: must reproduce A's EXACT deployed set (PROF-03). ---
+    // --- Switch back to A: must reproduce A's EXACT deployed set. ---
     {
         let store = fx.open_store();
         switch_profile(&store, &game, prof_a).unwrap();
@@ -224,7 +224,7 @@ fn profile_switch_round_trips_pristine_across_switches() {
     assert_eq!(
         fs::read(fx.install.join("Data/shared.esp")).unwrap(),
         b"M1-SHARED",
-        "A->B->A reproduces profile A's winner set exactly (PROF-03)"
+        "A->B->A reproduces profile A's winner set exactly"
     );
 
     // --- NON-NEGOTIABLE: a final purge returns the install byte-for-byte pristine. ---
@@ -245,11 +245,11 @@ fn profile_switch_round_trips_pristine_across_switches() {
     }
 }
 
-/// PROF-02: switch_profile writes the target profile's plugins.txt at the prefix after
+/// switch_profile writes the target profile's plugins.txt at the prefix after
 /// deploy (apply_load_order is called with the new profile's plugin order). We assert the
 /// SwitchReport carries a plugins_txt path under the resolved prefix AppData location.
 ///
-/// The deep libloot plugins.txt content round-trip is covered by the Plan-04 loadorder
+/// The deep libloot plugins.txt content round-trip is covered by the loadorder
 /// tests (crates/loadorder/tests/plugins.rs); here we assert the WIRING — that a switch
 /// produces a plugins.txt at the expected prefix path for the active profile's plugins.
 #[test]
@@ -328,7 +328,7 @@ fn failed_switch_after_purge_clears_stale_active_flag() {
     // TARGET. Without the fix, OLD would still be flagged active while its set is gone.
     assert!(
         store.active_profile(game.appid).unwrap().is_none(),
-        "WR-02: a failed mid-switch must leave NO profile active (stale flag cleared)"
+        "a failed mid-switch must leave NO profile active (stale flag cleared)"
     );
 
     // State/disk consistency — journal-recoverable: replay recover_on_launch exactly as the
@@ -340,7 +340,7 @@ fn failed_switch_after_purge_clears_stale_active_flag() {
     let recovery = recover_on_launch(&store, &game).unwrap();
     assert!(
         recovery.drift.missing.is_empty() && recovery.drift.changed.is_empty(),
-        "WR-02: recover_on_launch finds the deployed set consistent (drift: {:?})",
+        "recover_on_launch finds the deployed set consistent (drift: {:?})",
         recovery.drift
     );
 

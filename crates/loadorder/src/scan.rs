@@ -1,4 +1,4 @@
-//! Plugin discovery (PLUGIN-01 discovery half, D-06).
+//! Plugin discovery.
 //!
 //! Walks the enabled mods' staged trees plus the game `Data/` dir, collects every
 //! `.esp`/`.esm`/`.esl` file (case-insensitive — Wine), and classifies each as
@@ -77,7 +77,7 @@ fn is_plugin_file(path: &Path) -> bool {
 /// light), which esplugin gates to Starfield via `supports_medium_plugins` — so SkyrimSE /
 /// Fallout4 always yield `medium == false`. There is deliberately NO `PluginKind::Medium`:
 /// `core::Plugin` and the DB token set are frozen, so medium rides a separate boolean on the
-/// wire model only (07-RESEARCH Pattern 1 / Pitfall 2).
+/// wire model only.
 ///
 /// If the file cannot be header-parsed (corrupt / not actually a plugin), we DO NOT abort the
 /// scan — we fall back to `(PluginKind::Esp, false)` and log, because a single bad file must
@@ -107,7 +107,7 @@ fn classify(game_id: GameId, path: &Path) -> (PluginKind, bool) {
     }
 }
 
-/// A plugin scan result enriched with the two Phase-7 derived booleans that do NOT belong on
+/// A plugin scan result enriched with the two derived booleans that do NOT belong on
 /// the frozen persisted [`core::Plugin`](Plugin): `medium` (a CE2 medium master, read from
 /// the esplugin header at scan time) and `protected` (an implicitly-active base master,
 /// filled by the caller AFTER a live libloot `Game::is_plugin_active` probe — see
@@ -133,7 +133,7 @@ pub struct PluginView {
     pub protected: bool,
 }
 
-/// Drop the Phase-7 view-only booleans (`medium`/`protected`) to the persisted
+/// Drop the view-only booleans (`medium`/`protected`) to the persisted
 /// [`core::Plugin`](Plugin) the apply/sort callers consume unchanged.
 ///
 /// Public because the command layer holds `PluginView`s (what it lists to the UI) but the
@@ -231,7 +231,7 @@ pub fn scan_plugins(
     )
 }
 
-/// Discover the plugins for an EXPLICIT game (PLUGIN-01 discovery): same as
+/// Discover the plugins for an EXPLICIT game: same as
 /// [`scan_plugins`] but takes the resolved [`esplugin::GameId`] directly so the Tauri
 /// command (which already knows the appid) does not pay an inference cost.
 ///
@@ -343,10 +343,10 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    /// A minimal but VALID 24-byte TES4 header (matches the Plan-02 spike fixture).
+    /// A minimal but VALID 24-byte TES4 header (matches the spike fixture).
     /// `flags` at bytes [8..12): 0x1 = master. Light flag is record-internal, so a true
     /// ESL fixture needs a record; for ESL we test the flag path via a real master bit and
-    /// document that header-only ESL detection from a hand-built 24-byte stub is a SUMMARY
+    /// document that header-only ESL detection from a hand-built 24-byte stub is a known
     /// limitation (a real ESL plugin sets the 0x200 light flag in the TES4 record header).
     fn tes4_header(master: bool) -> Vec<u8> {
         let mut h = vec![0u8; 24];

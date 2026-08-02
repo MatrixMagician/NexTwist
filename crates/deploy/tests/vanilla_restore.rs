@@ -1,4 +1,4 @@
-//! vanilla_restore (DEPLOY-04): a mod that REPLACES a vanilla file backs the original
+//! vanilla_restore: a mod that REPLACES a vanilla file backs the original
 //! up to the content-addressed store; purge restores the exact original bytes.
 //!
 //! Also asserts the pure-add case takes no vanilla backup, and that deploy is

@@ -84,7 +84,7 @@
 
   // Account panel state. `userInfo` drives logged-in vs logged-out; the
   // refresh token / API key NEVER reaches the UI (only UserInfo does). `noKeyring` is
-  // set when a login attempt hits the NEXUS-02 no-Secret-Service hard-fail — it blocks
+  // set when a login attempt hits the no-Secret-Service hard-fail — it blocks
   // login behind the destructive banner. `apiKeyReveal` toggles the key-paste fallback.
   let userInfo = $state<UserInfo | null>(null);
   let noKeyring = $state(false);
@@ -120,7 +120,7 @@
   // The malformed-FOMOD fallback offer (§A.8): the verbatim reason + plain-mod fallback.
   let fomodFallback = $state<string | null>(null);
 
-  // --- Collections state (UI-SPEC §B/§C, COLL-01..05). The Premium gate, the
+  // --- Collections state. The Premium gate, the
   //     resolve-before-download HARD GATE (`collResolve`), the bulk-download outcome
   //     (`collDownload`, including manual steps + per-mod failures), and the installed
   //     Collection's deploy/uninstall reports. ALL logic lives in the backend adapters;
@@ -173,7 +173,7 @@
         : starfield.ce2_state.Ready,
   );
 
-  // StarfieldCustom.ini loose-file activation (SFINI-01/03). `iniPreview` = the last
+  // StarfieldCustom.ini loose-file activation. `iniPreview` = the last
   // read-only preview (null = not loaded). Within this surface's two-command engine API
   // (preview + apply), activation state is read off the preview: will_create => the INI is
   // absent (not active); a non-null conflict => a pre-existing user value blocks
@@ -233,7 +233,7 @@
     }
   }
 
-  // --- StarfieldCustom.ini loose-file activation (SFINI-01/03) ---
+  // --- StarfieldCustom.ini loose-file activation ---
 
   // Read-only: preview what activation would do (writes nothing). Drives the state line +
   // conflict box; called when CE2 is Ready and after every apply.
@@ -250,7 +250,7 @@
     iniModalOpen = true;
   }
 
-  // The modal confirm is the ONLY thing that authorizes the write (SFINI-01, Block path).
+  // The modal confirm is the ONLY thing that authorizes the write.
   async function onActivateIni() {
     const outcome = await run("Enable loose-file loading", () =>
       api.applyIniActivation(selectedAppid!, "Block"),
@@ -302,7 +302,7 @@
       status = "Logged in";
     } catch (e) {
       if (isNoKeyring(e)) {
-        noKeyring = true; // block login behind the destructive banner (NEXUS-02)
+        noKeyring = true; // block login behind the destructive banner
       } else {
         error = `Login failed: ${String(e)}. Try again, or use an API key instead.`;
       }
@@ -325,7 +325,7 @@
 
   // --- NexusMods downloads. Everything is event-driven. ---
 
-  /** Apply a `download://progress` event to the matching row (UI-SPEC §B states). */
+  /** Apply a `download://progress` event to the matching row. */
   function applyProgress(p: DownloadProgress) {
     const idx = downloads.findIndex((d) => d.id === p.id);
     if (idx === -1) return;
@@ -352,7 +352,7 @@
       row.reason = p.reason ?? "unknown error";
     } else if (p.state === "downloading" || p.state === "extracting" || p.state === "done") {
       row.state = p.state;
-      // A healthy tick means the backoff is over — clear the WR-01 notice.
+      // A healthy tick means the backoff is over — clear the rate-limit notice.
       rateLimited = false;
     }
     // Re-assign so Svelte 5 reactivity sees the row mutation.
@@ -432,7 +432,7 @@
           downloaded: 0,
           total: null,
           state: "downloading",
-          // BUG 2 fix: store the non-secret coordinates the arrival carries so a Retry of
+          // Store the non-secret coordinates the arrival carries so a Retry of
           // this nxm-originated row can re-issue the download. `appid: 0` is a sentinel the
           // backend resolves from `gameDomain` (it owns the domain→appid map). `key`/
           // `expires` are deliberately absent — a single-use free link can't be replayed, so
@@ -495,7 +495,7 @@
     await tryOpenFomodWizard(selectedAppid!, archivePath);
   }
 
-  /** Plain (non-guided) install — the Phase-1 direct path (also the §A.8 fallback). */
+  /** Plain (non-guided) install — the direct path (also the no-FOMOD fallback). */
   async function onPlainInstall() {
     if (selectedAppid === null || !archivePath) return;
     closeFomodWizard();
@@ -576,7 +576,7 @@
     if (fomodStepIdx > 0) fomodStepIdx -= 1;
   }
 
-  /** The dry-run conflict-preview HARD GATE (§A.6, FOMOD-02): resolve the plan BEFORE any
+  /** The dry-run conflict-preview HARD GATE: resolve the plan BEFORE any
    *  staging write and show it. Install is only enabled when classification !== "blocking". */
   async function fomodShowPreview() {
     if (selectedAppid === null || !fomodArchive) return;
@@ -649,7 +649,7 @@
   }
 
   // Reorder by swapping ranks with the neighbor (▲▼). Keyboard/click reorder is the
-  // baseline path (no DnD-only) per UI-SPEC §A.1. Pending until Deploy.
+  // baseline path (no DnD-only) Pending until Deploy.
   async function onReorder(index: number, dir: -1 | 1) {
     if (selectedAppid === null) return;
     const other = index + dir;
@@ -827,7 +827,7 @@
   }
 
   // Confirmed delete: removes the profile + its mod/plugin selections only. Staged mod
-  // files are KEPT (D-14, shared staging). Idempotent at the store.
+  // files are KEPT (shared staging). Idempotent at the store.
   async function onConfirmDelete() {
     const target = deleteTarget;
     if (selectedAppid === null || !target) return;
@@ -1017,7 +1017,7 @@
     <h2>Account</h2>
 
     {#if noKeyring}
-      <!-- NEXUS-02 hard-fail: no Secret Service backend. Login is blocked; NexTwist
+      <!-- Hard-fail: no Secret Service backend. Login is blocked; NexTwist
            never falls back to a plaintext file. -->
       <div class="keyring-banner" role="alert">
         <strong>Can't store your login securely</strong>
@@ -1170,7 +1170,7 @@
   </section>
 
   {#if selectedGame}
-    <!-- Collections (UI-SPEC §B/§C, COLL-01..05). The resolve report is a HARD GATE shown
+    <!-- Collections. The resolve report is a HARD GATE shown
          BEFORE any download; the Premium gate replaces the controls for a free account. -->
     <section class="collections">
       <h2>Collections — {selectedGame.name}</h2>
@@ -1461,8 +1461,8 @@
   {#if selectedGame}
     <!-- Starfield version-drift notice (SFDET-03): persistent + advisory. It NEVER blocks
          management; it only appears when the installed build is newer than the validated
-         baseline (dormant until Phase 9 seeds a non-zero baseline). Build numbers render as
-         plain text — Svelte escapes them, no {@html} (T-06-05). -->
+         baseline (dormant until a non-zero baseline is seeded). Build numbers render as
+         plain text — Svelte escapes them, no {@html}. -->
     {#if isStarfield && starfield?.drift}
       <div class="drift-notice">
         <strong>Starfield build newer than validated</strong>
@@ -1475,7 +1475,7 @@
       </div>
     {/if}
 
-    <!-- StarfieldCustom.ini loose-file activation (SFINI-01/03). Shown once CE2 is Ready
+    <!-- StarfieldCustom.ini loose-file activation. Shown once CE2 is Ready
          (while pending, the §5 first-launch gate guides the user instead). Reuses the
          .first-launch info box + .badge state tag and the .warn conflict box — no new
          component or CSS. The state line is read off the read-only preview. -->
@@ -1607,7 +1607,7 @@
         </div>
       {/if}
 
-      <!-- SFLO-04 on-launch reconciliation (Starfield only). Renders the engine verdict:
+      <!-- On-launch reconciliation (Starfield only). Renders the engine verdict:
            InSync is CALM (green, no diff); Drift lists only the beyond-expected names. -->
       {#if isStarfield && reconcileState}
         <div class="report">
@@ -1836,8 +1836,8 @@
               {/if}
               {#if p.protected}
                 <!-- Focusable, non-interactive lock affordance carries the reason into the a11y
-                     tree (SFLO-03) — a bare disabled control alone would not announce it. The
-                     tabindex is a deliberate, UI-SPEC-mandated focusable status affordance. -->
+                     tree — a bare disabled control alone would not announce it. The
+                     tabindex is a deliberate focusable status affordance. -->
                 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
                 <span
                   class="badge badge-protected"
@@ -1955,7 +1955,7 @@
     </div>
   {/if}
 
-  <!-- Confirmation-gated profile switch (UI-SPEC §D.2 / Copywriting). Disk is mutated
+  <!-- Confirmation-gated profile switch. Disk is mutated
        ONLY on confirm; the safe engine runs purge-old → deploy-new. -->
   {#if switchTarget}
     <div class="overlay" role="dialog" aria-modal="true" aria-labelledby="switch-title">
@@ -1974,7 +1974,7 @@
   {/if}
 
   <!-- Destructive delete confirmation (Copywriting): Destructive-red confirm; staged
-       mod files are kept (D-14). -->
+       mod files are kept. -->
   {#if deleteTarget}
     <div class="overlay" role="dialog" aria-modal="true" aria-labelledby="delete-title">
       <div class="modal">
@@ -1991,7 +1991,7 @@
     </div>
   {/if}
 
-  <!-- Destructive Collection uninstall (UI-SPEC §C.4 / Copywriting). Purges the deployment,
+  <!-- Destructive Collection uninstall. Purges the deployment,
        drops the profile, and deletes staged mods — restoring the game to vanilla. -->
   {#if collUninstallTarget}
     <div class="overlay" role="dialog" aria-modal="true" aria-labelledby="coll-uninstall-title">
@@ -2104,7 +2104,7 @@
             <button onclick={closeFomodWizard} disabled={busy}>Cancel</button>
           </div>
         {:else}
-          <!-- Dry-run conflict-preview HARD GATE (§A.6, FOMOD-02): the resolved file plan
+          <!-- Dry-run conflict-preview HARD GATE: the resolved file plan
                BEFORE any staging write. Install is disabled on a blocking conflict. -->
           <div class="report fomod-preview">
             <h4>Conflict preview</h4>
@@ -2207,7 +2207,7 @@
   button.link-btn { background: none; border: none; color: #0a66c2; text-decoration: underline; padding: 0.35rem 0; }
   .apikey { margin-top: 0.5rem; }
   .confirm { border: 1px solid #ccc; border-radius: 6px; padding: 0.5rem 0.75rem; margin-top: 0.5rem; background: #f3f3f3; }
-  /* NEXUS-02 destructive no-keyring banner. */
+  /* Destructive no-keyring banner. */
   .keyring-banner {
     color: #cf222e;
     background: #fff;
@@ -2251,7 +2251,7 @@
     display: grid;
     grid-template-columns: 1fr;
     gap: 0.25rem;
-    min-height: 40px; /* UI-SPEC download-row density */
+    min-height: 40px; /* download-row density */
     padding: 0.5rem 0.75rem;
     border: 1px solid #eee;
     border-radius: 4px;
@@ -2292,7 +2292,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    min-height: 32px; /* desktop reorder hit target (UI-SPEC Spacing) */
+    min-height: 32px; /* desktop reorder hit target */
     padding: 0.25rem 0.5rem;
     border: 1px solid #eee;
     border-radius: 6px;
@@ -2318,7 +2318,7 @@
   table.conflicts { width: 100%; border-collapse: collapse; margin-top: 0.4rem; }
   table.conflicts th, table.conflicts td {
     text-align: left;
-    padding: 4px 8px; /* dense table padding (UI-SPEC Spacing exception) */
+    padding: 4px 8px; /* dense table padding */
     border-bottom: 1px solid #eee;
     vertical-align: top;
   }

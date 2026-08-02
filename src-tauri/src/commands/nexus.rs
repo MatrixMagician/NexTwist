@@ -1,7 +1,7 @@
 //! NexusMods auth command adapters — thin IPC boundary over the headless `crates/nexus`
 //! client + the shell keyring / OAuth orchestration.
 //!
-//! Per the Anti-Pattern-4 contract (see `commands/mod.rs`): each command locks the
+//! Per the thin-adapter contract (see `commands/mod.rs`): each command locks the
 //! shared state, calls one headless/keyring/auth function, maps the error to a `String`,
 //! and returns. No HTTP, no file loops, no business logic here. A token or key is NEVER
 //! returned to the UI — only a `UserInfo`.
@@ -52,7 +52,7 @@ struct NxmExpired {
 }
 
 /// Log in with a manual NexusMods personal API key (the works-today fallback while OAuth
-/// client registration is pending — NEXUS-01). Validates the key against the live API,
+/// client registration is pending). Validates the key against the live API,
 /// stores it in the keyring, caches the `UserInfo`, and returns it. The key
 /// itself never crosses back to the UI.
 #[tauri::command]
@@ -65,7 +65,7 @@ pub async fn login_with_api_key(
         .await
         .map_err(boundary_err)?;
 
-    // Persist ONLY through the keyring (NEXUS-02 hard-fail-no-plaintext). If no backend,
+    // Persist ONLY through the keyring (hard-fail, never plaintext). If no backend,
     // this surfaces the NoKeyringBackend string the UI keys its destructive banner on.
     keyring::store_refresh_token(&key).map_err(boundary_err)?;
 
@@ -78,7 +78,7 @@ pub async fn login_with_api_key(
 
 /// Begin the OAuth2+PKCE login: build the authorize URL (headless), stash the CSRF +
 /// PKCE verifier in memory, and open the system browser. The `nxm://oauth/callback`
-/// code is delivered by the Plan-03 deep-link handler, which calls `auth::complete_oauth`.
+/// code is delivered by the deep-link handler, which calls `auth::complete_oauth`.
 /// Returns the authorize URL (also opened in the browser) so the UI can show a fallback link.
 #[tauri::command]
 pub async fn login_oauth_start(state: State<'_, Mutex<AppState>>) -> Result<String, String> {
@@ -109,7 +109,7 @@ pub async fn login_oauth_start(state: State<'_, Mutex<AppState>>) -> Result<Stri
 }
 
 /// Log out: clear the keyring entry and the in-memory access token + cached user
-/// (NEXUS-01 / D-Auth). Idempotent — clearing when already logged out succeeds.
+/// Idempotent — clearing when already logged out succeeds.
 #[tauri::command]
 pub async fn logout(state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     keyring::clear_refresh_token().map_err(boundary_err)?;
@@ -127,7 +127,7 @@ pub async fn logout(state: State<'_, Mutex<AppState>>) -> Result<(), String> {
 /// from the keyring — load the persisted credential and re-validate it as an API key,
 /// caching the resulting `UserInfo` so a stored login survives a restart (previously the
 /// keyring entry was write-only and the user appeared logged out every cold start). This
-/// honours NEXUS-02 (keyring-only, no plaintext): the credential never leaves the keyring
+/// is keyring-only, never plaintext: the credential never leaves the keyring
 /// path, only the `UserInfo` is cached. A keyring no-backend / missing-entry / invalid-key
 /// outcome simply leaves the session logged-out here — the explicit login path owns the
 /// destructive no-keyring banner.
@@ -176,8 +176,8 @@ pub async fn account_info(
 /// Route one incoming `nxm://` URL — the deep-link handler's only job.
 ///
 /// This is a THIN router: ALL parsing lives in the headless `nexus::NxmLink::parse`, ALL
-/// download logic lives in Plan-02's `run_download_to_window`, and the OAuth code-exchange
-/// lives in Plan-01's `auth::complete_oauth`. Here we only parse, discriminate, and dispatch.
+/// download logic lives in `run_download_to_window`, and the OAuth code-exchange
+/// lives in `auth::complete_oauth`. Here we only parse, discriminate, and dispatch.
 ///
 /// SECURITY (V5/V7): the URL is untrusted OS input. We never shell out, never interpolate
 /// link content into a command, and never log the url/key/expires/code — only a coarse,
@@ -200,7 +200,7 @@ pub fn handle_nxm_url(app: &tauri::AppHandle, url: &str) {
     }
 }
 
-/// Dispatch a download `nxm://` link to the shared Plan-02 download core.
+/// Dispatch a download `nxm://` link to the shared download core.
 fn route_download(app: &tauri::AppHandle, link: NxmLink) {
     let Some(appid) = appid_for_domain(&link.game_domain) else {
         // Unknown/unmanaged game domain — surface the Warning rather than guess an AppID.
@@ -241,7 +241,7 @@ fn route_download(app: &tauri::AppHandle, link: NxmLink) {
             return;
         };
         let state = app.state::<Mutex<AppState>>();
-        // Reuse the EXACT Plan-02 stream→extract→stage flow (NEXUS-04 free-user redemption):
+        // Reuse the EXACT stream→extract→stage flow (free-user redemption):
         // the parsed key/expires are passed straight through, never interpreted here.
         let _ = crate::commands::downloads::run_download_to_window(
             &state,
@@ -260,7 +260,7 @@ fn route_download(app: &tauri::AppHandle, link: NxmLink) {
     });
 }
 
-/// Dispatch an `nxm://oauth/callback` to the Plan-01 OAuth code-exchange, closing the loop.
+/// Dispatch an `nxm://oauth/callback` to the OAuth code-exchange, closing the loop.
 fn route_oauth_callback(app: &tauri::AppHandle, code: String, state_param: String) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {

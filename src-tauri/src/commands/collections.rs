@@ -1,4 +1,4 @@
-//! Collection lifecycle adapters (COLL-02/03/04/05) — THIN per Anti-Pattern-4.
+//! Collection lifecycle adapters — deliberately THIN.
 //!
 //! These four `#[tauri::command]`s orchestrate the FULL Collection lifecycle entirely out
 //! of EXISTING, safety-reviewed primitives — they add ZERO new download/deploy/purge code:
@@ -6,9 +6,9 @@
 //! * [`resolve_collection`] — parse the `collection.json` manifest (`nexus::Collection`),
 //!   gate the game domain (`appid_for_domain`), and run the headless `nexus::resolve_collection`
 //!   (metadata reads only, ZERO downloads) → the `ResolveReport`. No disk mutation before
-//!   the report is accepted (the resolve-before-download HARD GATE, COLL-02).
+//!   the report is accepted (the resolve-before-download HARD GATE).
 //! * [`download_collection`] — read `UserInfo.is_premium` FIRST (non-Premium ⇒ the
-//!   Premium-required notice, NO download starts — locked decision, T-04-16). For Premium:
+//!   Premium-required notice, NO download starts — a locked decision). For Premium:
 //!   bulk-download the AVAILABLE nexus set, reusing `run_download_to_window` VERBATIM per
 //!   mod under a small bounded concurrency so the shared governor limiter governs the global
 //!   rate; a per-mod failure does NOT abort the batch; off-Nexus mods are recorded
@@ -84,7 +84,7 @@ pub async fn resolve_collection(
         .map_err(boundary_err)
 }
 
-/// The outcome of a bulk Collection download (COLL-02/03): how many available mods were
+/// The outcome of a bulk Collection download: how many available mods were
 /// downloaded, which per-mod downloads failed (the batch is NOT aborted on a single
 /// failure), the manual (off-Nexus) steps the user must perform, and any stale FOMOD-choice
 /// replays the user must re-run manually. Serializable for the UI.
@@ -102,7 +102,7 @@ pub struct DownloadCollectionReport {
     pub stale_choices: Vec<(String, String)>,
 }
 
-/// One off-Nexus manual step surfaced to the user (never auto-fetched; T-04-12).
+/// One off-Nexus manual step surfaced to the user (never auto-fetched).
 #[derive(Debug, Clone, Serialize)]
 pub struct ManualStep {
     /// The mod display name.
@@ -114,7 +114,7 @@ pub struct ManualStep {
 }
 
 /// Bulk-download a Collection's AVAILABLE mods after the resolve report is accepted
-/// (COLL-02/03). Enforces the Premium gate FIRST: a non-Premium session returns
+/// Enforces the Premium gate FIRST: a non-Premium session returns
 /// the Premium-required notice and starts NO download (no `nxm://` fallback — locked
 /// decision). For a Premium session, each available `nexus` mod reuses
 /// `run_download_to_window` VERBATIM (the SAME stream→extract→stage→persist path), bounded
@@ -177,7 +177,7 @@ pub async fn download_collection(
         ..Default::default()
     };
 
-    // Partition: off-Nexus mods are manual steps (NEVER fetched, T-04-12); the rest are the
+    // Partition: off-Nexus mods are manual steps (NEVER fetched); the rest are the
     // auto-fetchable available set we bulk-download. We carry only the manifest INDEX +
     // owned coordinates into the download futures so no borrow of `collection` crosses the
     // bounded-concurrency stream (which would over-constrain the async-command lifetimes).
@@ -251,7 +251,7 @@ pub async fn download_collection(
             Ok(dl) => {
                 // Replay the pinned FOMOD choices (no wizard). A stale choice surfaces as a
                 // specific error and is recorded — the mod still staged, but the user must
-                // run its installer manually (never a silent mis-install; COLL-03 / A3).
+                // run its installer manually (never a silent mis-install).
                 if let Some(choices) = &m.choices
                     && let Err(e) = replay_for(&dl.staging_root, choices)
                 {
@@ -326,7 +326,7 @@ pub async fn deploy_collection(
         };
 
         // Set per-profile membership: each collection mod enabled, ranked by its stored rank
-        // (which was derived from the manifest's modRules at download time, Pattern 7).
+        // (which was derived from the manifest's modRules at download time).
         for cm in &mods {
             guard
                 .store
@@ -427,7 +427,7 @@ pub async fn uninstall_collection(
     Ok(purged)
 }
 
-// ── Pure / small helpers (no business logic — Anti-Pattern-4) ────────────────────────
+// ── Pure / small helpers (no business logic) ────────────────────────────────────────
 
 /// Refuse to operate on a Collection that belongs to a different game than the one the
 /// command was invoked for.
@@ -448,8 +448,8 @@ fn same_game_gate(collection: &nextwist_core::Collection, appid: u32) -> Result<
 }
 
 /// The Premium gate: a non-Premium session may NOT download a Collection. Returns
-/// `Ok(())` for a Premium session, or the exact Premium-required notice string (UI-SPEC §B.1
-/// Copywriting Contract) for a free session. Pure so the gate decision is unit-tested.
+/// `Ok(())` for a Premium session, or the exact Premium-required notice string for a free
+/// session. Pure so the gate decision is unit-tested.
 fn premium_gate(is_premium: bool) -> Result<(), String> {
     if is_premium {
         Ok(())
@@ -462,7 +462,7 @@ fn premium_gate(is_premium: bool) -> Result<(), String> {
 
 /// Lock the state and build a session `NexusClient` (`AppState::nexus_client` owns the auth
 /// resolution + shared-limiter wiring, so the Collection reads coordinate the same rate
-/// budget as downloads by construction — WR-03).
+/// budget as downloads by construction).
 async fn build_client(state: &State<'_, Mutex<AppState>>) -> Result<NexusClient, String> {
     state.lock().await.nexus_client()
 }

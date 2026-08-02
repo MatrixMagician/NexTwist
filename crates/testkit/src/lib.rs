@@ -1,8 +1,8 @@
 //! `nextwist-testkit` — shared test helpers for the safety-critical engine.
 //!
 //! This crate exists to make the **byte-for-byte pristine assertion** a single,
-//! well-tested primitive. The DEPLOY-01/02/03 `round_trip_pristine` test and the
-//! DEPLOY-06 `crash_recovery` centerpiece both build on the
+//! well-tested primitive. The `round_trip_pristine` test and the
+//! `crash_recovery` centerpiece both build on the
 //! [`snapshot_tree`] and [`assert_trees_identical`] pair: deploy a mod, purge it,
 //! then assert the game tree's snapshot equals the pre-deploy vanilla snapshot. The
 //! diff output is intentionally explicit (which paths differ / are orphaned / are
@@ -23,7 +23,7 @@ use walkdir::WalkDir;
 /// marker is the reserved [`DIR_SENTINEL`] value — a non-hex string a 64-char blake3
 /// digest can never collide with — so the snapshot captures the directory *shape*
 /// (including EMPTY directories), not just file contents. This is load-bearing for the
-/// GAP-01 byte-for-byte-pristine guarantee: an orphan empty directory left behind by a
+/// The byte-for-byte-pristine guarantee: an orphan empty directory left behind by a
 /// purge is a real difference from vanilla and must be detected.
 ///
 /// `BTreeMap` so iteration/diffing is deterministic and ordered.
@@ -60,7 +60,7 @@ pub fn fake_staged_mod<P: AsRef<Path>>(root: P, files: &[(&str, &[u8])]) -> io::
 /// root, suitable to pass where the `steam` crate would supply a real prefix).
 ///
 /// This mimics the exact location a real Proton prefix exposes:
-/// `<root>/drive_c/users/steamuser/AppData/Local/<game_name>/` (Pitfall 1/2). On Linux
+/// `<root>/drive_c/users/steamuser/AppData/Local/<game_name>/`. On Linux
 /// libloot cannot derive this path itself (it returns `NoLocalAppData`), so NexTwist
 /// must always supply it; this fixture lets `plugins.txt` round-trips be asserted
 /// **headlessly** in CI without a real Proton install. When `plugins_txt` is `Some`,
@@ -117,7 +117,7 @@ pub struct MyGamesOpts<'a> {
 /// `<root>/drive_c/users/steamuser/Documents/My Games/<folder>/` — this fixture lets the
 /// case-fold / first-launch / redirection resolver tests run headlessly in CI.
 ///
-/// **Read-only invariant:** Phase 6 performs NO writes to a real prefix; this builder only
+/// **Read-only invariant:** this performs NO writes to a real prefix; this builder only
 /// materializes a *fake* prefix on a temp dir so the read-only resolver has something to
 /// probe.
 ///
@@ -158,7 +158,7 @@ pub fn fake_my_games_prefix(
 /// Write a minimal esplugin-parseable plugin file (a bare 24-byte TES4 header record) into
 /// `dir` under `name`, with the given raw TES4 header flags.
 ///
-/// The header layout mirrors the Plan-02 spike fixture: `b"TES4"`, a zero subrecord-size,
+/// The header layout mirrors the spike fixture: `b"TES4"`, a zero subrecord-size,
 /// the 32-bit little-endian `flags`, then a zero form-id and 8 padding bytes. Callers pass
 /// the flag bits their game classifier reads — `0x1` = master, and for Starfield `0x400` =
 /// medium (see [`write_medium_plugin`]). This is the ONE shared plugin-fixture builder the
@@ -362,7 +362,7 @@ mod tests {
 
         let dir_b = TempDir::new().unwrap();
         write_tree(dir_b.path(), &[("Data/a.esp", b"x")]).unwrap();
-        // Leftover empty directory the purge failed to clean up (the GAP-01 repro shape).
+        // Leftover empty directory the purge failed to clean up (the repro shape).
         fs::create_dir_all(dir_b.path().join("Data/leftover/empty")).unwrap();
         let b = snapshot_tree(dir_b.path()).unwrap();
 

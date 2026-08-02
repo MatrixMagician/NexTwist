@@ -1,8 +1,8 @@
-//! Reversible StarfieldCustom.ini loose-file activation (SFINI-01..05).
+//! Reversible StarfieldCustom.ini loose-file activation.
 //!
 //! This is the FIRST sanctioned engine write OUTSIDE the `Data/` deploy root. It does
 //! NOT relax the `Data/`-root guard: it resolves its target independently via the
-//! Phase-6 hardened `steam::my_games_path` resolver and rides its own journal `kind`
+//! hardened `steam::my_games_path` resolver and rides its own journal `kind`
 //! token (`journal::KIND_INI`) on a bare `StarfieldCustom.ini` sentinel that can never
 //! collide with a `Data/`-rooted manifest relpath.
 //!
@@ -14,8 +14,7 @@
 //! The one genuinely new piece is a std-only surgical INI byte editor ([`editor`]) that
 //! merges NexTwist's two owned `[Archive]` keys into an existing file while preserving
 //! its BOM, EOL style, comments, key order, and every untouched section byte-for-byte —
-//! something no INI *parser* crate round-trips (RESEARCH rejected `rust-ini` on exactly
-//! these grounds).
+//! something no INI *parser* crate round-trips, which is why `rust-ini` was rejected.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -33,7 +32,7 @@ use crate::journal;
 //
 // These four constants ARE the recipe: the `[Archive]` section plus the two owned keys
 // `bInvalidateOlderFiles=1` and an empty `sResourceDataDirsFinal=`. This is validated
-// AGAINST-A-BUILD, not a permanent constant — Phase 9's on-hardware gate (SFVER-01)
+// AGAINST-A-BUILD, not a permanent constant — the on-hardware gate
 // corrects the recipe by editing THIS block ONLY, without touching the reversibility
 // machinery around it. Keep the recipe here, in one labelled place.
 // ============================================================================
@@ -433,8 +432,8 @@ pub fn ensure_ini_active(
     game: &Game,
     resolution: IniConflictResolution,
 ) -> Result<IniOutcome, DeployError> {
-    let target = resolve_ini_target(game)?; // T-08-01: re-verify drive_c containment.
-    refuse_symlink(&target)?; // T-08-02: never write through a symlink we do not own.
+    let target = resolve_ini_target(game)?; // Re-verify drive_c containment.
+    refuse_symlink(&target)?; // Never write through a symlink we do not own.
 
     let current: Option<Vec<u8>> = if path_exists(&target) {
         Some(fs::read(&target).map_err(|e| DeployError::io(&target, e))?)
@@ -572,7 +571,7 @@ pub(crate) fn restore_ini_at(store: &Store, game: &Game, target: &Path) -> Resul
     Ok(())
 }
 
-/// Resolve the INI target via the Phase-6 hardened resolver and RE-VERIFY `drive_c`
+/// Resolve the INI target via the hardened resolver and RE-VERIFY `drive_c`
 /// containment at the write site — never trust a cached path. NEVER touches the
 /// `Data/`-root guard (`resolve_target`/`guard_within_root`).
 pub(crate) fn resolve_ini_target(game: &Game) -> Result<PathBuf, DeployError> {
@@ -1057,7 +1056,7 @@ mod wrapper_tests {
         std::os::unix::fs::symlink(&elsewhere, &ini).unwrap();
         assert!(
             ensure_ini_active(&store, &game, IniConflictResolution::Block).is_err(),
-            "must refuse to write through a foreign symlink (T-08-02)"
+            "must refuse to write through a foreign symlink"
         );
         // The symlink target is untouched.
         assert_eq!(std::fs::read(&elsewhere).unwrap(), b"x");
@@ -1074,7 +1073,7 @@ mod wrapper_tests {
                 verify_contained(escape, prefix),
                 Err(DeployError::PathEscape(_))
             ),
-            "a target outside <prefix>/drive_c must be refused (T-08-01)"
+            "a target outside <prefix>/drive_c must be refused"
         );
     }
 }

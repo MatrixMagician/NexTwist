@@ -8,7 +8,7 @@
 //!
 //! The fetch is **pinned**: HTTPS only, host `raw.githubusercontent.com`, repo
 //! `loot/<game-slug>`, branch [`MASTERLIST_BRANCH`] (`v0.29`, matching the libloot 0.29.x
-//! major — Pitfall 5). reqwest uses the `rustls` feature (no OpenSSL — CLAUDE.md). The branch is
+//! major). reqwest uses the `rustls` feature (no OpenSSL). The branch is
 //! pinned to the libloot major so the masterlist schema always matches the parser. The
 //! masterlist is itself parsed by libloot (a trusted CC0 source), never by hand here.
 //!
@@ -56,12 +56,12 @@ fn game_slug(appid: u32) -> Option<&'static str> {
 }
 
 /// The recorded snapshot date (git commit date of the bundled `masterlist.yaml`) for a
-/// supported AppID, surfaced as the SFLO-02 "masterlist from {date} — may be stale" note.
+/// supported AppID, surfaced as the "masterlist from {date} — may be stale" note.
 ///
 /// The bundled snapshot is `include_str!`'d into the binary, so there is NO runtime file to
-/// `stat` for an mtime (07-RESEARCH Pitfall 3) — the date is recorded as a const here and
+/// `stat` for an mtime — the date is recorded as a const here and
 /// bumped in lock-step whenever the bundled `assets/<slug>/masterlist.yaml` is refreshed.
-/// Only Starfield is dated this phase (its Phase-6 snapshot commit date); the other games
+/// Only Starfield is dated (its snapshot commit date); the other games
 /// return `None` (their note is out of scope until a bump records their dates).
 pub fn masterlist_snapshot_date(appid: u32) -> Option<&'static str> {
     match appid {

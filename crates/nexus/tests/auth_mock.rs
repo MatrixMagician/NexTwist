@@ -106,7 +106,7 @@ async fn exchange_code_rejects_csrf_mismatch() {
     );
 }
 
-/// NEXUS-01 fallback: validate_api_key hits /v1/users/validate.json with the apikey
+/// Fallback: validate_api_key hits /v1/users/validate.json with the apikey
 /// header and parses {user_id,name,is_premium} into UserInfo.
 #[tokio::test]
 async fn validate_api_key_parses_user_info() {
@@ -131,7 +131,7 @@ async fn validate_api_key_parses_user_info() {
     assert!(info.is_premium);
 }
 
-/// NEXUS-01 fallback: a 401 maps to NexusError::Auth (not a panic / not a generic Http).
+/// Fallback: a 401 maps to NexusError::Auth (not a panic / not a generic Http).
 #[tokio::test]
 async fn validate_api_key_401_maps_to_auth_error() {
     let mut server = mockito::Server::new_async().await;

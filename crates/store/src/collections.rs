@@ -1,4 +1,4 @@
-//! Collection persistence store facade (COLL-01/02): the V5 `collection`,
+//! Collection persistence store facade: the V5 `collection`,
 //! `collection_mod`, and `fomod_choice` tables.
 //!
 //! Records a pinned NexusMods Collection revision, every mod it pins (with the mod's

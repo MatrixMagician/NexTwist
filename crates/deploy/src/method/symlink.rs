@@ -1,7 +1,7 @@
 //! Symlink deployment — the cross-device fallback.
 //!
 //! Used when staging and the game tree are on different filesystems (hardlink/reflink
-//! impossible). PER-FILE ONLY — we never symlink a directory into `Data/` (Pitfall 2:
+//! impossible). PER-FILE ONLY — we never symlink a directory into `Data/`:
 //! a Steam update could write *through* a directory symlink into staging, and Wine
 //! path translation mishandles directory symlinks). The link target is the absolute
 //! staged-file path so it resolves regardless of the game tree's location.

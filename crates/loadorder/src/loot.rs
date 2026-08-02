@@ -1,7 +1,7 @@
 //! The libloot wrapper — the Linux seam for plugin / load-order management.
 //!
 //! This is the verified minimal surface over libloot 0.29.5 (de-risked by the
-//! `libloot_spike` integration test, RESEARCH A1/A3). The non-negotiable invariant:
+//! `libloot_spike` integration test). The non-negotiable invariant:
 //! on Linux libloot CANNOT derive the AppData/Local plugins.txt location (it calls
 //! `dirs::data_local_dir()`, meaningless inside a Proton prefix, and returns
 //! `NoLocalAppData`). NexTwist therefore ALWAYS constructs the game with
@@ -60,7 +60,7 @@ const FALLOUT4: u32 = 377160;
 const STARFIELD: u32 = 1716740;
 
 /// Build the Proton-prefix AppData/Local path libloot's `with_local_path` targets on
-/// Linux: `<prefix>/drive_c/users/steamuser/AppData/Local/<game_name>` (Pitfall 1/2).
+/// Linux: `<prefix>/drive_c/users/steamuser/AppData/Local/<game_name>`.
 ///
 /// `prefix` is the resolved Proton prefix root (the `steam` crate supplies it; the
 /// spike supplies a fixture via `testkit::fake_proton_prefix`). `game_name` is the
@@ -200,7 +200,7 @@ fn implicit_protected_set(game: &Game, enabled_names: &HashSet<String>) -> HashS
 /// enable (`enabled_names`). Those are the game's hardcoded early-loaders (game master,
 /// hardcoded DLC, Creation-Club `*.ccc` plugins), which the UI renders as locked rows and the
 /// engine refuses to reorder/disable. `early_loading_plugins()` is private in libloot 0.29.5,
-/// so `is_plugin_active` after a load is the only public proxy (07-RESEARCH Pattern 2).
+/// so `is_plugin_active` after a load is the only public proxy.
 ///
 /// # Errors
 /// * [`LoadOrderError::NoLocalAppData`] / unsupported appid via [`open_game`].
@@ -309,7 +309,7 @@ pub fn masters_first_order(plugins: &[Plugin]) -> Vec<String> {
 ///
 /// This is the ONLY place NexTwist materializes active flags, and only as a SEED that
 /// libloot then re-reads/re-writes — we are NOT hand-rolling the canonical format, we are
-/// feeding libloot its own input (the Plan-02 spike proved this round-trips).
+/// feeding libloot its own input (the spike proved this round-trips).
 fn asterisk_plugins_txt(plugins: &[Plugin]) -> String {
     // Preserve a name -> enabled lookup, then walk the masters-first order.
     let order = masters_first_order(plugins);
@@ -336,14 +336,14 @@ fn asterisk_plugins_txt(plugins: &[Plugin]) -> String {
 /// Sequence (the verified seam — there is no active-plugin setter in libloot 0.29.5, so
 /// active state enters via the Plugins.txt libloot loads, and the order must respect
 /// libloot's own fixed early-loader sequence — debug `loadorder-active-write`):
-///   1. `open_game` (with_local_path; creates the AppData dir — Pitfall 2),
+///   1. `open_game` (with_local_path; creates the AppData dir),
 ///   2. SEED the asterisk Plugins.txt from the desired `plugins` (enabled → `*Name`),
 ///   3. `load_canonical_order` (`load_current_load_order_state` + read libloot's resolved
 ///      order — early-loaders / implicitly-active plugins are placed at their REQUIRED
 ///      fixed positions: game master, then the game's hardcoded DLC list, then CCC),
 ///   4. [`reconcile_order`]: keep that fixed early-loader prefix verbatim and splice the
 ///      user's desired order in for the plugins the user actually controls,
-///   5. `set_order_and_save` (libloot also enforces masters-first internally, D-08, and
+///   5. `set_order_and_save` (libloot also enforces masters-first internally, and
 ///      persists — there is NO separate `Game::save`).
 ///
 /// Why NOT a hand-rolled masters-first sort: with every store `order_index == 0` the old
@@ -433,7 +433,7 @@ pub struct SortProposal {
     pub proposed: Vec<String>,
     /// Critical (Warn/Error) masterlist messages to surface above the proposal.
     pub warnings: Vec<String>,
-    /// The bundled masterlist's recorded snapshot date (SFLO-02 "masterlist from {date} —
+    /// The bundled masterlist's recorded snapshot date (the "masterlist from {date} —
     /// may be stale" note). Empty when no snapshot date is recorded for the game (the
     /// `include_str!`'d snapshot has no runtime file to stat — see
     /// [`crate::masterlist::masterlist_snapshot_date`]).
@@ -568,7 +568,7 @@ mod tests {
             Some("Skyrim Special Edition")
         );
         assert_eq!(appdata_folder_name(FALLOUT4), Some("Fallout4"));
-        // Starfield's Plugins.txt lives in AppData/Local/Starfield (Phase 7 consumes this).
+        // Starfield's Plugins.txt lives in AppData/Local/Starfield (the load-order code consumes this).
         assert_eq!(appdata_folder_name(STARFIELD), Some("Starfield"));
         assert!(appdata_folder_name(0).is_none());
         assert!(appdata_folder_name(220).is_none());

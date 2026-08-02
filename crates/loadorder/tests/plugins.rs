@@ -1,15 +1,15 @@
-//! PLUGIN-01/02 + masterlist integration tests (the apply-write path).
+//! Plugin + masterlist integration tests (the apply-write path).
 //!
 //! These exercise the REAL libloot seam against a fixture Proton prefix built by
 //! `testkit::fake_proton_prefix`, asserting:
-//!   * PLUGIN-02: `apply_load_order` writes an asterisk-format, masters-first Plugins.txt
+//!   * `apply_load_order` writes an asterisk-format, masters-first Plugins.txt
 //!     at libloot's `active_plugins_file_path`, bounded inside the prefix.
-//!   * PLUGIN-01: a disabled plugin is NOT written with a leading asterisk (inactive).
+//!   * a disabled plugin is NOT written with a leading asterisk (inactive).
 //!   * Masterlist caching: a fresh cache is reused with no network, and the bundled CC0
 //!     snapshot seeds the cache when offline.
 //!
 //! libloot/libloadorder header-parse every named plugin, so the fixture writes minimal but
-//! VALID 24-byte TES4 records in the game `Data/` dir (matching the Plan-02 spike).
+//! VALID 24-byte TES4 records in the game `Data/` dir (matching the spike).
 
 use std::collections::HashSet;
 use std::fs;
@@ -415,7 +415,7 @@ fn starfield_locked_master_saves_at_resting_state() {
     ];
 
     let written = apply_load_order(STARFIELD, &install, &appdata_local, &desired)
-        .expect("a locked master at its resting enabled==false state must save (CR-01)");
+        .expect("a locked master at its resting enabled==false state must save");
 
     let body = fs::read_to_string(&written).unwrap();
     assert!(
@@ -428,7 +428,7 @@ fn starfield_locked_master_saves_at_resting_state() {
     );
 }
 
-/// CR-01 (a GENUINE reorder of a pinned master is still prevented — now by libloot itself, not a
+/// A GENUINE reorder of a pinned master is still prevented — now by libloot itself, not a
 /// NexTwist name/enabled guard): a request that SWAPS two masters (Constellation before the
 /// Starfield.esm game master), both at their resting `enabled == false` state. `reconcile_order`
 /// forces every master into libloot's canonical position UNCONDITIONALLY, so the save SUCCEEDS
@@ -457,7 +457,7 @@ fn starfield_pinned_master_reorder_is_neutralized() {
 
     // Succeeds (no false rejection) — the swap is neutralized by reconcile_order, not rejected.
     apply_load_order(STARFIELD, &install, &appdata_local, &desired)
-        .expect("save succeeds; the master swap is neutralized, not rejected (CR-01)");
+        .expect("save succeeds; the master swap is neutralized, not rejected");
 
     // The persisted order keeps the game master pinned FIRST despite the swapped request.
     let mut game = loadorder::loot::open_game(STARFIELD, &install, &appdata_local).unwrap();
@@ -547,6 +547,6 @@ fn starfield_sort_determinism() {
     );
     assert_eq!(
         first.masterlist_date, "2026-07-07",
-        "the recorded Starfield masterlist snapshot date is surfaced (SFLO-02)"
+        "the recorded Starfield masterlist snapshot date is surfaced"
     );
 }

@@ -91,7 +91,7 @@ fn resolves_skyrim_se_from_synthetic_fixture() {
         "the fixture created the pfx dir, so it must be reported as existing"
     );
 
-    // The resolved install_dir feeds the canonical Data/ casing map (DEPLOY-08 input).
+    // The resolved install_dir feeds the canonical Data/ casing map.
     let casing = canonical_data_casing(&resolved.install_dir).expect("casing map");
     assert_eq!(casing.canonical_dir("textures"), Some("Textures"));
     assert_eq!(casing.canonical_dir("meshes"), Some("Meshes"));

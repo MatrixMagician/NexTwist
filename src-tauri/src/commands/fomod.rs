@@ -1,5 +1,5 @@
 //! FOMOD guided-installer adapter — the thin IPC boundary over the
-//! headless `crates/fomod` engine. Per the Anti-Pattern-4 contract (see `commands/mod.rs`):
+//! headless `crates/fomod` engine. Per the thin-adapter contract (see `commands/mod.rs`):
 //! NO FOMOD business logic lives here. Each `#[tauri::command]`:
 //!
 //! 1. resolves the managed game (`require_game`) or extracts the archive to a temp tree,
@@ -18,9 +18,9 @@
 //!   `fomod::resolve` and return a serializable file-install plan with a per-destination
 //!   conflict classification. Writes NOTHING (the locked dry-run-before-apply gate).
 //! * [`apply_fomod`] — on a confirmed (non-blocking) install, route the archive through
-//!   the validated `extract::install_archive` staging path (Plan-01 root-detection,
-//!   zip-slip/symlink/`..` defenses unchanged — the adapter adds no new write primitive,
-//!   threat T-04-05), then `store.add_mod` so the result is an ordinary `ManagedMod`.
+//!   the validated `extract::install_archive` staging path (root-detection,
+//!   zip-slip/symlink/`..` defenses unchanged — the adapter adds no new write primitive),
+//!   then `store.add_mod` so the result is an ordinary `ManagedMod`.
 //!
 //! The temp extraction here re-uses the SAME validated extractor the rest of the app
 //! uses; FOMOD source-path resolution and parsing are pure reads over that tree.
@@ -168,7 +168,7 @@ pub async fn resolve_fomod(
     // constraint is rejected here before the plan is computed.
     validate_selection(&module, &sel).map_err(boundary_err)?;
 
-    // PURE: fomod::resolve performs zero filesystem writes (Plan-01 invariant).
+    // PURE: fomod::resolve performs zero filesystem writes.
     let plan = resolve(&module, &sel).map_err(boundary_err)?;
     Ok(classify_plan(&plan))
 }
@@ -178,7 +178,7 @@ pub async fn resolve_fomod(
 ///
 /// The selection is re-resolved (defence in depth: never apply a plan the engine now
 /// rejects — e.g. a blocking conflict) BEFORE any write. On success the archive is staged
-/// through the validated `extract::install_archive` path (Plan-01 root-detection,
+/// through the validated `extract::install_archive` path (root-detection,
 /// zip-slip/symlink/`..` defenses unchanged — the adapter adds no new write primitive),
 /// and the staged tree is persisted via `store.add_mod`. Returns the new mod's row id.
 #[tauri::command]
@@ -294,9 +294,8 @@ fn fomod_staging_root(staging_dir: &Path, module_name: &str) -> PathBuf {
 }
 
 /// Project the resolved plan into the dry-run preview rows + a conflict classification
-/// (UI-SPEC §A.6).
 ///
-/// `fomod::resolve` IS the FOMOD-02 safety gate. It returns `Ok` only with a
+/// `fomod::resolve` IS the safety gate. It returns `Ok` only with a
 /// deterministically DEDUPED, conflict-free plan — one winner per `dest_rel`, the
 /// highest-priority `src` wins each destination — so a successfully-resolved plan has no
 /// remaining same-destination contest and is **safe to install** (`ConflictClass::None`).
@@ -330,7 +329,7 @@ mod tests {
     //! Headless adapter tests (no webview). They exercise the adapter's REAL logic — the
     //! validated temp extraction (`extract_to_temp`), the ordered AST projection (`fomod::project`),
     //! the dry-run plan + classification (`classify_plan` over `fomod::resolve`), and the
-    //! malformed-FOMOD `Err` path — by zipping a Plan-01 fixture tree into a real archive
+    //! malformed-FOMOD `Err` path — by zipping a fixture tree into a real archive
     //! and flowing it through the SAME functions the `#[tauri::command]`s call. The Tauri
     //! IPC shell (`require_game` + `State` lock) is the only part not covered, which is the
     //! pure boundary glue these tests deliberately exclude.
@@ -340,7 +339,7 @@ mod tests {
 
     use fomod::Selection;
 
-    /// Path to a Plan-01 fixture tree (the dir that CONTAINS the `fomod/` folder).
+    /// Path to a fixture tree (the dir that CONTAINS the `fomod/` folder).
     fn fixture(name: &str) -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../crates/fomod/tests/fixtures")

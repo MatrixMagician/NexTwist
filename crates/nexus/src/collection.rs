@@ -5,9 +5,9 @@
 //! [`Collection`] with NO I/O and NO Tauri — exactly the pure-parse discipline of
 //! `crates/store/src/nexus.rs` and the FOMOD parser, so it is unit-testable headless.
 //!
-//! The manifest is **untrusted input** (a trust boundary, T-04-08): it lives inside the
+//! The manifest is **untrusted input** (a trust boundary): it lives inside the
 //! attacker-authorable collection archive. Parsing it is allocation-bounded by `serde_json`
-//! (T-04-11 accept); nothing here fetches a URL or touches disk — the resolve gate
+//! nothing here fetches a URL or touches disk — the resolve gate
 //! ([`crate::resolve`]) decides what, if anything, is actionable, and off-Nexus source URLs
 //! are NEVER auto-fetched.
 //!
@@ -100,7 +100,7 @@ pub struct CollectionMod {
 ///
 /// `type` discriminates how (and whether) NexTwist may obtain the file. Only `nexus` and
 /// `bundle` are actionable; `direct`/`browse`/`manual` are off-Nexus and surfaced as
-/// manual steps — they are NEVER auto-fetched (locked decision; T-04-08 SSRF mitigation).
+/// manual steps — they are NEVER auto-fetched (a locked decision; SSRF mitigation).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceInfo {
     /// The source kind.
@@ -142,7 +142,7 @@ pub struct SourceInfo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SourceType {
-    /// A pinned NexusMods file (`modId`+`fileId`) — downloadable via the Phase-3 client.
+    /// A pinned NexusMods file (`modId`+`fileId`) — downloadable via the Nexus client.
     Nexus,
     /// A file bundled inside the collection archive itself — no download.
     Bundle,
@@ -156,7 +156,7 @@ pub enum SourceType {
 
 impl SourceType {
     /// Whether this source is off-Nexus and must be surfaced as a manual step rather than
-    /// fetched (the SSRF-safe classification, T-04-08).
+    /// fetched (the SSRF-safe classification).
     pub fn is_off_nexus(self) -> bool {
         matches!(
             self,

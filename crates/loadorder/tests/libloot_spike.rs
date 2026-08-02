@@ -1,6 +1,6 @@
 //! A1/A3 de-risk spike: prove the libloot Linux seam.
 //!
-//! The single largest technical unknown of Phase 2 is
+//! The single largest technical unknown was
 //! whether libloot's load-order machinery works on Linux against a Proton-prefix
 //! AppData directory. On Linux `Game::new` returns `NoLocalAppData` (libloadorder's
 //! `local_path()` calls `dirs::data_local_dir()` which has no meaning inside a Proton

@@ -1,6 +1,6 @@
 //! The single shared per-entry path validator.
 //!
-//! THE Phase 1 security centerpiece. Every format handler (zip, 7z, system-rar
+//! THE security centerpiece. Every format handler (zip, 7z, system-rar
 //! output) routes each archive entry through [`validate_entry`] BEFORE its bytes
 //! are written. The threat surface is untrusted third-party archive content, so
 //! this is the one code path that must hold:

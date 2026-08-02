@@ -1,6 +1,6 @@
 //! OAuth2 Authorization-Code + PKCE (S256) and API-key auth — headless.
 //!
-//! Follows RESEARCH Pattern 1 (oauth2 5.0 PKCE) verbatim. The HTTP shape mirrors
+//! Uses oauth2 5.0 PKCE. The HTTP shape mirrors
 //! `crates/loadorder`'s `real_fetch` (rustls, `redirect(Policy::none())`,
 //! `error_for_status()`) converted from blocking to async — these are security-reviewed
 //! choices (V9 / SSRF guard), not stylistic.
@@ -30,7 +30,7 @@ pub const API_BASE: &str = "https://api.nexusmods.com";
 
 /// The OAuth scope requested at authorize time.
 ///
-/// `[ASSUMED]` `"public"` per RESEARCH A1 — the exact scope set is unconfirmed until the
+/// `[ASSUMED]` `"public"` — the exact scope set is unconfirmed until the
 /// OAuth client is registered under the Nexus Acceptable Use Policy. Centralised here so
 /// the registration step changes it in exactly one place.
 const OAUTH_SCOPE: &str = "public";
@@ -85,7 +85,7 @@ pub fn build_authorize_url(
 /// async executor cannot accept our client. oauth2 still owns the security-sensitive
 /// half (S256 PKCE challenge/verifier + CSRF state); the token POST itself is a plain,
 /// well-specified form request we issue with the workspace's hardened reqwest 0.13
-/// client (rustls, redirects disabled). See RESEARCH Pitfall — reqwest 0.12/0.13 split.
+/// client (rustls, redirects disabled). Note the reqwest 0.12/0.13 split.
 #[derive(Debug, Deserialize)]
 struct TokenJson {
     access_token: String,

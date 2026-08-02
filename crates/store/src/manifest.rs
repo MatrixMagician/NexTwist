@@ -1,4 +1,4 @@
-//! Per-file deploy manifest (DEPLOY-02): the `deployed_file` table facade.
+//! Per-file deploy manifest: the `deployed_file` table facade.
 //!
 //! Each [`core::FileEntry`] row records one file NexTwist placed into a game's
 //! deploy tree — what it is, how it was placed, its content hash, and whether it

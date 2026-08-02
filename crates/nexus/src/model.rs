@@ -84,7 +84,7 @@ pub struct ModFile {
 /// with numeric ids. `key`/`expires` are present **only for free-user** "Mod Manager
 /// Download" links; a Premium link omits both. They are carried as **opaque strings** and
 /// are NEVER interpreted, logged, shelled out, or string-interpolated into a command — they
-/// are passed straight to the Plan-02 `download_link` redemption (Security Domain V5).
+/// are passed straight to the `download_link` redemption.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NxmLink {
     /// The NexusMods game domain (the URL host), e.g. `skyrimspecialedition`.
@@ -104,7 +104,7 @@ pub struct NxmLink {
 /// What an `nxm://` link routes to: a download or the OAuth callback.
 ///
 /// The shell's `on_open_url` handler matches on this to decide whether to drive the
-/// Plan-01 OAuth code-exchange or a Plan-02 download — the discrimination is made HERE in
+/// An OAuth code-exchange or a download — the discrimination is made HERE in
 /// the headless crate so the shell stays a thin router.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NxmLinkKind {
@@ -124,7 +124,7 @@ impl NxmLink {
     ///
     /// This is a **security boundary**: the input is an untrusted URL handed to the app by
     /// the OS deep-link handler (a malicious/​spoofed link is the primary new attack surface,
-    /// threat T-03-12). The parser therefore:
+    /// The parser therefore:
     /// - requires the scheme to be **exactly** `nxm` (case-insensitive per RFC 3986);
     /// - discriminates the `oauth/callback` authority from a download authority;
     /// - for a download, requires the path to be exactly `/mods/<mod_id>/files/<file_id>`
@@ -207,7 +207,7 @@ impl NxmLink {
 
 /// Look up a query-string parameter by name and percent-decode its value.
 ///
-/// A tiny dependency-free query reader (mirrors Plan-02's local percent-encoder decision
+/// A tiny dependency-free query reader (a local percent-encoder decision
 /// — the workspace `reqwest` stays on its minimal rustls-only feature set, and no
 /// `url`/`serde_urlencoded` dep is added). Returns the first match. The decoded value is
 /// treated as opaque by every caller.
@@ -279,7 +279,7 @@ mod tests {
         assert_eq!(percent_decode("100%"), "100%");
     }
 
-    /// WR-04 at the query layer: an oauth callback whose `code`/`state` contain `+`
+    /// At the query layer: an oauth callback whose `code`/`state` contain `+`
     /// round-trips through `query_get` with the `+` intact (no CSRF-breaking mangling).
     #[test]
     fn oauth_callback_preserves_plus_in_code_and_state() {

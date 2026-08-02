@@ -1,4 +1,4 @@
-//! Profile-switch reconcile (PROF-02/PROF-03) — the capstone of multi-mod management.
+//! Profile-switch reconcile — the capstone of multi-mod management.
 //!
 //! Switching the active profile changes WHICH mods, plugins, and order are deployed for
 //! a game. NexTwist does this WITHOUT ever bypassing the safe engine and WITHOUT a
@@ -6,18 +6,18 @@
 //! **purge-to-pristine** of the current deployment followed by a **fresh deploy** of the
 //! target profile's winner set, then the target profile's `plugins.txt` is written.
 //!
-//! ## The reconcile sequence ([`switch_profile`], D-15)
+//! ## The reconcile sequence ([`switch_profile`])
 //!
 //! 1. **`purge(old)`** — manifest-driven, crash-safe restore to byte-for-byte pristine
-//!    (the existing Phase-1 primitive). Because purge is total, profile A's unique files
+//!    (the existing primitive). Because purge is total, profile A's unique files
 //!    can never survive into profile B.
 //! 2. **resolve + `deploy_winners(new)`** — read the target profile's enabled membership
-//!    (mod set + per-profile ranks via the Plan-01 store), build [`ModInput`]s, run the
-//!    Plan-03 conflict resolver, and deploy the deduped winner set through the SAME
-//!    journaled per-file primitive as Phase-1 deploy (the safe engine is never bypassed).
+//!    (mod set + per-profile ranks via the store), build [`ModInput`]s, run the
+//!    conflict resolver, and deploy the deduped winner set through the SAME
+//!    journaled per-file primitive as deploy (the safe engine is never bypassed).
 //! 3. **`apply_load_order(new)`** — write the target profile's asterisk `plugins.txt` at
-//!    the Proton-prefix AppData location via libloot (Plan-04 primitive; PROF-02 carries
-//!    the plugin order, D-13).
+//!    the Proton-prefix AppData location via libloot, which carries
+//!    the plugin order.
 //! 4. **`set_active_profile(new)`** — only AFTER a successful deploy, so exactly one
 //!    profile is active and the active flag never points at a half-applied state.
 //!
@@ -54,14 +54,14 @@ pub struct SwitchReport {
 }
 
 /// Switch the active profile for `game` to `target_profile_id`, reconciling the on-disk
-/// deployment through the safe engine (PROF-02): purge the current deployment to
+/// deployment through the safe engine: purge the current deployment to
 /// pristine, deploy the target profile's enabled-mod winner set, write the target
 /// profile's `plugins.txt`, and mark the target active.
 ///
 /// This NEVER bypasses the engine and NEVER does a diff-deploy: it is a full
 /// purge-to-pristine then a fresh deploy of the target set. Each profile
-/// preserves its own enabled set + per-profile ranks + plugin order (PROF-03), read from
-/// the Plan-01 `profile_mod` / `plugin_state` store tables.
+/// preserves its own enabled set + per-profile ranks + plugin order, read from
+/// the `profile_mod` / `plugin_state` store tables.
 ///
 /// # Errors
 ///
@@ -106,18 +106,18 @@ fn switch_after_purge(
 ) -> Result<SwitchReport, DeployError> {
     // 2. Build the target profile's enabled-mod winner set and deploy it through the
     //    UNCHANGED safe engine. The per-profile membership (enabled flag + per-profile
-    //    rank) is the source of truth — PROF-03 (each profile keeps its own set/order).
+    //    rank) is the source of truth (each profile keeps its own set/order).
     let inputs = enabled_inputs_for_profile(store, game.appid, target_profile_id)?;
     let (winners, _conflicts) = resolve(&inputs)?;
     let deployed = deploy_winners(store, game, &winners)?;
 
     // 3. Write the target profile's plugins.txt at the Proton-prefix AppData location via
-    //    libloot (Plan-04 apply_load_order; masters-first enforced internally). PROF-02
+    //    libloot (apply_load_order; masters-first enforced internally).
     //    carries plugin order across the switch. deploy -> loadorder is acyclic.
     let plugins_txt = apply_profile_plugins(store, game, target_profile_id)?;
 
     // 4. Mark the target active ONLY after a successful deploy (exactly one active; the
-    //    active flag never points at a half-applied state — T-02-16).
+    //    active flag never points at a half-applied state).
     store
         .set_active_profile(game.appid, target_profile_id)
         .map_err(|e| DeployError::Profile(e.to_string()))?;
@@ -134,7 +134,7 @@ fn switch_after_purge(
 /// Joins the per-profile membership (`list_profile_mods` → `(mod_id, enabled, rank)`)
 /// against the game's managed mods (`list_mods` → staging roots), keeping only enabled
 /// members and tagging each with its PER-PROFILE rank (so the same shared mod can win in
-/// one profile and lose in another — PROF-03). Membership rows for mods that no longer
+/// one profile and lose in another). Membership rows for mods that no longer
 /// exist are skipped defensively.
 fn enabled_inputs_for_profile(
     store: &Store,
@@ -166,7 +166,7 @@ fn enabled_inputs_for_profile(
 }
 
 /// Write the target profile's `plugins.txt` at the Proton-prefix AppData location via the
-/// Plan-04 `loadorder::apply_load_order` primitive, returning the written path.
+/// The `loadorder::apply_load_order` primitive, returning the written path.
 ///
 /// Reads the profile's persisted plugin enable/order (`list_plugin_state`) and hands it to
 /// libloot, which writes the canonical asterisk-format masters-first active-plugins file.

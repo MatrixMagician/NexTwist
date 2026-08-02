@@ -14,11 +14,10 @@
 //! drops the choice and mis-installs. The caller surfaces this for a manual wizard pass.
 //!
 //! [`map_rules_to_ranks`] translates the Collection's `modRules[]` (`after`/`before`/
-//! `conflicts`) plus per-mod `fileOverrides` onto the EXISTING Phase-2 conflict-rank model
+//! `conflicts`) plus per-mod `fileOverrides` onto the EXISTING conflict-rank model
 //! — no new rules engine. `after` ⇒ the source gets a HIGHER rank
 //! number (lower priority, loses file conflicts) than the reference; `before` ⇒ the
 //! inverse. A rule whose `reference` matches no resolved mod is skipped, never fatal
-//! (Pitfall 4 / T-04-09).
 
 use std::collections::HashMap;
 
@@ -30,8 +29,7 @@ use crate::collection::{
 use crate::error::NexusError;
 
 /// Replay a Collection mod's pinned FOMOD [`Choices`] against the parsed [`FomodModule`],
-/// producing the [`fomod::Selection`] the SAME [`fomod::resolve`] drives (COLL-03,
-/// Pattern 6).
+/// producing the [`fomod::Selection`] the SAME [`fomod::resolve`] drives.
 ///
 /// For each manifest step → group → option, the name is matched (case-sensitively, exactly
 /// as authored) against the module's `installSteps`. A matched option is added to the
@@ -125,7 +123,7 @@ fn stale(detail: String) -> NexusError {
 /// A relative-rank adjustment for one resolved mod, derived from the Collection's rules.
 ///
 /// The orchestrator seeds every resolved mod with a baseline rank (e.g. manifest order)
-/// and then applies these deltas: a higher `rank` number loses file conflicts (Phase-2
+/// and then applies these deltas: a higher `rank` number loses file conflicts (
 /// `conflict::resolve` semantics). `file_overrides` are the `dest_rel` paths this mod
 /// force-wins regardless of rank.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -137,7 +135,7 @@ pub struct RankAdjustment {
     pub file_overrides: Vec<String>,
 }
 
-/// Map the Collection's `modRules[]` + per-mod `fileOverrides` onto the Phase-2 rank model
+/// Map the Collection's `modRules[]` + per-mod `fileOverrides` onto the rank model
 /// — NO new rules engine.
 ///
 /// `key_for` resolves a [`ModReference`] (or a mod identity) to a stable key (e.g. the
@@ -192,7 +190,7 @@ where
         }
     }
 
-    // Per-mod fileOverrides force-win paths (Pattern 7 / fileOverrides).
+    // Per-mod fileOverrides force-win paths.
     for (mod_key, paths) in file_overrides {
         if paths.is_empty() {
             continue;
@@ -245,7 +243,7 @@ fn reference_to_index(reference: &ModReference, mods: &[CollectionMod]) -> Optio
 }
 
 /// Compute each Collection mod's concrete deploy rank from the manifest `modRules` +
-/// per-mod `fileOverrides` — the PRODUCTION wiring for COLL-04.
+/// per-mod `fileOverrides` — the PRODUCTION wiring.
 ///
 /// This is the single entry point the adapter calls so the author-intended conflict order
 /// actually reaches the deploy engine (rather than every mod being hardcoded to one rank).
@@ -520,7 +518,7 @@ mod tests {
         }
     }
 
-    /// COLL-04 wiring: `compute_collection_ranks` turns a manifest `after` rule into a
+    /// `compute_collection_ranks` turns a manifest `after` rule into a
     /// concrete per-mod rank where the deploy engine's "lower number wins" makes the author's
     /// intended winner own a contested path. Critically, the rule must FLIP the outcome
     /// relative to plain manifest order so the wiring (not the baseline) is what proves it.

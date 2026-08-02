@@ -1,4 +1,4 @@
-//! Profile-slice adapters (PROF-01/02/03) — delegate to the store (create/list/delete)
+//! Profile-slice adapters — delegate to the store (create/list/delete)
 //! and the headless `deploy::switch_profile` reconcile (switch). Zero business logic:
 //! each command looks up the game and forwards exactly ONE store/headless call, mapping
 //! the typed error to a `String` at the IPC boundary.
@@ -9,7 +9,7 @@
 //! mark active); it ALREADY writes the target profile's `plugins.txt` internally (the
 //! Task-1 wiring is deploy → loadorder direct), so this adapter does not re-apply it.
 //! `delete_profile` removes only the profile + its selections; staged mod files are kept
-//! (D-14, shared staging).
+//! (shared staging).
 
 use deploy::SwitchReport;
 use nextwist_core::Profile;
@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 use crate::commands::{boundary_err, require_game};
 use crate::state::AppState;
 
-/// List all profiles for a game (PROF-01) — the data source for the §D profile selector.
+/// List all profiles for a game — the data source for the profile selector.
 /// A single `store.list_profiles` read.
 #[tauri::command]
 pub async fn list_profiles(
@@ -35,7 +35,7 @@ pub async fn list_profiles(
         .map_err(boundary_err)
 }
 
-/// Create a new (inactive) profile for a game and return it (PROF-01). The store assigns
+/// Create a new (inactive) profile for a game and return it. The store assigns
 /// the row id; a duplicate name per game surfaces the store's UNIQUE error verbatim.
 #[tauri::command]
 pub async fn create_profile(
@@ -57,7 +57,7 @@ pub async fn create_profile(
     })
 }
 
-/// Switch the active profile (PROF-02), reconciling the deployment through the safe
+/// Switch the active profile, reconciling the deployment through the safe
 /// engine: `deploy::switch_profile` purges the current deployment to pristine, deploys
 /// the target profile's winner set, writes its `plugins.txt`, and marks it active. This
 /// is the disk-mutating action the UI gates behind a confirmation modal.
@@ -71,7 +71,7 @@ pub async fn switch_profile(
     deploy::switch_profile(&state.lock().await.store, &game, profile_id).map_err(boundary_err)
 }
 
-/// Delete a profile and its mod/plugin selections (PROF-01). Staged mod files are KEPT
+/// Delete a profile and its mod/plugin selections. Staged mod files are KEPT
 /// (only the profile + its references are removed). Idempotent: a missing id
 /// returns `false`.
 ///

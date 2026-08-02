@@ -9,7 +9,7 @@
 //! exercised here directly against the headless engine + store with the testkit blake3
 //! DIR_SENTINEL pristine harness — no Tauri, no live Premium account, no download.
 //!
-//! BL-01 REGRESSION LOCK: the deploy ranks are NOT hand-written here. They are computed by
+//! REGRESSION LOCK: the deploy ranks are NOT hand-written here. They are computed by
 //! the REAL adapter helper `nexus::compute_collection_ranks` from a parsed `collection.json`
 //! manifest's `modRules`, then persisted into the store and read back the SAME way
 //! `deploy_collection` does. The manifest is authored so the `after` rule makes a mod with a
@@ -20,7 +20,7 @@
 //! deploy engine. Hand-set ranks can no longer satisfy it.
 //!
 //! The live end-to-end (real Premium account → real Collection archive download → deploy →
-//! in-game launch → uninstall) remains a manual UAT item (the Plan checkpoint / NEXUS-01
+//! in-game launch → uninstall) remains a manual verification item (
 //! live-account gate). The reversibility CONTRACT it would visually confirm is regression-
 //! locked here so a refactor can never silently break it.
 
@@ -243,7 +243,7 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
         fs::read(fx.install.join("Data/shared.esp")).unwrap(),
         b"B-SHARED",
         "the manifest `after` rule makes modB (rank 1) win shared.esp over modA (rank 3) — \
-         NOT the engine's lowest-mod_id tie-break (which would pick modA). BL-01 wiring."
+         NOT the engine's lowest-mod_id tie-break (which would pick modA)."
     );
     assert!(fx.install.join("Data/onlyA.esp").is_file());
     assert!(fx.install.join("Data/onlyB.esp").is_file());
@@ -266,7 +266,7 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
     //    first, exactly as uninstall_collection does. This is the ordering CONTRACT.
     assert!(
         store.delete_profile(profile_id).is_err(),
-        "delete_profile must reject the still-active collection profile (CR-02)"
+        "delete_profile must reject the still-active collection profile"
     );
     store.clear_active_profile(game.appid).unwrap();
     assert!(

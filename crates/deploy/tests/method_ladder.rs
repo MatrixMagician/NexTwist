@@ -1,4 +1,4 @@
-//! method_ladder (DEPLOY-05): the per-target method ladder selects the strongest
+//! method_ladder: the per-target method ladder selects the strongest
 //! applicable primitive and downgrades on `CrossesDevices`/errno 18 instead of
 //! failing — and every method's `deploy_file` + `remove_file` round-trips a single
 //! file (per-file only; never a directory symlink).
@@ -88,7 +88,7 @@ fn symlink_method_is_per_file_only() {
         let meta = fs::symlink_metadata(&dst).unwrap();
         assert!(
             !meta.file_type().is_symlink() || !dst.is_dir(),
-            "must never create a directory symlink into staging (Pitfall 2)"
+            "must never create a directory symlink into staging"
         );
     }
 }

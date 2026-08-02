@@ -1,5 +1,5 @@
-//! Download adapter (NEXUS-03/06) — the ONLY place a Tauri type touches the download
-//! flow. Per the Anti-Pattern-4 contract (see `commands/mod.rs`): no business logic
+//! Download adapter — the ONLY place a Tauri type touches the download
+//! flow. Per the thin-adapter contract (see `commands/mod.rs`): no business logic
 //! lives here. The adapter:
 //!
 //! 1. resolves the managed game + the session auth (OAuth bearer or the keyring API key),
@@ -89,7 +89,7 @@ pub async fn start_download(
 ///
 /// This is the shared core both the IPC [`start_download`] command and the `nxm://`
 /// deep-link router (`commands::nexus::handle_nxm_url`) call — so the free-user redemption
-/// reuses the EXACT Plan-02 stream→extract→stage path (no parallel download flow). It
+/// reuses the EXACT stream→extract→stage path (no parallel download flow). It
 /// resolves the session auth itself (OAuth bearer or the keyring API key), registers a
 /// cancel flag, runs the flow, and emits the terminal `download://progress` event (`done`,
 /// `failed`, or `expired`). Returns the staged result, or the failure reason string.
@@ -108,7 +108,7 @@ pub(crate) async fn run_download_to_window(
     key: Option<String>,
     expires: Option<String>,
 ) -> Result<DownloadResult, String> {
-    // BUG 2 fix: a Retry of an `nxm://`-originated row reaches the IPC `start_download`
+    // A Retry of an `nxm://`-originated row reaches the IPC `start_download`
     // command with `appid == 0`, because the backend created that row entirely server-side
     // (`route_download` resolved the AppID from the domain) and the secret-free arrival
     // event never carried an AppID back to the frontend. Recover the AppID from the
@@ -174,7 +174,7 @@ pub(crate) async fn run_download_to_window(
             retry_after,
         }) => {
             // A rate-limit is transient and auto-recoverable — surface it as a
-            // distinct "ratelimited" state (which drives the WR-01 UI notice and a paused,
+            // distinct "ratelimited" state (which drives the rate-limit UI notice and a paused,
             // retryable row), NOT a terminal "failed" row. An expired free-user link is
             // surfaced as "expired". Everything else is a real "failed".
             let state_label = if retry_after.is_some() {

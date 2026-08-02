@@ -29,7 +29,7 @@ pub struct Game {
     pub staging_dir: PathBuf,
 }
 
-/// A single mod managed for a game. Phase 2 makes the store multi-mod: many
+/// A single mod managed for a game. The store is multi-mod: many
 /// `ManagedMod` rows coexist per game, ordered by `rank` for conflict resolution.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManagedMod {
@@ -41,7 +41,7 @@ pub struct ManagedMod {
     pub staging_root: PathBuf,
     /// Whether the mod is currently enabled (deployed).
     pub enabled: bool,
-    /// Deployment rank — LOWER rank = HIGHER priority = wins a file conflict; 1-based. D-01.
+    /// Deployment rank — LOWER rank = HIGHER priority = wins a file conflict; 1-based.
     pub rank: u32,
 }
 
@@ -63,11 +63,11 @@ pub struct Profile {
     pub active: bool,
 }
 
-/// NexusMods provenance for a managed mod that was acquired in-app (NEXUS-03/06).
+/// NexusMods provenance for a managed mod that was acquired in-app.
 ///
 /// Recorded additively (V4 migration) against the mod's `managed_mod` row so a
 /// Nexus-sourced mod is otherwise indistinguishable from a local-archive mod — it still
-/// deploys/purges through the Phase-1/2 engine. `mod_id` is the local `managed_mod` row
+/// deploys/purges through the deploy engine. `mod_id` is the local `managed_mod` row
 /// id; `nexus_mod_id`/`file_id` identify the file on NexusMods; `version`/`display_name`
 /// come from the GraphQL v2 metadata read. The FK CASCADEs, so deleting the mod sheds
 /// this row.
@@ -90,7 +90,7 @@ pub struct NexusSource {
 /// A Collection is parsed from its revision manifest (`collection.json`) and persisted
 /// additively (V5 migration). `(appid, slug, revision)` identify the exact revision and
 /// form the idempotent upsert key. `profile_id` is `None` until the Collection is
-/// materialised into its dedicated Phase-2 profile; deploying a Collection is a
+/// materialised into its dedicated profile; deploying a Collection is a
 /// profile switch, never a new primitive. The `id` field is assigned by the store.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Collection {
@@ -104,7 +104,7 @@ pub struct Collection {
     pub revision: u32,
     /// Human-readable Collection name (from the manifest `info.name`).
     pub name: String,
-    /// The dedicated Phase-2 profile this Collection deploys into, once materialised.
+    /// The dedicated profile this Collection deploys into, once materialised.
     pub profile_id: Option<i64>,
 }
 
@@ -188,10 +188,10 @@ pub struct Plugin {
     pub order: u32,
 }
 
-/// A file-level conflict: many mods provide the same deploy-relative path (CONF-01).
+/// A file-level conflict: many mods provide the same deploy-relative path.
 ///
 /// `providers` and `winner` are `ManagedMod` row ids. `winner` is the provider whose
-/// file is actually deployed (lowest rank wins, D-01); it is recorded in the deploy
+/// file is actually deployed (lowest rank wins); it is recorded in the deploy
 /// manifest so purge stays pristine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileConflict {

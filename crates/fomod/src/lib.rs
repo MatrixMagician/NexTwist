@@ -1,6 +1,6 @@
 //! `nextwist-fomod` — the headless FOMOD `ModuleConfig.xml` engine.
 //!
-//! This crate is the only genuinely new safety-critical engine code in Phase 4. It
+//! This crate is a self-contained safety-critical engine. It
 //! implements the FULL FOMOD 5.x `ModuleConfig.xml` specification (CONTEXT-locked
 //! "full spec, not a subset" decision) as a pure transform: untrusted archive XML →
 //! typed AST → (user choices + accumulated flags) → an ordered, concrete file-install

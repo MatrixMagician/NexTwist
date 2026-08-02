@@ -46,7 +46,7 @@ fn parses_premium_link_without_key_or_expires() {
 }
 
 /// Test 3: the oauth-callback variant is discriminated from a download and yields the
-/// code+state for the Plan-01 code-exchange.
+/// code+state for the code-exchange.
 #[test]
 fn discriminates_oauth_callback() {
     let url = "nxm://oauth/callback?code=XYZ&state=S";

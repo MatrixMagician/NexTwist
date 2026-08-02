@@ -220,7 +220,7 @@ impl NexusClient {
     /// load-bearing path that the same base + auth header already use for
     /// [`download_link`]. (A previously-guessed GraphQL v2 `modFile(gameDomain,modId,fileId)`
     /// top-level field does NOT exist in the live v2 schema, so it always returned a null
-    /// `modFile` and aborted the download — RESEARCH was only MEDIUM-confidence on v2.)
+    /// `modFile` and aborted the download — v2 coverage here was never confirmed.)
     ///
     /// The base URL is centralised so a future host swap is one edit.
     ///
@@ -274,7 +274,7 @@ impl NexusClient {
         })
     }
 
-    /// Resolve a pinned `(mod_id, file_id)`'s availability over REST v1 (COLL-02 resolve gate).
+    /// Resolve a pinned `(mod_id, file_id)`'s availability over REST v1 (the resolve gate).
     ///
     /// Reuses the same proven v1 file-info endpoint as [`mod_file_metadata`] — gated through
     /// `limiter.until_ready()` FIRST — but classifies the result for the Collection resolve

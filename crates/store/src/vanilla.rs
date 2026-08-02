@@ -1,4 +1,4 @@
-//! Content-addressed vanilla backup ledger (DEPLOY-04): the `vanilla_backup` facade.
+//! Content-addressed vanilla backup ledger: the `vanilla_backup` facade.
 //!
 //! Backup-before-overwrite is the single most important safety mechanism. Before a
 //! deploy overwrites any pre-existing game file, the deploy engine copies

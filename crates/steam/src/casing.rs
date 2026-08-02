@@ -1,8 +1,8 @@
-//! Per-game canonical `Data/` casing map (DEPLOY-08 input).
+//! Per-game canonical `Data/` casing map.
 //!
 //! Wine/Proton does NOT abstract the filesystem: a Windows `open("Data\\Textures\\x")`
 //! becomes a case-sensitive Linux `open()`, so mixed-case mod paths (authored on
-//! case-insensitive NTFS) silently fail to load (RESEARCH.md Pitfall 4). The deploy
+//! case-insensitive NTFS) silently fail to load. The deploy
 //! engine's `casefold.rs` rewrites incoming mod paths to the game's REAL
 //! casing — and the knowledge of that real casing lives HERE.
 //!

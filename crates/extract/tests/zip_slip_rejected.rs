@@ -1,4 +1,4 @@
-//! Crafted malicious-archive rejection test — the Phase 1 security centerpiece.
+//! Crafted malicious-archive rejection test — the security centerpiece.
 //!
 //! Builds three hostile zips in-test and proves `install_archive` rejects each
 //! with the correct `ExtractError` variant AND that nothing is written outside the

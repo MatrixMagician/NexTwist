@@ -1,4 +1,4 @@
-//! Intent-before-act operation-journal protocol + idempotent replay (DEPLOY-06).
+//! Intent-before-act operation-journal protocol + idempotent replay.
 //!
 //! SQLite WAL gives ACID *inside* the DB, but a `link()`/`reflink()`/`copy()` syscall
 //! and the row recording it are two operations that cannot be made atomic together.
@@ -53,7 +53,7 @@ pub fn begin_deploy(
 }
 
 /// Record a `pending` StarfieldCustom.ini-activation intent and return its id. The
-/// `sentinel_rel` is the bare `StarfieldCustom.ini` (NO `Data/` prefix, Pitfall 2) so it
+/// `sentinel_rel` is the bare `StarfieldCustom.ini` (NO `Data/` prefix) so it
 /// can never collide with a `Data/`-rooted manifest relpath. Mirrors [`begin_purge`]
 /// (`method: None`, `source_hash: None`).
 pub fn begin_ini(store: &Store, appid: u32, sentinel_rel: &Path) -> Result<JournalId, DeployError> {
@@ -204,7 +204,7 @@ fn replay_purge(store: &Store, game: &Game, row: &JournalRow) -> Result<(), Depl
 /// This is the copy of [`replay_purge`]'s body that swaps ONLY the target resolution: the
 /// INI target resolves via `steam::my_games_path(&game.prefix)`, NEVER `resolve_target` /
 /// `guard_within_root` (the copy-paste trap; the `Data/`-root guard stays
-/// byte-for-byte untouched, SFINI-04). Rolling a crashed *ensure* back to provenance is a
+/// byte-for-byte untouched). Rolling a crashed *ensure* back to provenance is a
 /// valid recovery: the activation simply didn't take, and re-runs on the next deploy.
 fn replay_ini(store: &Store, game: &Game, row: &JournalRow) -> Result<(), DeployError> {
     let target = steam::my_games_path(&game.prefix).join(crate::gameconfig::INI_FILENAME);

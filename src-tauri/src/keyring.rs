@@ -8,9 +8,8 @@
 //! `NoKeyringBackend` to the UI's destructive "Can't store your login securely" banner
 //! and disables login.
 //!
-//! Follows RESEARCH Pattern 2 verbatim, with the backend abstracted behind a small
-//! [`KeyringBackend`] trait so a simulated `NoStorageAccess` can be exercised in CI
-//! without a real DBus session (RESEARCH Environment Availability).
+//! The backend is abstracted behind a small [`KeyringBackend`] trait so a simulated
+//! `NoStorageAccess` can be exercised in CI without a real DBus session.
 
 use keyring::Entry;
 use keyring::error::Error as KrError;
@@ -23,7 +22,7 @@ const USER: &str = "nexusmods-refresh-token";
 /// Errors from the shell keyring layer.
 #[derive(Debug, Error)]
 pub enum KeyringError {
-    /// No Secret Service / keyring backend is available. The NEXUS-02 hard-fail: login
+    /// No Secret Service / keyring backend is available. A hard-fail: login
     /// is blocked and NOTHING is written to disk. Never downgraded to a plaintext file.
     #[error("no keyring backend available — refusing to store credentials as plaintext")]
     NoKeyringBackend,
@@ -65,7 +64,7 @@ impl KeyringBackend for SecretService {
     }
 }
 
-/// Store the long-lived credential. NEXUS-02: on no-backend this returns
+/// Store the long-lived credential. On no-backend this returns
 /// `NoKeyringBackend` and writes nothing — the only write path is `set_password`.
 pub fn store_refresh_token(token: &str) -> Result<(), KeyringError> {
     store_with(&SecretService, token)

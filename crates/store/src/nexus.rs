@@ -1,4 +1,4 @@
-//! Nexus provenance store facade (NEXUS-03/06): the `nexus_source` table.
+//! Nexus provenance store facade: the `nexus_source` table.
 //!
 //! Records where a managed mod was acquired from NexusMods (mod id, file id, version,
 //! display name) so a Nexus-sourced mod is otherwise indistinguishable from a

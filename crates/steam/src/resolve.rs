@@ -2,7 +2,7 @@
 //!
 //! steamlocate returns the `(App, Library)` pair but exposes NO compatdata API, so
 //! the Proton prefix `compatdata/<appid>/pfx` is derived MANUALLY here from the
-//! library root (RESEARCH.md Pitfall 5). Resolution honors `$STEAM_COMPAT_DATA_PATH`
+//! library root. Resolution honors `$STEAM_COMPAT_DATA_PATH`
 //! when set and re-resolves on every call (paths can move — never cached to disk).
 //!
 //! Only the two supported Bethesda AppIDs are accepted (allow-list, ENV-03).
@@ -255,7 +255,7 @@ fn proton_prefix(library_root: &Path, appid: u32) -> PathBuf {
 /// Manual "add game by folder" fallback (ENV-03) for non-standard / Snap installs.
 ///
 /// Validates the supplied folder contains the expected Bethesda markers (a `Data/`
-/// directory and the game executable) BEFORE accepting it (threat T-01-04: untrusted
+/// directory and the game executable) BEFORE accepting it (untrusted
 /// path validation). Derives the prefix from a sibling `compatdata` when discoverable,
 /// else records the install dir with `prefix_exists = false` (unresolved-prefix
 /// warning surfaced by the caller).

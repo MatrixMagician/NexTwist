@@ -1,4 +1,4 @@
-//! Streaming download with progress (NEXUS-03/04/06).
+//! Streaming download with progress.
 //!
 //! [`download_to`] streams a CDN response body **chunk-by-chunk** to a destination file
 //! via `reqwest::Response::bytes_stream()` + `futures_util::StreamExt`, writing each
@@ -6,7 +6,7 @@
 //! `Fn(u64, Option<u64>)` callback. The callback carries **no Tauri type** — the shell
 //! wraps it into `window.emit("download://progress", …)`.
 //!
-//! CRITICAL anti-pattern (RESEARCH T-03-09 / criterion #4): the whole body is NEVER
+//! CRITICAL anti-pattern: the whole body is NEVER
 //! buffered into memory (the full-body whole-buffer read is forbidden — a multi-GB
 //! texture pack would OOM the process). Only the chunked byte-stream path is used.
 //!

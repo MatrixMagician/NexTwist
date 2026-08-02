@@ -2,7 +2,7 @@
 //!
 //! Enumerates Steam roots via steamlocate's `locate_all()` (which already covers the
 //! Flatpak-relocated root on most systems) and additionally probes the explicit
-//! Flatpak path. Snap is treated as LOW-confidence (RESEARCH.md Assumption A2): we do
+//! Flatpak path. Snap is treated as LOW-confidence: we do
 //! NOT auto-detect Snap — Snap users rely on [`crate::add_game_by_folder`].
 //!
 //! Discovery is filtered to the supported Bethesda AppIDs (see [`crate::resolve`]).

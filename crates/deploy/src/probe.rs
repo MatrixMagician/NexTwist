@@ -41,7 +41,7 @@ pub struct FsCaps {
     pub casefold: Casefold,
 }
 
-/// Best-effort case-folding (ext4 `+F`) verdict. A nice-to-have warning in Phase 1;
+/// Best-effort case-folding (ext4 `+F`) verdict. A nice-to-have warning;
 /// casing normalization is the locked primary approach, so this never gates deploy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Casefold {

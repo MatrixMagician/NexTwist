@@ -140,7 +140,7 @@ export interface SortProposal {
   masterlist_date: string;
 }
 
-/** SFLO-04 on-launch reconciliation verdict (mirrors loadorder::ReconcileState, externally-
+/** On-launch reconciliation verdict (mirrors loadorder::ReconcileState, externally-
  *  tagged serde). `"InSync"` is the bare string (NOT `{InSync:null}`) — the calm in-sync branch;
  *  `{ Drift: [...] }` lists beyond-expected plugin names (the amber discrepancy branch). */
 export type ReconcileState = "InSync" | { Drift: string[] };
@@ -343,7 +343,7 @@ export const parseFomod = (appid: number, archive: string): Promise<FomodProject
   invoke("parse_fomod", { appid, archive });
 
 /** The PURE dry-run resolve: turn a selection into the file-install plan + conflict
- *  classification WITHOUT writing anything (the FOMOD-02 dry-run-before-apply gate). */
+ *  classification WITHOUT writing anything (the dry-run-before-apply gate). */
 export const resolveFomod = (
   appid: number,
   archive: string,
@@ -361,7 +361,7 @@ export const applyFomod = (
 ): Promise<FomodApplyResult> =>
   invoke("apply_fomod", { appid, archive, name, selection });
 
-// --- Collections (COLL-01..05). 1:1 mirrors of commands/collections.rs. The resolve
+// --- Collections. 1:1 mirrors of commands/collections.rs. The resolve
 //     report is a HARD GATE rendered BEFORE any download; the Premium gate blocks a free
 //     account before any download starts. ---
 
@@ -411,7 +411,7 @@ export const resolveCollection = (
   manifestJson: string,
 ): Promise<ResolveReport> => invoke("resolve_collection", { appid, manifestJson });
 
-/** Bulk-download a Collection's available mods after the report is accepted (COLL-02/03).
+/** Bulk-download a Collection's available mods after the report is accepted.
  *  Enforces the Premium gate FIRST — a free account throws the Premium-required notice and
  *  starts NO download. Per-mod progress drives off the same `download://progress` events. */
 export const downloadCollection = (args: {
@@ -518,7 +518,7 @@ export const switchProfile = (appid: number, profileId: number): Promise<SwitchR
 export const deleteProfile = (appid: number, profileId: number): Promise<boolean> =>
   invoke("delete_profile", { appid, profileId });
 
-// --- NexusMods auth (NEXUS-01/02). Tokens never cross this boundary; only UserInfo. ---
+// --- NexusMods auth. Tokens never cross this boundary; only UserInfo. ---
 
 /** Log in with a manual NexusMods personal API key (the works-today fallback). */
 export const loginWithApiKey = (key: string): Promise<UserInfo> =>
@@ -533,7 +533,7 @@ export const logout = (): Promise<void> => invoke("logout");
 /** The currently logged-in user, or null if logged out. */
 export const accountInfo = (): Promise<UserInfo | null> => invoke("account_info");
 
-// --- NexusMods downloads (NEXUS-03/05/06). Streams server-side; the UI drives entirely
+// --- NexusMods downloads. Streams server-side; the UI drives entirely
 //     off async `download://progress` events so it never freezes. ---
 
 /**

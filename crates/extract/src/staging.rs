@@ -93,7 +93,7 @@ pub fn install_archive(archive: &Path, staging_root: &Path) -> Result<StagedMod,
     // packaged as `MyMod/Data/foo.esp` instead of `Data/foo.esp`) so the staged tree is
     // `Data/`-rooted rather than double-nested under `Data/MyMod/...`. This runs strictly
     // between extract-validate and the move — the validated extract→validate→move→
-    // read-only ordering is preserved. (Carried Phase-2 gap; acute for FOMOD-02 because
+    // read-only ordering is preserved. (Carried gap; acute for the FOMOD dry-run because
     // `<file>/<folder>` source resolution depends on the detected archive root.)
     let plan = detect_archive_root(temp_root)?;
 
@@ -138,7 +138,7 @@ fn make_temp_near(staging_root: &Path) -> Result<TempDir, ExtractError> {
 /// Recognized top-level game-root items (case-insensitive). A wrapper directory that
 /// directly contains one of these — or a `Data` folder — is treated as the real root.
 ///
-/// Kept SMALL and explicit (threat T-04-04): a too-broad list would wrongly flatten a
+/// Kept SMALL and explicit: a too-broad list would wrongly flatten a
 /// legitimate multi-folder mod. `Data` is handled separately below (it is the dominant
 /// Bethesda root); these are the common script-extender / config siblings that ship at the
 /// game root alongside `Data`.
@@ -442,7 +442,7 @@ mod root_detection_tests {
     #[test]
     fn multi_folder_mod_is_never_flattened() {
         // More than one top-level entry ⇒ a legitimate multi-folder mod; leave it as-is
-        // even though one child is a recognizable root. This is the T-04-04 guard.
+        // even though one child is a recognizable root. This is the ambiguous-root guard.
         let tmp = tempfile::tempdir().unwrap();
         touch(tmp.path(), "Data/foo.esp");
         touch(tmp.path(), "readme.txt");

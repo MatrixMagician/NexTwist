@@ -1,4 +1,4 @@
-//! casefold_normalize (DEPLOY-08): a mixed-case mod path is rewritten so its DIRECTORY
+//! casefold_normalize: a mixed-case mod path is rewritten so its DIRECTORY
 //! components match the game's canonical `Data/` casing, while leaf-file casing and
 //! mod-introduced (game-absent) directories are preserved unchanged.
 //!

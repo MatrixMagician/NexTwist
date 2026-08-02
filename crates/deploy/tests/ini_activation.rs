@@ -1,4 +1,4 @@
-//! ini_activation (SFINI-04/05) — the reversibility suite for StarfieldCustom.ini
+//! ini_activation — the reversibility suite for StarfieldCustom.ini
 //! loose-file activation, driven ENTIRELY through the public engine choke points
 //! (`deploy` / `deploy_winners` / `redeploy_winners` / `purge` / `recover_on_launch`)
 //! so it proves the WIRING, not just the `gameconfig` module.
@@ -453,7 +453,7 @@ fn ini_purge_crash_window_recovers_via_journal() {
         "activation edited the INI"
     );
 
-    // Crash in the WR-01 window: the Data/ purge loop has completed and the INI-restore
+    // Crash in the restore window: the Data/ purge loop has completed and the INI-restore
     // intent is journaled, but the INI has not yet been restored.
     let err = purge_with_abort_before_ini(&store, &game).unwrap_err();
     assert!(
@@ -479,7 +479,7 @@ fn ini_purge_crash_window_recovers_via_journal() {
     assert_eq!(
         fs::read(ini_path(&game)).unwrap(),
         original,
-        "recover_on_launch restored the stranded INI byte-for-byte (WR-01)"
+        "recover_on_launch restored the stranded INI byte-for-byte"
     );
     let after = snapshot_tree(&game.prefix).unwrap();
     assert_trees_identical(&pristine, &after);
@@ -490,7 +490,7 @@ fn ini_purge_crash_window_recovers_via_journal() {
 }
 
 // ---------------------------------------------------------------------------
-// SFINI-04 (unit-style) — the KIND_INI target is under the prefix, never under Data/.
+// Unit-style — the KIND_INI target is under the prefix, never under Data/.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -637,7 +637,7 @@ fn ini_reactivation_of_absent_preexisting_preserves_original_on_purge() {
     assert_eq!(
         fs::read(ini_path(&game)).unwrap(),
         original,
-        "the user's PreExisting INI is restored byte-for-byte, never deleted (CR-01)"
+        "the user's PreExisting INI is restored byte-for-byte, never deleted"
     );
     let after = snapshot_tree(&game.prefix).unwrap();
     assert_trees_identical(&pristine, &after);

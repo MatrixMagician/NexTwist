@@ -63,7 +63,7 @@ pub enum NexusError {
     /// A Collection's pinned FOMOD choice no longer matches the mod's `ModuleConfig.xml`
     /// (the mod was updated since the Collection captured the choice). Distinct from a
     /// parse error so the UI can surface the "this mod changed — run its installer
-    /// manually" hint rather than mis-installing the stale plan (COLL-03; RESEARCH A3).
+    /// manually" hint rather than mis-installing the stale plan.
     #[error("collection choice replay failed: {0}")]
     Replay(String),
 }

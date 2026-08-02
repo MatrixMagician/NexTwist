@@ -1,9 +1,9 @@
-//! verify_drift (DEPLOY-07): the verify/repair pass hash-diffs the per-game manifest
+//! verify_drift: the verify/repair pass hash-diffs the per-game manifest
 //! against the on-disk game tree and classifies drift as `missing` (recorded but absent
 //! on disk), `changed` (recorded but on-disk bytes hash differently), or `orphan` (on
 //! disk under Data/ but neither recorded by us nor a known vanilla original). `repair`
 //! restores missing+changed managed files but NEVER deletes orphans — unmanaged
-//! user/vanilla files are reported only (Pitfall 4 / threat T-01-16).
+//! user/vanilla files are reported only.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -127,7 +127,7 @@ fn unrecorded_extra_file_is_orphan_and_repair_does_not_delete_it() {
         "extra unrecorded file must be reported as an orphan: {report:?}"
     );
 
-    // repair MUST report-not-delete the orphan (threat T-01-16 / Pitfall 4).
+    // repair MUST report-not-delete the orphan.
     let rep = repair(&h.store, &h.game).unwrap();
     assert!(
         rep.orphans.iter().any(|p| p.ends_with("extra/user.txt")),
@@ -172,7 +172,7 @@ fn repair_restores_missing_and_changed_managed_files() {
 #[test]
 fn empty_orphan_dir_is_reported_and_repair_removes_it() {
     let h = deploy_two_file_mod();
-    // Plant an EMPTY mod-introduced subdir under Data/ (the GAP-01 orphan shape).
+    // Plant an EMPTY mod-introduced subdir under Data/ (the orphan shape).
     let orphan_dir = on_disk(&h.install, "Data/leftover/empty");
     fs::create_dir_all(&orphan_dir).unwrap();
 
@@ -252,7 +252,7 @@ fn dir_with_unmanaged_file_is_not_orphan_dir_and_file_is_not_deleted() {
     );
     assert!(
         unmanaged.is_file(),
-        "repair must NEVER delete an unmanaged file (T-01-16)"
+        "repair must NEVER delete an unmanaged file"
     );
     assert_eq!(fs::read(&unmanaged).unwrap(), b"user-content");
     assert!(

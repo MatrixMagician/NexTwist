@@ -1,4 +1,4 @@
-//! mockito-backed tests for the Collection parser + availability resolver (COLL-01/02).
+//! mockito-backed tests for the Collection parser + availability resolver.
 //!
 //! The resolver is the resolve-before-download HARD GATE: it classifies every pinned mod's
 //! availability from metadata reads ONLY, before any download. These tests drive the REST v1

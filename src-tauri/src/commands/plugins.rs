@@ -1,4 +1,4 @@
-//! Plugin / LOOT adapters (PLUGIN-01/02/03) — delegate to the headless `loadorder` crate.
+//! Plugin / LOOT adapters — delegate to the headless `loadorder` crate.
 //!
 //! Zero safety/format logic lives here: `loadorder` owns the scan, the asterisk
 //! plugins.txt write, the masterlist fetch, and the LOOT sort (all via libloot). These
@@ -8,7 +8,7 @@
 //!
 //! The active-state/order source of truth is the per-profile `plugin_state` store table
 //!`plugins.txt` in the Proton prefix is DERIVED from it (regenerable; not
-//! the pristine invariant — RESEARCH OQ3). `list_plugins` MERGES the on-disk scan
+//! the pristine invariant). `list_plugins` MERGES the on-disk scan
 //! (filenames + ESM/ESL/ESP badges) with the stored enable/order per profile.
 
 use nextwist_core::{Game, Plugin};
@@ -60,7 +60,7 @@ fn merged_plugins_locked(
         .list_plugin_state(profile_id)
         .map_err(boundary_err)?;
 
-    // SFLO-03 protected: the LIVE libloot probe is the engine's authority — the adapter only
+    // Protected masters: the LIVE libloot probe is the engine's authority — the adapter only
     // supplies the paths + enabled-name set (no name literals). Computed for every supported
     // game (SSE/FO4 base masters are implicitly active too). Degrade gracefully: a probe Err
     // (unresolvable prefix / libloot open failure) is LOGGED and the protected set treated as
@@ -130,7 +130,7 @@ async fn merged_plugins(
     merged_plugins_locked(&guard, appid)
 }
 
-/// List a game's plugins (PLUGIN-01 discovery): the enabled mods' + game `Data/` plugins,
+/// List a game's plugins: the enabled mods' + game `Data/` plugins,
 /// ESM/ESL/ESP-badged, merged with the active profile's stored enable/order.
 #[tauri::command]
 pub async fn list_plugins(
@@ -187,8 +187,7 @@ pub async fn set_plugin_enabled(
 /// `order` is the full desired plugin list (name/kind/enabled/order) in the user's chosen
 /// order; the index in the vector becomes the stored order. Writes `plugins.txt` FIRST,
 /// then persists every row to `plugin_state` only after the file write succeeds. On a
-/// write failure the libloot reason is surfaced verbatim for the UI-SPEC plugins.txt error
-/// copy.
+/// write failure the libloot reason is surfaced verbatim for the plugins.txt error copy.
 ///
 /// The file write precedes the DB persist so a libloot/IO failure leaves the DB
 /// UNTOUCHED — matching the user's "nothing was saved" mental model when the command
@@ -226,7 +225,7 @@ fn save_plugin_order_inner(
     profile_id: i64,
     order: &[Plugin],
 ) -> Result<std::path::PathBuf, String> {
-    // 1. Write plugins.txt at the prefix AppData via libloot (masters-first; D-08). Doing
+    // 1. Write plugins.txt at the prefix AppData via libloot (masters-first). Doing
     //    this FIRST means a failure here leaves the DB untouched (nothing saved).
     let folder = loadorder::appdata_folder_name(game.appid)
         .ok_or_else(|| format!("game {} is not supported", game.appid))?;
@@ -294,8 +293,7 @@ pub async fn sort_with_loot(
 /// call to `loadorder::reconcile_plugins_txt`. All classification lives in the engine.
 ///
 /// `deploy::verify` / `VerifyReport` is a SEPARATE surface and is deliberately untouched:
-/// `plugins.txt` lives in the prefix AppData, never seen by the `Data/`-hash verify walk
-/// (07-RESEARCH Pitfall 4).
+/// `plugins.txt` lives in the prefix AppData, never seen by the `Data/`-hash verify walk.
 ///
 /// `protected_plugins` opens a libloot game but does no blocking HTTP (unlike `sort_with_loot`'s
 /// masterlist fetch), so — like `save_plugin_order` — it is called directly under the lock.
@@ -331,7 +329,7 @@ pub async fn reconcile_plugins(
     let on_disk_txt = loadorder::read_plugins_txt(&appdata_local).map_err(boundary_err)?;
 
     // Protected set from the live libloot probe (data-driven EXPECTED set); enabled_names =
-    // the recorded state's enabled plugins (what NexTwist itself writes as `*` lines). IN-02:
+    // the recorded state's enabled plugins (what NexTwist itself writes as `*` lines).
     // degrade gracefully via the same `protected_set` helper `list_plugins` uses — a probe
     // failure (unresolvable prefix / libloot hiccup) logs and treats protected as EMPTY rather
     // than hard-failing this advisory reconciliation surface with a scary error toast.
@@ -407,7 +405,7 @@ mod tests {
         );
         assert!(
             store.list_plugin_state(profile_id).unwrap().is_empty(),
-            "WR-05: a plugins.txt write failure must leave plugin_state UNTOUCHED (nothing saved)"
+            "a plugins.txt write failure must leave plugin_state UNTOUCHED (nothing saved)"
         );
     }
 }

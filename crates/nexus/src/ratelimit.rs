@@ -1,6 +1,6 @@
 //! Client-side rate limiting.
 //!
-//! Two layers, per RESEARCH Pattern 6:
+//! Two layers:
 //!
 //! 1. **Proactive** — a `governor` direct token-bucket limiter sized to the documented
 //!    NexusMods budget. [`RateLimiter::until_ready`] gates *before* each request so a
@@ -26,7 +26,7 @@ use governor::state::{InMemoryState, NotKeyed};
 use governor::{Quota, RateLimiter as GovLimiter};
 use reqwest::header::HeaderMap;
 
-/// Documented NexusMods per-hour request cap for API-key users (RESEARCH A4, `[ASSUMED]`).
+/// Documented NexusMods per-hour request cap for API-key users (`[ASSUMED]`).
 /// The reactive header path corrects for the real budget; this only sizes the proactive
 /// bucket so a runaway loop is throttled even before the first response is seen.
 const HOURLY_CAP: u32 = 100;
@@ -39,7 +39,7 @@ const LOW_REMAINING_THRESHOLD: u64 = 5;
 /// Fallback backoff (when a header signals "low"/429 but carries no usable `-Reset`).
 const DEFAULT_BACKOFF: Duration = Duration::from_secs(60);
 
-// --- X-RL-* header names (centralised — RESEARCH A3 flags the exact casing as ASSUMED). ---
+// --- X-RL-* header names (centralised — the exact casing is ASSUMED). ---
 const H_HOURLY_REMAINING: &str = "x-rl-hourly-remaining";
 const H_HOURLY_RESET: &str = "x-rl-hourly-reset";
 const H_DAILY_REMAINING: &str = "x-rl-daily-remaining";

@@ -1,4 +1,4 @@
-//! SFLO-04 reconciliation unit tests — the pure `reconcile_plugins_txt` verdict.
+//! Reconciliation unit tests — the pure `reconcile_plugins_txt` verdict.
 //!
 //! No prefix / libloot needed: the function is pure, so these use synthetic recorded slices
 //! and hand-written `plugins.txt` strings. They lock BOTH the expected-vs-drift classification

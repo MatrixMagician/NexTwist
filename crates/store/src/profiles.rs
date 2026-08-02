@@ -153,7 +153,7 @@ impl Store {
 
     /// Delete a profile and its membership rows. Idempotent: a missing id returns `false`.
     ///
-    /// REFUSES to delete the currently-active profile (CR-02 safety invariant): the active
+    /// REFUSES to delete the currently-active profile (a safety invariant): the active
     /// profile may have a live on-disk deployment, and deleting it here would orphan those
     /// files (the profile flow no longer triggers a purge) AND leave the game with zero
     /// active profiles, violating "exactly one active per game". The caller must switch to
@@ -248,7 +248,7 @@ mod tests {
             .unwrap()
     }
 
-    /// PROF-01: a game can hold multiple profiles, all listed.
+    /// A game can hold multiple profiles, all listed.
     #[test]
     fn create_multiple() {
         let dir = TempDir::new().unwrap();
@@ -294,14 +294,14 @@ mod tests {
         assert!(!store.set_active_profile(1, 99999).unwrap());
     }
 
-    /// PROF-03: two profiles hold independent enabled-mod sets + ranks.
+    /// Two profiles hold independent enabled-mod sets + ranks.
     #[test]
     fn preserve_membership() {
         let dir = TempDir::new().unwrap();
         let store = Store::open(&dir.path().join("d.db")).unwrap();
         let p1 = store.create_profile(1, "P1").unwrap();
         let p2 = store.create_profile(1, "P2").unwrap();
-        // Real mod rows (WR-06 FK): m10 and m20 stand in for the former hardcoded 10/20.
+        // Real mod rows (FK): m10 and m20 stand in for the former hardcoded 10/20.
         let m10 = add_test_mod(&store, 1, "m10");
         let m20 = add_test_mod(&store, 1, "m20");
 

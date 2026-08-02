@@ -106,7 +106,7 @@ pub struct RecoveryReport {
     /// Number of journal rows replayed (rolled forward or back).
     pub replayed: usize,
     /// Drift report from the automatic verify run after journal replay. An abnormal
-    /// exit thus always yields a drift status (DEPLOY-07: full-pristine-or-report).
+    /// exit thus always yields a drift status: full-pristine-or-report.
     pub drift: crate::verify::VerifyReport,
 }
 
@@ -121,7 +121,7 @@ pub fn deploy(
     staged: &StagedFiles,
 ) -> Result<DeployReport, DeployError> {
     let report = deploy_inner(store, game, staged, None)?;
-    // SFINI-04 choke point: after the Data/ file loop, auto-activate the loose-file INI for
+    // INI choke point: after the Data/ file loop, auto-activate the loose-file INI for
     // Starfield only. The hook lives on the PUBLIC `deploy` (never `deploy_inner`, which
     // `deploy_with_abort` shares) so the crash-sim path never triggers INI activation. A
     // `Block` conflict returns Ok (nothing written); a real I/O / containment / symlink
@@ -192,10 +192,10 @@ fn deploy_inner(
     // for the UI before the user relies on this deployment.
     report.fs_warnings = fs_warnings_from_caps(&caps);
 
-    // DEPLOY-08: the per-game canonical Data/ casing map. Mixed-case mod directory
+    // The per-game canonical Data/ casing map. Mixed-case mod directory
     // components are rewritten to the game's REAL on-disk casing so Wine's
-    // case-sensitive open() resolves them. The map is produced by the steam crate (Plan
-    // 02); deploy only consumes it. It is best-effort: a game whose Data/ tree cannot be
+    // case-sensitive open() resolves them. The map is produced by the steam crate;
+    // deploy only consumes it. It is best-effort: a game whose Data/ tree cannot be
     // walked yields an empty map and normalization is a no-op (no worse than today).
     let casing = canonical_data_casing(&game.install_dir).unwrap_or_default();
 
@@ -206,7 +206,7 @@ fn deploy_inner(
             // extract time). Skip anything else defensively.
             continue;
         }
-        // Single-root Phase-1 deploys do not track per-file ownership (one mod per
+        // Single-root deploys do not track per-file ownership (one mod per
         // deploy), so source_mod stays 0 — UNCHANGED behavior. The injected abort point
         // (crash simulation) lives INSIDE deploy_one_file: it fires after the pending
         // journal row is committed + the file is placed but BEFORE the manifest row /
@@ -228,9 +228,9 @@ fn deploy_inner(
     Ok(report)
 }
 
-/// Deploy a deterministic multi-root WINNER SET (CONF-03): the conflict resolver's
+/// Deploy a deterministic multi-root WINNER SET: the conflict resolver's
 /// output, where each file may come from a DIFFERENT mod's staging root and carries the
-/// winning mod's id (recorded as `FileEntry.source_mod`, D-03).
+/// winning mod's id (recorded as `FileEntry.source_mod`).
 ///
 /// This reuses the EXACT same journaled, backup-before-overwrite, method-laddered
 /// per-file primitive as [`deploy`] ([`deploy_one_file`]) — the safe engine is never
@@ -303,7 +303,7 @@ pub fn deploy_winners(
 
     report.fs_warnings = seen_warnings;
 
-    // SFINI-04 choke point (profile-switch rides `redeploy_winners` = purge + this): after
+    // INI choke point (profile-switch rides `redeploy_winners` = purge + this): after
     // the winner loop, auto-activate the loose-file INI for Starfield only. Same gate +
     // Block semantics as the single-root `deploy` tail; all logic lives in `gameconfig`.
     if game.appid == steam::STARFIELD {
@@ -313,7 +313,7 @@ pub fn deploy_winners(
     Ok(report)
 }
 
-/// Reconcile a game's on-disk deployment to a fresh conflict-winner set (CONF-03): a full
+/// Reconcile a game's on-disk deployment to a fresh conflict-winner set: a full
 /// **purge-to-pristine** of the CURRENT deployment followed by a **fresh deploy** of
 /// `winners`, in one journaled sequence — exactly the discipline [`crate::switch_profile`]
 /// uses for a profile switch (always purge between deployments, never a
@@ -354,7 +354,7 @@ pub fn redeploy_winners(
 /// backup-before-overwrite, idempotent file op, then manifest row + `done` flip.
 ///
 /// `source_mod` is the owning mod id recorded in the manifest (`0` for single-root
-/// Phase-1 deploys; the winning mod id for the conflict winner set — D-03).
+/// single-root deploys; the winning mod id for the conflict winner set).
 ///
 /// `abort_after` is the test-only crash-injection seam (`None` in production): when set,
 /// once `report.deployed >= abort_after` the function returns [`DeployError::Aborted`]
@@ -377,7 +377,7 @@ fn deploy_one_file(
 ) -> Result<(), DeployError> {
     // Normalize the mod's path casing to the game's canonical Data/ casing BEFORE
     // resolving the on-disk target, so the deployed path matches what Wine opens
-    // (DEPLOY-08). The manifest then records the normalized relpath, preserving the
+    // The manifest then records the normalized relpath, preserving the
     // round-trip-pristine guarantee (purge keys off the same normalized path).
     let rel = normalize_to_canonical(rel, casing);
     let rel = &rel;
@@ -434,7 +434,7 @@ pub fn purge(store: &Store, game: &Game) -> Result<PurgeReport, DeployError> {
 }
 
 /// Test-only crash seam: run the full `Data/` purge and durably journal the INI-restore
-/// intent, but abort in the WR-01 window — AFTER the manifest loop (every row flipped to
+/// intent, but abort in the crash window — AFTER the manifest loop (every row flipped to
 /// `done`, manifest emptied) and AFTER the `KIND_INI` intent is committed, but BEFORE the
 /// INI is actually restored. Simulates a kill between the last file-purge `finish_purge`
 /// and the INI restore; recovery must still restore the INI from the pending intent.
@@ -455,7 +455,7 @@ fn purge_inner(
         orphans: Vec::new(),
     };
 
-    // SFINI-02/04 + WR-01: journal the INI-restore intent BEFORE the Data/ loop, so a crash
+    // Journal the INI-restore intent BEFORE the Data/ loop, so a crash
     // ANYWHERE in purge — including the window between the last file-purge `finish_purge`
     // and the INI restore — leaves a durable `pending` KIND_INI row that
     // `recover_on_launch` replays to provenance (closing the stranded-INI reversibility
@@ -505,13 +505,13 @@ fn purge_inner(
     let removed_rels: Vec<PathBuf> = files.iter().map(|e| e.target_rel.clone()).collect();
     remove_emptied_dirs(&game.install_dir, &removed_rels)?;
 
-    // WR-01 crash seam: die in the window before the INI restore. The pending KIND_INI row
+    // Crash seam: die in the window before the INI restore. The pending KIND_INI row
     // journaled above survives, so recover_on_launch can complete the restore.
     if abort_before_ini {
         return Err(DeployError::Aborted(report.removed));
     }
 
-    // SFINI-02/04 choke point: after the Data/ manifest loop, restore the loose-file INI to
+    // INI choke point: after the Data/ manifest loop, restore the loose-file INI to
     // its recorded provenance (byte-restore a PreExisting INI; delete + prune the created
     // dirs for a CreatedByNexTwist one) and flip the pre-journaled intent to `done`. Only
     // reached for Starfield with an active INI (see `ini_jid` above). Resolution stays
@@ -528,7 +528,7 @@ fn purge_inner(
 /// Remove the directories that `deploy()` created for `removed_rels` and that are now
 /// EMPTY, bottom-up, bounded strictly below the deploy root.
 ///
-/// ## Why bottom-up `remove_dir` is safe (GAP-01 safety argument)
+/// ## Why bottom-up `remove_dir` is safe
 ///
 /// 1. **Manifest-derived candidates only.** The candidate directories are computed from
 ///    OUR manifest `target_rel`s (the rows purge/recovery just removed) — never from a
@@ -594,7 +594,7 @@ fn remove_emptied_dirs(install_dir: &Path, removed_rels: &[PathBuf]) -> Result<(
 }
 
 /// Replay any non-`done` journal rows on launch to reach a consistent state, then
-/// auto-run a verify pass so an abnormal exit always yields a drift report (DEPLOY-07).
+/// auto-run a verify pass so an abnormal exit always yields a drift report.
 pub fn recover_on_launch(store: &Store, game: &Game) -> Result<RecoveryReport, DeployError> {
     let outcome = journal::replay(store, game)?;
     // If recovery rolled any PURGE rows forward (a crash-mid-purge), the directories the

@@ -1,4 +1,4 @@
-//! Write-ahead operation journal (DEPLOY-06): the `op_journal` table facade.
+//! Write-ahead operation journal: the `op_journal` table facade.
 //!
 //! This module provides ONLY the durable row primitives. The intent-before-act
 //! protocol and idempotent replay/rollback live in the deploy crate:

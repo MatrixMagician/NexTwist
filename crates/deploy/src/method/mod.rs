@@ -1,4 +1,4 @@
-//! The `DeploymentMethod` trait + per-target method ladder (DEPLOY-05).
+//! The `DeploymentMethod` trait + per-target method ladder.
 //!
 //! A method places one staged file into the game tree and can remove it again. The
 //! ladder is reflink → hardlink → symlink → copy, chosen per-target from the

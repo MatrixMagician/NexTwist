@@ -46,7 +46,7 @@ pub struct AppState {
     pub session_restore_attempted: bool,
     /// In-flight downloads' cancellation flags, keyed by the UI download id. A
     /// `cancel_download` command trips the matching flag; the streaming loop in
-    /// `crates/nexus` checks it once per chunk and aborts (NEXUS-03 Cancel affordance).
+    /// `crates/nexus` checks it once per chunk and aborts (the Cancel affordance).
     pub downloads: HashMap<String, CancelFlag>,
     /// The ONE process-wide NexusMods rate limiter. Every per-download
     /// `NexusClient` is built with a clone of this `Arc` so the proactive token bucket and

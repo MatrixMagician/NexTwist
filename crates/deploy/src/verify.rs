@@ -1,4 +1,4 @@
-//! verify/repair drift detection (DEPLOY-07): hash-diff the per-game manifest against
+//! verify/repair drift detection: hash-diff the per-game manifest against
 //! the on-disk game tree.
 //!
 //! After a deploy, the per-game manifest (`list_deployed_files`) is the source of truth
@@ -17,7 +17,7 @@
 //! touched, so an unmanaged file mistaken for an orphan can never be destroyed.
 //!
 //! `verify` auto-runs after `recover_on_launch`'s journal replay so an abnormal exit
-//! always yields an automatic drift report (RESEARCH.md Pattern 1: full-pristine-or-report).
+//! always yields an automatic drift report: full-pristine-or-report.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -64,7 +64,7 @@ pub struct RepairReport {
     /// Number of `changed` files restored to the recorded state.
     pub restored_changed: usize,
     /// Number of orphan EMPTY directories removed (the ONLY thing repair deletes — file
-    /// orphans remain report-only, so no file is ever deleted; T-01-16 / T-01-20).
+    /// orphans remain report-only, so no file is ever deleted).
     pub removed_orphan_dirs: usize,
     /// Whether a drifted StarfieldCustom.ini was re-activated to its recorded state.
     /// A user-blocked conflict is NOT drift, so it is never re-activated / clobbered here.
@@ -117,7 +117,7 @@ pub fn verify(store: &Store, game: &Game) -> Result<VerifyReport, DeployError> {
     // The StarfieldCustom.ini participates in verify like a deployed file, but it
     // lives OUTSIDE the deploy root, so it is a distinct `is_starfield`-gated check whose
     // path/INI logic stays inside `gameconfig` (never `resolve_target`/`guard_within_root`,
-    // never widens the `deploy_root`-bounded orphan walk above — T-08-03).
+    // never widens the `deploy_root`-bounded orphan walk above).
     if game.appid == steam::STARFIELD {
         report.ini_drift = crate::gameconfig::ini_drift(store, game)?;
     }
@@ -168,7 +168,7 @@ pub fn repair(store: &Store, game: &Game) -> Result<RepairReport, DeployError> {
     }
 
     // Remove the orphan EMPTY dirs (the ONLY thing repair ever deletes — file orphans
-    // stay report-only, T-01-16 / T-01-20). Iterate to a fixed point so a chain of nested
+    // stay report-only). Iterate to a fixed point so a chain of nested
     // empty dirs (a leaf whose parent becomes empty once the leaf is gone) is fully
     // cleaned in one repair call, leaving the tree pristine. Each pass removes deepest-
     // first; `remove_dir` refuses non-empty dirs (so a dir that holds an unmanaged file is

@@ -5,18 +5,18 @@
 //! multi-mod / profile / plugin substrate:
 //!
 //!   * **game registry**  (ENV-03)    — [`Store::add_managed_game`] / [`Store::list_managed_games`]
-//!   * **deploy manifest** (DEPLOY-02) — [`Store::record_deployed_file`] / [`Store::list_deployed_files`]
-//!   * **operation journal** (DEPLOY-06) — [`Store::begin_op`] / [`Store::mark_done`] / [`Store::pending_ops`]
-//!   * **vanilla backup ledger** (DEPLOY-04) — [`Store::record_vanilla`] / [`Store::vanilla_for`]
+//!   * **deploy manifest** — [`Store::record_deployed_file`] / [`Store::list_deployed_files`]
+//!   * **operation journal** — [`Store::begin_op`] / [`Store::mark_done`] / [`Store::pending_ops`]
+//!   * **vanilla backup ledger** — [`Store::record_vanilla`] / [`Store::vanilla_for`]
 //!   * **mod registry** — [`Store::add_mod`] / [`Store::list_mods`] / [`Store::set_mod_rank`]
 //!   * **profiles + membership** — [`Store::create_profile`] / [`Store::set_active_profile`] / [`Store::set_profile_mod`]
 //!   * **plugin state** — [`Store::set_plugin_state`] / [`Store::list_plugin_state`]
 //!
 //! The V4 migration adds Nexus provenance additively:
-//!   * **nexus provenance** (NEXUS-03/06) — [`Store::add_nexus_source`] / [`Store::get_nexus_source`]
+//!   * **nexus provenance** — [`Store::add_nexus_source`] / [`Store::get_nexus_source`]
 //!
 //! The V5 migration adds the Collection acquisition substrate additively:
-//!   * **collections** (COLL-01/02) — [`Store::add_collection`] / [`Store::get_collection`]
+//!   * **collections** — [`Store::add_collection`] / [`Store::get_collection`]
 //!     / [`Store::add_collection_mod`] / [`Store::list_collection_mods`]
 //!
 //! Encapsulation invariant: NO `rusqlite` type appears in this crate's public API.

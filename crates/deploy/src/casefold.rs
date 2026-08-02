@@ -1,12 +1,11 @@
 //! Case-sensitivity normalization against the per-game canonical `Data/` casing
-//! (DEPLOY-08).
+//! casing.
 //!
 //! Wine/Proton does NOT abstract the filesystem: a Windows `open("Data\\Textures\\x")`
 //! becomes a case-sensitive Linux `open()`. Mods are authored on case-insensitive NTFS,
 //! so a mod may carry `TEXTURES/Foo.DDS` even though the game's real on-disk directory
 //! is `Textures/`. Deployed verbatim onto a case-sensitive Linux tree, the game's
-//! `open()` would miss the file and the mod would silently do nothing (RESEARCH.md
-//! Pitfall 4 / PITFALLS.md Pitfall 5).
+//! `open()` would miss the file and the mod would silently do nothing.
 //!
 //! This module rewrites every DIRECTORY component of an incoming mod relpath to the
 //! game's REAL casing using the [`CasingMap`](steam::CasingMap) produced by

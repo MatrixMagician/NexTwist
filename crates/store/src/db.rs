@@ -1,6 +1,6 @@
 //! Database open + migration. The single place that touches `PRAGMA`s and refinery.
 //!
-//! Crash-safety model (CONTEXT.md, RESEARCH.md A7):
+//! Crash-safety model:
 //! * `journal_mode = WAL` — ACID *inside* the DB; concurrent reads during writes.
 //! * `synchronous = FULL` — durability for the operation-journal commit path. FULL
 //!   (not NORMAL) is chosen so a `pending` op_journal row is on stable storage before
@@ -149,7 +149,7 @@ mod tests {
     }
 
     /// BLOCKING: the V2 migration must apply cleanly OVER a real
-    /// Phase-1 (V1-only) DB and auto-create one active 'Default' profile per
+    /// A V1-only DB and auto-create one active 'Default' profile per
     /// pre-existing managed_game — proving the data migration runs over existing rows
     /// and that V2 is additive (V1 tables + data survive).
     ///
@@ -157,9 +157,9 @@ mod tests {
     /// registering a game AFTER V2 has run would NOT retro-trigger the Default-profile
     /// INSERT. To exercise the upgrade path we deliberately reach a V1-ONLY state by
     /// running the refinery runner pinned to `Target::Version(1)`, seed a managed_game
-    /// the way Phase-1 would have, then `Store::open` runs the full runner which sees
+    /// the way a V1 install would have, then `Store::open` runs the full runner which sees
     /// V1 already applied and applies ONLY V2 (and its Default-profile INSERT) over the
-    /// seeded V1 state — exactly the real-world Phase-1 → Phase-2 upgrade.
+    /// seeded V1 state — exactly the real-world upgrade.
     #[test]
     fn v2_migrates_phase1_state() {
         use refinery::Target;
@@ -191,7 +191,7 @@ mod tests {
                 .unwrap();
             assert_eq!(v2_count, 0, "V2 tables must be absent in the V1-only state");
 
-            // Seed a managed_game as Phase-1 would have persisted it.
+            // Seed a managed_game as a V1 install would have persisted it.
             conn.execute(
                 "INSERT INTO managed_game (appid, name, install_dir, prefix, staging_dir)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -231,14 +231,14 @@ mod tests {
         let profiles = store.list_profiles(489830).unwrap();
         assert_eq!(profiles.len(), 1, "exactly one Default profile per game");
 
-        // (3) V2 is additive: the Phase-1 managed_game row survived untouched.
+        // (3) V2 is additive: the V1 managed_game row survived untouched.
         assert_eq!(
             store.get_game(489830).unwrap().unwrap().name,
             "Skyrim Special Edition"
         );
     }
 
-    /// V4 guard (NEXUS-03/06): reach a V3-only state, then apply V4 and confirm it ADDED
+    /// V4 guard: reach a V3-only state, then apply V4 and confirm it ADDED
     /// `nexus_source` WITHOUT altering `managed_mod`'s columns (additive-only). Mirrors
     /// the `v2_migrates_phase1_state` test seam (refinery pinned to a target version).
     #[test]
