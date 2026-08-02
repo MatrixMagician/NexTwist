@@ -134,6 +134,17 @@ Before claiming a change is complete:
 5. Anything touching `deploy`/`store` has a test proving the reversibility or
    crash-recovery property still holds.
 
+All four gates were run green on `main` as of 2026-08-02, so a failure you see is
+something you introduced, not pre-existing noise. Two caveats worth knowing:
+
+- `cargo deny` carries two documented `ignore`d advisories (RUSTSEC-2026-0194/0195) for
+  the vulnerable `quick-xml <0.41` that Tauri pulls in transitively via `plist` at build
+  time. A `[[bans.deny]]` rule with `wrappers = ["plist"]` keeps that exception pinned to
+  that one path — **if `quick-xml <0.41` ever reaches our own crates, `bans` fails.**
+  `crates/fomod` parses untrusted mod XML, so never relax that floor.
+- `licenses` prints one `unmatched license allowance` warning (`Unicode-DFS-2016`). It is
+  a warning, not a failure.
+
 ## Workflow
 
 This project runs the GSD workflow. Planning artifacts live in `.planning/`
