@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use deploy::{purge, recover_on_launch, switch_profile, SwitchReport};
+use deploy::{SwitchReport, purge, recover_on_launch, switch_profile};
 use nextwist_core::{Game, ManagedMod};
 use store::Store;
 use tempfile::TempDir;
@@ -108,11 +108,17 @@ fn profile_switch_round_trips_pristine_across_switches() {
     // each also has a unique file. mod3 is profile B's exclusive mod.
     let mod1_root = fx.stage_mod(
         "mod1",
-        &[("Data/shared.esp", b"M1-SHARED"), ("Data/only1.esp", b"M1-ONLY")],
+        &[
+            ("Data/shared.esp", b"M1-SHARED"),
+            ("Data/only1.esp", b"M1-ONLY"),
+        ],
     );
     let mod2_root = fx.stage_mod(
         "mod2",
-        &[("Data/shared.esp", b"M2-SHARED"), ("Data/only2.esp", b"M2-ONLY")],
+        &[
+            ("Data/shared.esp", b"M2-SHARED"),
+            ("Data/only2.esp", b"M2-ONLY"),
+        ],
     );
     let mod3_root = fx.stage_mod("mod3", &[("Data/only3.esp", b"M3-ONLY")]);
 
@@ -139,7 +145,10 @@ fn profile_switch_round_trips_pristine_across_switches() {
         let store = fx.open_store();
         switch_profile(&store, &game, prof_a).unwrap()
     };
-    assert_eq!(report_a1.deployed.deployed, 3, "A deploys shared + only1 + only2");
+    assert_eq!(
+        report_a1.deployed.deployed, 3,
+        "A deploys shared + only1 + only2"
+    );
     // Profile A's winner for the contested path is mod1's bytes.
     assert_eq!(
         fs::read(fx.install.join("Data/shared.esp")).unwrap(),
@@ -148,11 +157,17 @@ fn profile_switch_round_trips_pristine_across_switches() {
     );
     assert!(fx.install.join("Data/only1.esp").is_file());
     assert!(fx.install.join("Data/only2.esp").is_file());
-    assert!(!fx.install.join("Data/only3.esp").exists(), "mod3 disabled in A");
+    assert!(
+        !fx.install.join("Data/only3.esp").exists(),
+        "mod3 disabled in A"
+    );
     // Active profile is now exactly A.
     {
         let store = fx.open_store();
-        assert_eq!(store.active_profile(game.appid).unwrap().unwrap().id, prof_a);
+        assert_eq!(
+            store.active_profile(game.appid).unwrap().unwrap().id,
+            prof_a
+        );
     }
     // Capture A's exact deployed set (target_rel + bytes) for the PROF-03 reproduction check.
     let a_deployed_snapshot = snapshot_tree(&fx.install).unwrap();
@@ -163,19 +178,40 @@ fn profile_switch_round_trips_pristine_across_switches() {
         switch_profile(&store, &game, prof_b).unwrap()
     };
     // The purge half restored A's 3 files (T-02-15: A's files do not leak into B).
-    assert_eq!(report_b.purged.removed, 3, "switching to B purges A's 3 deployed files");
-    assert_eq!(report_b.deployed.deployed, 1, "B deploys only mod3's single file");
-    assert!(fx.install.join("Data/only3.esp").is_file(), "B's mod3 file is deployed");
-    assert!(!fx.install.join("Data/shared.esp").exists() || {
-        // shared.esp may exist ONLY as the vanilla original would (it does not in vanilla);
-        // here vanilla has no shared.esp, so it must be gone after purging A.
-        fs::read(fx.install.join("Data/shared.esp")).unwrap() != b"M1-SHARED"
-    }, "A's shared.esp winner must not survive into B");
-    assert!(!fx.install.join("Data/only1.esp").exists(), "A's only1.esp purged");
-    assert!(!fx.install.join("Data/only2.esp").exists(), "A's only2.esp purged");
+    assert_eq!(
+        report_b.purged.removed, 3,
+        "switching to B purges A's 3 deployed files"
+    );
+    assert_eq!(
+        report_b.deployed.deployed, 1,
+        "B deploys only mod3's single file"
+    );
+    assert!(
+        fx.install.join("Data/only3.esp").is_file(),
+        "B's mod3 file is deployed"
+    );
+    assert!(
+        !fx.install.join("Data/shared.esp").exists() || {
+            // shared.esp may exist ONLY as the vanilla original would (it does not in vanilla);
+            // here vanilla has no shared.esp, so it must be gone after purging A.
+            fs::read(fx.install.join("Data/shared.esp")).unwrap() != b"M1-SHARED"
+        },
+        "A's shared.esp winner must not survive into B"
+    );
+    assert!(
+        !fx.install.join("Data/only1.esp").exists(),
+        "A's only1.esp purged"
+    );
+    assert!(
+        !fx.install.join("Data/only2.esp").exists(),
+        "A's only2.esp purged"
+    );
     {
         let store = fx.open_store();
-        assert_eq!(store.active_profile(game.appid).unwrap().unwrap().id, prof_b);
+        assert_eq!(
+            store.active_profile(game.appid).unwrap().unwrap().id,
+            prof_b
+        );
     }
 
     // --- Switch back to A: must reproduce A's EXACT deployed set (PROF-03). ---
@@ -195,7 +231,11 @@ fn profile_switch_round_trips_pristine_across_switches() {
     {
         let store = fx.open_store();
         let purged = purge(&store, &game).unwrap();
-        assert!(purged.orphans.is_empty(), "purge leaves no orphans: {:?}", purged.orphans);
+        assert!(
+            purged.orphans.is_empty(),
+            "purge leaves no orphans: {:?}",
+            purged.orphans
+        );
     }
     let after = snapshot_tree(&fx.install).unwrap();
     assert_trees_identical(&pristine, &after);
@@ -233,7 +273,10 @@ fn switch_writes_target_profile_plugins_txt_at_prefix() {
         report.plugins_txt,
         expected_under
     );
-    assert!(report.plugins_txt.is_file(), "switch wrote the plugins.txt file");
+    assert!(
+        report.plugins_txt.is_file(),
+        "switch wrote the plugins.txt file"
+    );
 }
 
 /// WR-02 (failure-injection): if a profile switch fails AFTER the purge step, no profile is
@@ -276,7 +319,10 @@ fn failed_switch_after_purge_clears_stale_active_flag() {
 
     // The switch must FAIL at the plugins step (unsupported game), after purge + deploy.
     let result = switch_profile(&store, &game, target);
-    assert!(result.is_err(), "switch must fail at the unsupported-game plugins step");
+    assert!(
+        result.is_err(),
+        "switch must fail at the unsupported-game plugins step"
+    );
 
     // WR-02: no profile is left marked active — neither the stale OLD nor the half-applied
     // TARGET. Without the fix, OLD would still be flagged active while its set is gone.
@@ -301,7 +347,11 @@ fn failed_switch_after_purge_clears_stale_active_flag() {
     // ...and a purge then still restores the install byte-for-byte pristine (the game stays
     // reversible — the deployment is purgeable to vanilla after the failed switch).
     let purged = purge(&store, &game).unwrap();
-    assert!(purged.orphans.is_empty(), "purge leaves no orphans: {:?}", purged.orphans);
+    assert!(
+        purged.orphans.is_empty(),
+        "purge leaves no orphans: {:?}",
+        purged.orphans
+    );
     let after = snapshot_tree(&fx.install).unwrap();
     assert_trees_identical(&pristine, &after);
 }

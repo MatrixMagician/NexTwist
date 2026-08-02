@@ -12,10 +12,10 @@
 
 use std::sync::Arc;
 
+use nexus::RateLimiter;
 use nexus::client::{NexusAuth, NexusClient};
 use nexus::collection::{Collection, ModRuleType, SourceType};
-use nexus::resolve::{resolve_collection, ModStatus};
-use nexus::RateLimiter;
+use nexus::resolve::{ModStatus, resolve_collection};
 
 const FIXTURE: &str = include_str!("fixtures/collection.json");
 
@@ -54,7 +54,10 @@ async fn resolve_classifies_every_source_type_with_zero_downloads() {
 
     // SkyUI (12604/120063): a normal MAIN file ⇒ Available.
     let m_skyui = server
-        .mock("GET", "/v1/games/skyrimspecialedition/mods/12604/files/120063.json")
+        .mock(
+            "GET",
+            "/v1/games/skyrimspecialedition/mods/12604/files/120063.json",
+        )
         .match_header("apikey", "premium-key")
         .with_status(200)
         .with_header("content-type", "application/json")
@@ -64,7 +67,10 @@ async fn resolve_classifies_every_source_type_with_zero_downloads() {
 
     // USSEP (266/99999): a normal file ⇒ Available.
     let m_ussep = server
-        .mock("GET", "/v1/games/skyrimspecialedition/mods/266/files/99999.json")
+        .mock(
+            "GET",
+            "/v1/games/skyrimspecialedition/mods/266/files/99999.json",
+        )
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(r#"{"file_id":99999,"name":"USSEP","version":"4.3.1","category_name":"MAIN"}"#)
@@ -73,16 +79,24 @@ async fn resolve_classifies_every_source_type_with_zero_downloads() {
 
     // Archived Texture Pack (5000/50001): category ARCHIVED ⇒ Archived.
     let m_archived = server
-        .mock("GET", "/v1/games/skyrimspecialedition/mods/5000/files/50001.json")
+        .mock(
+            "GET",
+            "/v1/games/skyrimspecialedition/mods/5000/files/50001.json",
+        )
         .with_status(200)
         .with_header("content-type", "application/json")
-        .with_body(r#"{"file_id":50001,"name":"Textures","version":"1.0.0","category_name":"ARCHIVED"}"#)
+        .with_body(
+            r#"{"file_id":50001,"name":"Textures","version":"1.0.0","category_name":"ARCHIVED"}"#,
+        )
         .create_async()
         .await;
 
     // Removed Mod (6000/60001): 404 ⇒ Unavailable.
     let m_removed = server
-        .mock("GET", "/v1/games/skyrimspecialedition/mods/6000/files/60001.json")
+        .mock(
+            "GET",
+            "/v1/games/skyrimspecialedition/mods/6000/files/60001.json",
+        )
         .with_status(404)
         .with_body(r#"{"message":"Not found"}"#)
         .create_async()
@@ -116,7 +130,11 @@ async fn resolve_classifies_every_source_type_with_zero_downloads() {
     assert_eq!(report.mods[3].status, ModStatus::Unavailable); // Removed Mod
 
     // bundle ⇒ Available (no request).
-    let bundle = report.mods.iter().find(|m| m.name == "Collection Config Patch").unwrap();
+    let bundle = report
+        .mods
+        .iter()
+        .find(|m| m.name == "Collection Config Patch")
+        .unwrap();
     assert_eq!(bundle.status, ModStatus::Available);
     assert_eq!(bundle.source, SourceType::Bundle);
 
@@ -124,12 +142,23 @@ async fn resolve_classifies_every_source_type_with_zero_downloads() {
     let skse = report.mods.iter().find(|m| m.name == "SKSE64").unwrap();
     assert_eq!(skse.status, ModStatus::Manual);
     assert_eq!(skse.source, SourceType::Direct);
-    let browse = report.mods.iter().find(|m| m.name == "Browse-Only Dependency").unwrap();
+    let browse = report
+        .mods
+        .iter()
+        .find(|m| m.name == "Browse-Only Dependency")
+        .unwrap();
     assert_eq!(browse.status, ModStatus::Manual);
 
     // Helpers reflect the mixed report.
-    assert!(!report.all_available(), "archived/unavailable/manual entries exist");
-    assert_eq!(report.manual_steps().count(), 2, "SKSE + Browse-only are manual");
+    assert!(
+        !report.all_available(),
+        "archived/unavailable/manual entries exist"
+    );
+    assert_eq!(
+        report.manual_steps().count(),
+        2,
+        "SKSE + Browse-only are manual"
+    );
 
     // Each nexus metadata read happened exactly as mocked; NO download was issued.
     m_skyui.assert_async().await;
@@ -147,7 +176,10 @@ async fn resolve_metadata_read_goes_through_shared_limiter() {
     let mut server = mockito::Server::new_async().await;
     // One nexus mod whose file-info returns 429.
     let _m = server
-        .mock("GET", "/v1/games/skyrimspecialedition/mods/12604/files/120063.json")
+        .mock(
+            "GET",
+            "/v1/games/skyrimspecialedition/mods/12604/files/120063.json",
+        )
         .with_status(429)
         .with_header("x-rl-hourly-remaining", "0")
         .with_header("x-rl-hourly-reset", "120")
@@ -162,7 +194,10 @@ async fn resolve_metadata_read_goes_through_shared_limiter() {
     let collection = Collection::parse(manifest).unwrap();
 
     let limiter = Arc::new(RateLimiter::new());
-    assert!(!limiter.is_backing_off(), "fresh limiter is not backing off");
+    assert!(
+        !limiter.is_backing_off(),
+        "fresh limiter is not backing off"
+    );
 
     let client = NexusClient::with_limiter(
         &server.url(),
@@ -208,8 +243,7 @@ async fn stale_mod_rule_reference_is_not_fatal() {
     let collection = Collection::parse(manifest).unwrap();
     assert_eq!(collection.mod_rules.len(), 1, "the phantom rule parsed");
 
-    let client =
-        NexusClient::with_base(&server.url(), NexusAuth::ApiKey("k".into())).unwrap();
+    let client = NexusClient::with_base(&server.url(), NexusAuth::ApiKey("k".into())).unwrap();
     let report = resolve_collection(&client, "skyrimspecialedition", &collection)
         .await
         .expect("resolve must not error on a stale rule");

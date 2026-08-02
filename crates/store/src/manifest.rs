@@ -57,11 +57,7 @@ impl Store {
 
     /// Remove a deployed-file row by (appid, target_rel). Idempotent: removing a
     /// missing row is a no-op (returns `false`), matching the idempotent-op model.
-    pub fn remove_deployed_file(
-        &self,
-        appid: u32,
-        target_rel: &Path,
-    ) -> Result<bool, StoreError> {
+    pub fn remove_deployed_file(&self, appid: u32, target_rel: &Path) -> Result<bool, StoreError> {
         let n = self
             .conn
             .execute(
@@ -117,8 +113,12 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let store = Store::open(&dir.path().join("d.db")).unwrap();
 
-        store.record_deployed_file(489830, &entry("Data/a.esp")).unwrap();
-        store.record_deployed_file(489830, &entry("Data/b.esp")).unwrap();
+        store
+            .record_deployed_file(489830, &entry("Data/a.esp"))
+            .unwrap();
+        store
+            .record_deployed_file(489830, &entry("Data/b.esp"))
+            .unwrap();
 
         let files = store.list_deployed_files(489830).unwrap();
         assert_eq!(files.len(), 2);
@@ -126,9 +126,17 @@ mod tests {
         assert_eq!(files[0].method, DeployMethod::Hardlink);
         assert!(files[0].pre_existing);
 
-        assert!(store.remove_deployed_file(489830, Path::new("Data/a.esp")).unwrap());
+        assert!(
+            store
+                .remove_deployed_file(489830, Path::new("Data/a.esp"))
+                .unwrap()
+        );
         // Removing again is a no-op.
-        assert!(!store.remove_deployed_file(489830, Path::new("Data/a.esp")).unwrap());
+        assert!(
+            !store
+                .remove_deployed_file(489830, Path::new("Data/a.esp"))
+                .unwrap()
+        );
 
         let files = store.list_deployed_files(489830).unwrap();
         assert_eq!(files.len(), 1);
@@ -139,8 +147,12 @@ mod tests {
     fn list_is_scoped_per_game() {
         let dir = TempDir::new().unwrap();
         let store = Store::open(&dir.path().join("d.db")).unwrap();
-        store.record_deployed_file(489830, &entry("Data/x.esp")).unwrap();
-        store.record_deployed_file(377160, &entry("Data/y.esp")).unwrap();
+        store
+            .record_deployed_file(489830, &entry("Data/x.esp"))
+            .unwrap();
+        store
+            .record_deployed_file(377160, &entry("Data/y.esp"))
+            .unwrap();
         assert_eq!(store.list_deployed_files(489830).unwrap().len(), 1);
         assert_eq!(store.list_deployed_files(377160).unwrap().len(), 1);
     }

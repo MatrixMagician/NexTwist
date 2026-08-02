@@ -161,7 +161,10 @@ mod tests {
 
     #[test]
     fn choose_reflink_when_supported() {
-        assert_eq!(choose_method(&caps(true, true, true)), DeployMethod::Reflink);
+        assert_eq!(
+            choose_method(&caps(true, true, true)),
+            DeployMethod::Reflink
+        );
     }
 
     #[test]
@@ -184,7 +187,11 @@ mod tests {
     fn ladder_starts_at_tag_and_ends_at_copy() {
         assert_eq!(
             ladder_from(DeployMethod::Hardlink),
-            vec![DeployMethod::Hardlink, DeployMethod::Symlink, DeployMethod::Copy]
+            vec![
+                DeployMethod::Hardlink,
+                DeployMethod::Symlink,
+                DeployMethod::Copy
+            ]
         );
         assert_eq!(ladder_from(DeployMethod::Copy), vec![DeployMethod::Copy]);
     }

@@ -29,8 +29,8 @@ use std::path::{Path, PathBuf};
 
 use extract::ArchiveFormat;
 use fomod::{
-    parse_module_config, resolve, validate_selection, FomodModule, GroupType, OrderKind,
-    PluginType, Selection,
+    FomodModule, GroupType, OrderKind, PluginType, Selection, parse_module_config, resolve,
+    validate_selection,
 };
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -311,9 +311,11 @@ pub async fn apply_fomod(
     let plan = resolve(&module, &sel).map_err(boundary_err)?;
     let preview = classify_plan(&plan);
     if preview.classification == ConflictClass::Blocking {
-        return Err("This selection installs conflicting files with no clear winner. \
+        return Err(
+            "This selection installs conflicting files with no clear winner. \
                     Change a choice to continue."
-            .to_string());
+                .to_string(),
+        );
     }
     drop(temp); // release the dry-run temp tree before the real validated staging.
 
@@ -332,7 +334,10 @@ pub async fn apply_fomod(
     };
     let mod_id = {
         let guard = state.lock().await;
-        guard.store.add_mod(game.appid, &managed).map_err(boundary_err)?
+        guard
+            .store
+            .add_mod(game.appid, &managed)
+            .map_err(boundary_err)?
     };
 
     Ok(ApplyResult {
@@ -511,7 +516,13 @@ fn classify_plan(plan: &[fomod::FileInstall]) -> ResolvePreview {
 fn sanitize(name: &str) -> String {
     let cleaned: String = name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let trimmed = cleaned.trim();
     if trimmed.is_empty() {
@@ -595,7 +606,10 @@ mod tests {
         assert_eq!(step.name, "Main");
         assert_eq!(step.groups.len(), 1);
         let group = &step.groups[0];
-        assert!(matches!(group.group_type, super::GroupTypeDto::SelectExactlyOne));
+        assert!(matches!(
+            group.group_type,
+            super::GroupTypeDto::SelectExactlyOne
+        ));
         assert_eq!(group.options.len(), 1);
         let opt = &group.options[0];
         assert_eq!(opt.name, "Standard Edition");
@@ -615,7 +629,10 @@ mod tests {
         let parsed = fomod::parse_module_config(&tree_root);
         assert!(parsed.is_err(), "malformed FOMOD must not parse Ok");
         let msg = parsed.err().unwrap().to_string();
-        assert!(!msg.is_empty(), "the error carries a specific reason for the UI");
+        assert!(
+            !msg.is_empty(),
+            "the error carries a specific reason for the UI"
+        );
     }
 
     #[test]
@@ -640,7 +657,10 @@ mod tests {
         let plan = fomod::resolve(&module, &sel).expect("resolve");
         let preview = super::classify_plan(&plan);
 
-        assert!(!preview.plan.is_empty(), "the Required file installs in the plan");
+        assert!(
+            !preview.plan.is_empty(),
+            "the Required file installs in the plan"
+        );
         let row = &preview.plan[0];
         assert_eq!(row.dest, "standard.esp");
         assert!(matches!(preview.classification, super::ConflictClass::None));

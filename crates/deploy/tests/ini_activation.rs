@@ -15,13 +15,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use deploy::{
-    deploy, journal, preview_ini_activation, purge, purge_with_abort_before_ini, recover_on_launch,
-    redeploy_winners, repair, verify, DeployError, StagedFiles, WinnerFile, INI_FILENAME,
+    DeployError, INI_FILENAME, StagedFiles, WinnerFile, deploy, journal, preview_ini_activation,
+    purge, purge_with_abort_before_ini, recover_on_launch, redeploy_winners, repair, verify,
 };
 use nextwist_core::Game;
 use store::Store;
 use tempfile::TempDir;
-use testkit::{assert_trees_identical, fake_my_games_prefix, snapshot_tree, MyGamesOpts};
+use testkit::{MyGamesOpts, assert_trees_identical, fake_my_games_prefix, snapshot_tree};
 
 const STARFIELD: u32 = 1716740;
 const SKYRIM_SE: u32 = 489830;
@@ -179,16 +179,25 @@ fn ini_restore_absence_prunes_created_dirs() {
     let (store, game) = game_with_prefix(root, STARFIELD, prefix);
 
     let pristine = snapshot_tree(&game.prefix).unwrap();
-    assert!(!ini_path(&game).exists(), "no INI (nor its dir) before deploy");
+    assert!(
+        !ini_path(&game).exists(),
+        "no INI (nor its dir) before deploy"
+    );
 
     deploy_loose_mod(&store, &game);
-    assert!(ini_path(&game).exists(), "ensure created the INI + its dir chain");
+    assert!(
+        ini_path(&game).exists(),
+        "ensure created the INI + its dir chain"
+    );
 
     purge(&store, &game).unwrap();
 
     let after = snapshot_tree(&game.prefix).unwrap();
     assert_trees_identical(&pristine, &after);
-    assert!(!ini_path(&game).exists(), "CreatedByNexTwist INI deleted on purge");
+    assert!(
+        !ini_path(&game).exists(),
+        "CreatedByNexTwist INI deleted on purge"
+    );
     assert!(
         !ini_path(&game).parent().unwrap().exists(),
         "NexTwist-created Starfield config dir pruned"
@@ -222,8 +231,14 @@ fn ini_merge_nonclobber() {
         "every unrelated section/comment/order byte preserved"
     );
     assert!(text.contains("bUseArchives=1\n"), "unrelated key preserved");
-    assert!(text.contains("bInvalidateOlderFiles=1\n"), "owned key merged");
-    assert!(text.contains("sResourceDataDirsFinal=\n"), "owned key merged");
+    assert!(
+        text.contains("bInvalidateOlderFiles=1\n"),
+        "owned key merged"
+    );
+    assert!(
+        text.contains("sResourceDataDirsFinal=\n"),
+        "owned key merged"
+    );
     assert!(!text.contains("\r\n"), "an LF file stays LF");
 }
 
@@ -309,7 +324,10 @@ fn ini_utf16_bom_is_refused_no_write() {
     // Refused → no provenance row taken (we never touched it), so a later restore is a safe
     // no-op and can never delete the user's file.
     assert!(
-        store.vanilla_for(game.appid, Path::new(INI_FILENAME)).unwrap().is_none(),
+        store
+            .vanilla_for(game.appid, Path::new(INI_FILENAME))
+            .unwrap()
+            .is_none(),
         "a refused UTF-16 INI takes no vanilla row"
     );
     // verify treats it as not-drift (repair must never clobber it).
@@ -337,7 +355,10 @@ fn ini_idempotent_one_archive() {
     // (a) deploy ×2 — the second is an AlreadyActive no-op.
     deploy_loose_mod(&store, &game);
     let baseline = fs::read(ini_path(&game)).unwrap();
-    assert_eq!(baseline, FRESH_INI, "fresh activation is the CRLF/no-BOM recipe");
+    assert_eq!(
+        baseline, FRESH_INI,
+        "fresh activation is the CRLF/no-BOM recipe"
+    );
     deploy_loose_mod(&store, &game);
     let after_two = fs::read(ini_path(&game)).unwrap();
     assert_eq!(after_two, baseline, "deploy×2 is byte-identical");
@@ -347,7 +368,10 @@ fn ini_idempotent_one_archive() {
     let winners = loose_winners(&game);
     redeploy_winners(&store, &game, &winners).unwrap();
     let after_switch = fs::read(ini_path(&game)).unwrap();
-    assert_eq!(after_switch, baseline, "profile switch converges to one [Archive]");
+    assert_eq!(
+        after_switch, baseline,
+        "profile switch converges to one [Archive]"
+    );
     assert_eq!(archive_count(&after_switch), 1);
 
     // (c) crash-replay then re-deploy — the interrupted ensure rolls back to provenance,
@@ -423,12 +447,19 @@ fn ini_purge_crash_window_recovers_via_journal() {
     let pristine = snapshot_tree(&game.prefix).unwrap();
 
     deploy_loose_mod(&store, &game); // activates the INI (PreExisting, real-hash row).
-    assert_ne!(fs::read(ini_path(&game)).unwrap(), original, "activation edited the INI");
+    assert_ne!(
+        fs::read(ini_path(&game)).unwrap(),
+        original,
+        "activation edited the INI"
+    );
 
     // Crash in the WR-01 window: the Data/ purge loop has completed and the INI-restore
     // intent is journaled, but the INI has not yet been restored.
     let err = purge_with_abort_before_ini(&store, &game).unwrap_err();
-    assert!(matches!(err, DeployError::Aborted(_)), "aborted in the window: {err:?}");
+    assert!(
+        matches!(err, DeployError::Aborted(_)),
+        "aborted in the window: {err:?}"
+    );
     assert!(
         store.list_deployed_files(game.appid).unwrap().is_empty(),
         "the Data/ manifest is already emptied (the loop completed before the crash)"
@@ -487,7 +518,10 @@ fn ini_kind_path_under_prefix() {
         !data_ini.exists(),
         "KIND_INI replay must NEVER touch <install>/Data/StarfieldCustom.ini"
     );
-    assert!(!ini.exists(), "the created INI was rolled back under the prefix");
+    assert!(
+        !ini.exists(),
+        "the created INI was rolled back under the prefix"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -500,14 +534,16 @@ fn nonstarfield_deploy_touches_no_ini() {
     let root = dir.path();
     // A Skyrim SE game that HAS a Starfield-shaped prefix (so the only thing stopping an
     // INI write is the is_starfield gate, not a missing prefix).
-    let prefix = fake_my_games_prefix(&root.join("prefix"), "Starfield", MyGamesOpts::default())
-        .unwrap();
+    let prefix =
+        fake_my_games_prefix(&root.join("prefix"), "Starfield", MyGamesOpts::default()).unwrap();
     let (store, game) = game_with_prefix(root, SKYRIM_SE, prefix);
 
     deploy_loose_mod(&store, &game);
 
     assert!(
-        !steam::my_games_path(&game.prefix).join(INI_FILENAME).exists(),
+        !steam::my_games_path(&game.prefix)
+            .join(INI_FILENAME)
+            .exists(),
         "a non-Starfield deploy writes no StarfieldCustom.ini"
     );
     assert!(
@@ -624,8 +660,15 @@ fn ini_verify_detects_key_stripped_ini() {
 
     repair(&store, &game).unwrap();
     let restored = fs::read(ini_path(&game)).unwrap();
-    assert_eq!(archive_count(&restored), 1, "repair leaves exactly one [Archive]");
-    assert_eq!(restored, baseline, "repair restores both owned keys byte-identically");
+    assert_eq!(
+        archive_count(&restored),
+        1,
+        "repair leaves exactly one [Archive]"
+    );
+    assert_eq!(
+        restored, baseline,
+        "repair restores both owned keys byte-identically"
+    );
     assert!(verify(&store, &game).unwrap().pristine);
 }
 
@@ -657,8 +700,8 @@ fn ini_verify_conflict_is_not_drift() {
 fn ini_verify_ignores_nonstarfield() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
-    let prefix = fake_my_games_prefix(&root.join("prefix"), "Starfield", MyGamesOpts::default())
-        .unwrap();
+    let prefix =
+        fake_my_games_prefix(&root.join("prefix"), "Starfield", MyGamesOpts::default()).unwrap();
     let (store, game) = game_with_prefix(root, SKYRIM_SE, prefix);
 
     deploy_loose_mod(&store, &game);
@@ -668,7 +711,9 @@ fn ini_verify_ignores_nonstarfield() {
     );
     repair(&store, &game).unwrap();
     assert!(
-        !steam::my_games_path(&game.prefix).join(INI_FILENAME).exists(),
+        !steam::my_games_path(&game.prefix)
+            .join(INI_FILENAME)
+            .exists(),
         "repair never creates an INI for a non-Starfield game"
     );
 }

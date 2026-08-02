@@ -6,7 +6,7 @@
 //! Exactly one profile is active per game. No `rusqlite` type leaks publicly.
 
 use core::{Profile, StoreError};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 
 use crate::db::Store;
 
@@ -28,9 +28,7 @@ impl Store {
     pub fn list_profiles(&self, appid: u32) -> Result<Vec<Profile>, StoreError> {
         let mut stmt = self
             .conn
-            .prepare(
-                "SELECT id, appid, name, active FROM profile WHERE appid = ?1 ORDER BY id",
-            )
+            .prepare("SELECT id, appid, name, active FROM profile WHERE appid = ?1 ORDER BY id")
             .map_err(|e| StoreError::Db(e.to_string()))?;
         let rows = stmt
             .query_map(params![appid], row_to_profile)
@@ -129,10 +127,7 @@ impl Store {
     }
 
     /// List a profile's membership as `(mod_id, enabled, rank)`, ordered by rank.
-    pub fn list_profile_mods(
-        &self,
-        profile_id: i64,
-    ) -> Result<Vec<(i64, bool, u32)>, StoreError> {
+    pub fn list_profile_mods(&self, profile_id: i64) -> Result<Vec<(i64, bool, u32)>, StoreError> {
         let mut stmt = self
             .conn
             .prepare(
@@ -323,7 +318,10 @@ mod tests {
 
         // Upsert changes one profile without touching the other.
         store.set_profile_mod(p1, m10, false, 9).unwrap();
-        assert_eq!(store.list_profile_mods(p1).unwrap(), vec![(m20, false, 2), (m10, false, 9)]);
+        assert_eq!(
+            store.list_profile_mods(p1).unwrap(),
+            vec![(m20, false, 2), (m10, false, 9)]
+        );
         assert_eq!(store.list_profile_mods(p2).unwrap(), vec![(m20, true, 1)]);
     }
 
@@ -351,9 +349,15 @@ mod tests {
         let m = add_test_mod(&store, 1, "real");
 
         // Dangling mod_id is rejected.
-        assert!(matches!(store.set_profile_mod(p, 9999, true, 1), Err(StoreError::Db(_))));
+        assert!(matches!(
+            store.set_profile_mod(p, 9999, true, 1),
+            Err(StoreError::Db(_))
+        ));
         // Dangling profile_id is rejected.
-        assert!(matches!(store.set_profile_mod(9999, m, true, 1), Err(StoreError::Db(_))));
+        assert!(matches!(
+            store.set_profile_mod(9999, m, true, 1),
+            Err(StoreError::Db(_))
+        ));
         // A fully-valid membership row still works.
         store.set_profile_mod(p, m, true, 1).unwrap();
         assert_eq!(store.list_profile_mods(p).unwrap(), vec![(m, true, 1)]);
@@ -370,7 +374,10 @@ mod tests {
         assert_eq!(store.list_profile_mods(p).unwrap().len(), 1);
 
         assert!(store.remove_mod(m).unwrap());
-        assert!(store.list_profile_mods(p).unwrap().is_empty(), "membership cascaded away");
+        assert!(
+            store.list_profile_mods(p).unwrap().is_empty(),
+            "membership cascaded away"
+        );
     }
 
     /// CR-02: deleting the ACTIVE profile is refused (it may have a live deployment and

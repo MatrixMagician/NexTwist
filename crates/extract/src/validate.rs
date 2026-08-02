@@ -91,11 +91,7 @@ impl ExtractError {
 /// On success the parent directory of the returned path has been created and
 /// re-canonicalized under `root`. On failure NOTHING is written and an
 /// [`ExtractError`] describing the rejection is returned.
-pub fn validate_entry(
-    name: &Path,
-    root: &Path,
-    is_symlink: bool,
-) -> Result<PathBuf, ExtractError> {
+pub fn validate_entry(name: &Path, root: &Path, is_symlink: bool) -> Result<PathBuf, ExtractError> {
     // 1. A symlink entry is never acceptable, regardless of where it points.
     if is_symlink {
         return Err(ExtractError::SymlinkEntry(name.to_path_buf()));
@@ -119,18 +115,18 @@ pub fn validate_entry(
     let canon_parent = parent
         .canonicalize()
         .map_err(|e| ExtractError::io(parent, e))?;
-    let canon_root = root
-        .canonicalize()
-        .map_err(|e| ExtractError::io(root, e))?;
+    let canon_root = root.canonicalize().map_err(|e| ExtractError::io(root, e))?;
     if !canon_parent.starts_with(&canon_root) {
         return Err(ExtractError::UnsafeEntry(format!(
             "entry destination escapes extraction root: {name:?}"
         )));
     }
 
-    Ok(canon_parent.join(dest.file_name().ok_or_else(|| {
-        ExtractError::UnsafeEntry(format!("entry has no file name: {name:?}"))
-    })?))
+    Ok(canon_parent.join(
+        dest.file_name().ok_or_else(|| {
+            ExtractError::UnsafeEntry(format!("entry has no file name: {name:?}"))
+        })?,
+    ))
 }
 
 /// Reduce a raw archive entry name to a safe relative path, rejecting absolute

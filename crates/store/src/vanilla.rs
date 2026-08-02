@@ -66,16 +66,10 @@ impl Store {
 
     /// The recorded blake3 hash of the vanilla original for a (appid, target_rel),
     /// if one was backed up.
-    pub fn vanilla_for(
-        &self,
-        appid: u32,
-        target_rel: &Path,
-    ) -> Result<Option<String>, StoreError> {
+    pub fn vanilla_for(&self, appid: u32, target_rel: &Path) -> Result<Option<String>, StoreError> {
         let mut stmt = self
             .conn
-            .prepare(
-                "SELECT hash FROM vanilla_backup WHERE appid = ?1 AND target_rel = ?2",
-            )
+            .prepare("SELECT hash FROM vanilla_backup WHERE appid = ?1 AND target_rel = ?2")
             .map_err(|e| StoreError::Db(e.to_string()))?;
         let mut rows = stmt
             .query_map(params![appid, target_rel.to_string_lossy()], |r| {

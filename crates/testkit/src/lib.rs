@@ -41,10 +41,7 @@ pub const DIR_SENTINEL: &str = "<dir>";
 ///
 /// Creates parent directories as needed. `root` is typically a `Data/`-rooted game
 /// directory on a temp dir. Returns `root` for convenient chaining.
-pub fn fake_game_tree<P: AsRef<Path>>(
-    root: P,
-    files: &[(&str, &[u8])],
-) -> io::Result<PathBuf> {
+pub fn fake_game_tree<P: AsRef<Path>>(root: P, files: &[(&str, &[u8])]) -> io::Result<PathBuf> {
     write_tree(root.as_ref(), files)?;
     Ok(root.as_ref().to_path_buf())
 }
@@ -53,10 +50,7 @@ pub fn fake_game_tree<P: AsRef<Path>>(
 ///
 /// Identical mechanics to [`fake_game_tree`]; named separately so test intent reads
 /// clearly (vanilla game vs. staged mod).
-pub fn fake_staged_mod<P: AsRef<Path>>(
-    root: P,
-    files: &[(&str, &[u8])],
-) -> io::Result<PathBuf> {
+pub fn fake_staged_mod<P: AsRef<Path>>(root: P, files: &[(&str, &[u8])]) -> io::Result<PathBuf> {
     write_tree(root.as_ref(), files)?;
     Ok(root.as_ref().to_path_buf())
 }
@@ -339,9 +333,15 @@ mod tests {
             Some(DIR_SENTINEL),
             "intermediate directory must be recorded with the dir sentinel"
         );
-        assert_eq!(snap.get(Path::new("Data")).map(String::as_str), Some(DIR_SENTINEL));
+        assert_eq!(
+            snap.get(Path::new("Data")).map(String::as_str),
+            Some(DIR_SENTINEL)
+        );
         // A file entry is never the dir sentinel.
-        assert_ne!(snap.get(Path::new("Data/a.esp")).map(String::as_str), Some(DIR_SENTINEL));
+        assert_ne!(
+            snap.get(Path::new("Data/a.esp")).map(String::as_str),
+            Some(DIR_SENTINEL)
+        );
         // Same bytes hash identically regardless of where they live.
         let dir2 = TempDir::new().unwrap();
         write_tree(dir2.path(), &[("elsewhere/a.esp", b"alpha")]).unwrap();
@@ -432,8 +432,8 @@ mod tests {
         // Returns the prefix root unchanged.
         assert_eq!(root, dir.path());
         // The full AppData/Local/<game_name> tree exists (the with_local_path target).
-        let appdata_local = root
-            .join("drive_c/users/steamuser/AppData/Local/Skyrim Special Edition");
+        let appdata_local =
+            root.join("drive_c/users/steamuser/AppData/Local/Skyrim Special Edition");
         assert!(appdata_local.is_dir(), "AppData/Local/<game> must exist");
         // The seeded Plugins.txt round-trips (asterisk-format active-plugins file).
         let written = fs::read_to_string(appdata_local.join("Plugins.txt")).unwrap();
@@ -463,18 +463,26 @@ mod tests {
         let canonical = root.join("drive_c/users/steamuser/Documents/My Games/Starfield");
         assert!(canonical.is_dir(), "canonical My Games/<folder> must exist");
         assert_eq!(fs::read_dir(&canonical).unwrap().count(), 0, "folder empty");
-        assert!(!root.join("user.reg").exists(), "no user.reg unless requested");
+        assert!(
+            !root.join("user.reg").exists(),
+            "no user.reg unless requested"
+        );
 
         // (b) case-variant tail exists under the mis-cased path.
         let d2 = TempDir::new().unwrap();
         fake_my_games_prefix(
             d2.path(),
             "Starfield",
-            MyGamesOpts { case_variant: true, ..Default::default() },
+            MyGamesOpts {
+                case_variant: true,
+                ..Default::default()
+            },
         )
         .unwrap();
         assert!(
-            d2.path().join("drive_c/users/steamuser/documents/my games/starfield").is_dir(),
+            d2.path()
+                .join("drive_c/users/steamuser/documents/my games/starfield")
+                .is_dir(),
             "case-variant mis-cased tail must exist"
         );
 
@@ -490,8 +498,13 @@ mod tests {
             },
         )
         .unwrap();
-        let folder = d3.path().join("drive_c/users/steamuser/Documents/My Games/Starfield");
-        assert!(folder.join("StarfieldCustom.ini").is_file(), "marker seeded");
+        let folder = d3
+            .path()
+            .join("drive_c/users/steamuser/Documents/My Games/Starfield");
+        assert!(
+            folder.join("StarfieldCustom.ini").is_file(),
+            "marker seeded"
+        );
         let reg = fs::read_to_string(d3.path().join("user.reg")).unwrap();
         assert!(reg.contains("\"Personal\"=\"C:\\\\users\\\\steamuser\\\\Documents\""));
         assert!(reg.contains("User Shell Folders"));
@@ -513,7 +526,11 @@ mod tests {
         };
         assert_eq!(flags("Regular.esp"), 0x0, "regular plugin: no flags");
         assert_eq!(flags("Master.esm") & 0x1, 0x1, "master flag set");
-        assert_eq!(flags("Medium.esm") & 0x1, 0x1, "medium master is still a master");
+        assert_eq!(
+            flags("Medium.esm") & 0x1,
+            0x1,
+            "medium master is still a master"
+        );
         assert_eq!(
             flags("Medium.esm") & 0x400,
             0x400,

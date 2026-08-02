@@ -36,7 +36,10 @@ fn authorize_url_carries_pkce_s256_and_state() {
         "authorize URL missing state: {}",
         req.authorize_url
     );
-    assert!(!req.pkce_verifier.is_empty(), "PKCE verifier must be non-empty");
+    assert!(
+        !req.pkce_verifier.is_empty(),
+        "PKCE verifier must be non-empty"
+    );
     assert!(!req.csrf_state.is_empty(), "CSRF state must be non-empty");
 }
 
@@ -69,7 +72,7 @@ async fn exchange_code_posts_pkce_and_returns_tokens() {
         REDIRECT,
         &server.url(),
         "the-auth-code",
-        &req.csrf_state,      // returned state == expected → CSRF ok
+        &req.csrf_state, // returned state == expected → CSRF ok
         &req.csrf_state,
         &req.pkce_verifier,
     )

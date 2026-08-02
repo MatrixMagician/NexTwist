@@ -30,8 +30,8 @@
 
 use futures_util::stream::{self, StreamExt};
 use nexus::{
-    replay_choices, Collection as NexusCollection, NexusAuth, NexusClient, ResolveReport,
-    SourceType,
+    Collection as NexusCollection, NexusAuth, NexusClient, ResolveReport, SourceType,
+    replay_choices,
 };
 use serde::Serialize;
 use tauri::State;
@@ -69,8 +69,9 @@ pub async fn resolve_collection(
 
     // Game-domain gate: the Collection's domain must be the one this appid manages.
     let domain = collection.info.domain_name.clone();
-    let resolved_appid = appid_for_domain(&domain)
-        .ok_or_else(|| format!("This Collection is for '{domain}', which NexTwist does not manage"))?;
+    let resolved_appid = appid_for_domain(&domain).ok_or_else(|| {
+        format!("This Collection is for '{domain}', which NexTwist does not manage")
+    })?;
     if resolved_appid != appid {
         return Err(format!(
             "This Collection is for '{domain}', not the selected game"
@@ -145,7 +146,7 @@ pub async fn download_collection(
         _ => {
             return Err(format!(
                 "This Collection is for '{domain}', not the selected game"
-            ))
+            ));
         }
     }
 
@@ -214,7 +215,11 @@ pub async fn download_collection(
 
     // ── Bulk download the available set, bounded concurrency, shared governor. ────────
     // A per-mod failure does NOT abort the batch (Pitfall 4): each result is collected.
-    type DlOutcome = (usize, String, Result<crate::commands::downloads::DownloadResult, String>);
+    type DlOutcome = (
+        usize,
+        String,
+        Result<crate::commands::downloads::DownloadResult, String>,
+    );
     let results: Vec<DlOutcome> = stream::iter(fetchable)
         .map(|(idx, name, mod_id, file_id)| {
             let state = &state;
@@ -302,7 +307,10 @@ pub async fn deploy_collection(
             Some(id) => id,
             None => {
                 let name = format!("Collection: {}", collection.name);
-                let id = guard.store.create_profile(appid, &name).map_err(boundary_err)?;
+                let id = guard
+                    .store
+                    .create_profile(appid, &name)
+                    .map_err(boundary_err)?;
                 // Re-link the profile to the collection (idempotent upsert preserves the link).
                 guard
                     .store
@@ -381,9 +389,15 @@ pub async fn uninstall_collection(
             if let Some(active) = guard.store.active_profile(appid).map_err(boundary_err)?
                 && active.id == profile_id
             {
-                guard.store.clear_active_profile(appid).map_err(boundary_err)?;
+                guard
+                    .store
+                    .clear_active_profile(appid)
+                    .map_err(boundary_err)?;
             }
-            guard.store.delete_profile(profile_id).map_err(boundary_err)?;
+            guard
+                .store
+                .delete_profile(profile_id)
+                .map_err(boundary_err)?;
         }
 
         // 3. Remove the collection's staged mod trees + their managed_mod rows, then drop the
@@ -401,7 +415,10 @@ pub async fn uninstall_collection(
             }
             let _ = guard.store.remove_mod(cm.mod_id);
         }
-        guard.store.remove_collection(collection_id).map_err(boundary_err)?;
+        guard
+            .store
+            .remove_collection(collection_id)
+            .map_err(boundary_err)?;
     }
 
     Ok(purged)
@@ -494,7 +511,7 @@ async fn persist_collection_mod(
                     "internal error: nexus mod '{}' reached persistence without its pinned \
                      mod/file id",
                     m.name
-                ))
+                ));
             }
         },
         _ => (0, 0),

@@ -5,9 +5,9 @@
 //! local `mockito` server, with NO live NexusMods account. The live Premium download is
 //! a separate human-verify checkpoint (Task 4).
 
-use nexus::client::{NexusAuth, NexusClient};
-use nexus::download::{download_to, CancelFlag};
 use nexus::NexusError;
+use nexus::client::{NexusAuth, NexusClient};
+use nexus::download::{CancelFlag, download_to};
 
 /// Test 1: a PREMIUM download_link request carries NO `key`/`expires` query params and
 /// parses the JSON array (with the upper-case `URI` field) into `Vec<DownloadLink>`.
@@ -125,8 +125,7 @@ async fn rate_limit_429_maps_to_rate_limited_and_arms_backoff() {
         .create_async()
         .await;
 
-    let client =
-        NexusClient::with_base(&server.url(), NexusAuth::ApiKey("k".into())).unwrap();
+    let client = NexusClient::with_base(&server.url(), NexusAuth::ApiKey("k".into())).unwrap();
     let err = client
         .download_link("skyrimspecialedition", 1, 2, None, None)
         .await
@@ -158,12 +157,18 @@ async fn shared_limiter_backoff_is_visible_across_clients() {
         .await;
 
     let limiter = Arc::new(nexus::RateLimiter::new());
-    assert!(!limiter.is_backing_off(), "fresh limiter is not backing off");
+    assert!(
+        !limiter.is_backing_off(),
+        "fresh limiter is not backing off"
+    );
 
     // Client A shares the limiter and trips a 429.
-    let client_a =
-        NexusClient::with_limiter(&server.url(), NexusAuth::ApiKey("k".into()), limiter.clone())
-            .unwrap();
+    let client_a = NexusClient::with_limiter(
+        &server.url(),
+        NexusAuth::ApiKey("k".into()),
+        limiter.clone(),
+    )
+    .unwrap();
     let _ = client_a
         .download_link("skyrimspecialedition", 1, 2, None, None)
         .await
@@ -174,9 +179,12 @@ async fn shared_limiter_backoff_is_visible_across_clients() {
         limiter.is_backing_off(),
         "WR-03: a 429 on one client must arm the shared limiter for all clients"
     );
-    let _client_b =
-        NexusClient::with_limiter(&server.url(), NexusAuth::Bearer("t".into()), limiter.clone())
-            .unwrap();
+    let _client_b = NexusClient::with_limiter(
+        &server.url(),
+        NexusAuth::Bearer("t".into()),
+        limiter.clone(),
+    )
+    .unwrap();
     assert!(
         limiter.is_backing_off(),
         "WR-03: client B coordinates the same backoff deadline"
@@ -202,8 +210,7 @@ async fn low_remaining_header_on_success_is_consumed() {
         .create_async()
         .await;
 
-    let client =
-        NexusClient::with_base(&server.url(), NexusAuth::ApiKey("k".into())).unwrap();
+    let client = NexusClient::with_base(&server.url(), NexusAuth::ApiKey("k".into())).unwrap();
     let links = client
         .download_link("skyrimspecialedition", 1, 2, None, None)
         .await
@@ -233,8 +240,7 @@ async fn mod_file_metadata_reads_v1_file_info() {
         .create_async()
         .await;
 
-    let client =
-        NexusClient::with_base(&server.url(), NexusAuth::Bearer("tok".into())).unwrap();
+    let client = NexusClient::with_base(&server.url(), NexusAuth::Bearer("tok".into())).unwrap();
     let mf = client
         .mod_file_metadata("skyrimspecialedition", 12604, 120063)
         .await
@@ -251,17 +257,13 @@ async fn mod_file_metadata_reads_v1_file_info() {
 async fn mod_file_metadata_missing_file_maps_to_http_error() {
     let mut server = mockito::Server::new_async().await;
     let _m = server
-        .mock(
-            "GET",
-            "/v1/games/skyrimspecialedition/mods/1/files/2.json",
-        )
+        .mock("GET", "/v1/games/skyrimspecialedition/mods/1/files/2.json")
         .with_status(404)
         .with_body(r#"{"message":"Not found"}"#)
         .create_async()
         .await;
 
-    let client =
-        NexusClient::with_base(&server.url(), NexusAuth::ApiKey("k".into())).unwrap();
+    let client = NexusClient::with_base(&server.url(), NexusAuth::ApiKey("k".into())).unwrap();
     let err = client
         .mod_file_metadata("skyrimspecialedition", 1, 2)
         .await

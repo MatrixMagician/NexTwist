@@ -8,7 +8,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use deploy::{deploy, repair, verify, StagedFiles};
+use deploy::{StagedFiles, deploy, repair, verify};
 use nextwist_core::Game;
 use store::Store;
 
@@ -72,7 +72,10 @@ fn on_disk(install: &Path, rel: &str) -> PathBuf {
 fn clean_deployment_is_pristine() {
     let h = deploy_two_file_mod();
     let report = verify(&h.store, &h.game).unwrap();
-    assert!(report.pristine, "fresh deployment must verify pristine: {report:?}");
+    assert!(
+        report.pristine,
+        "fresh deployment must verify pristine: {report:?}"
+    );
     assert!(report.missing.is_empty());
     assert!(report.changed.is_empty());
     assert!(report.orphans.is_empty());
@@ -147,13 +150,22 @@ fn repair_restores_missing_and_changed_managed_files() {
     assert!(!before.pristine);
 
     let rep = repair(&h.store, &h.game).unwrap();
-    assert_eq!(rep.restored_missing, 1, "one missing file re-deployed: {rep:?}");
-    assert_eq!(rep.restored_changed, 1, "one changed file restored: {rep:?}");
+    assert_eq!(
+        rep.restored_missing, 1,
+        "one missing file re-deployed: {rep:?}"
+    );
+    assert_eq!(
+        rep.restored_changed, 1,
+        "one changed file restored: {rep:?}"
+    );
 
     // After repair the deployment verifies pristine again.
     let after = verify(&h.store, &h.game).unwrap();
     assert!(after.pristine, "repair must restore pristine: {after:?}");
-    assert_eq!(fs::read(on_disk(&h.install, REL_A)).unwrap(), b"mod-a-bytes");
+    assert_eq!(
+        fs::read(on_disk(&h.install, REL_A)).unwrap(),
+        b"mod-a-bytes"
+    );
     assert_eq!(fs::read(&b).unwrap(), b"mod-b-bytes");
 }
 
@@ -165,13 +177,22 @@ fn empty_orphan_dir_is_reported_and_repair_removes_it() {
     fs::create_dir_all(&orphan_dir).unwrap();
 
     let report = verify(&h.store, &h.game).unwrap();
-    assert!(!report.pristine, "an orphan empty dir must make verify non-pristine");
     assert!(
-        report.orphan_dirs.iter().any(|p| p.ends_with("leftover/empty")),
+        !report.pristine,
+        "an orphan empty dir must make verify non-pristine"
+    );
+    assert!(
+        report
+            .orphan_dirs
+            .iter()
+            .any(|p| p.ends_with("leftover/empty")),
         "empty mod-introduced subdir must be reported in orphan_dirs: {report:?}"
     );
     // It is a DIR orphan, not a FILE orphan.
-    assert!(report.orphans.is_empty(), "no file orphans expected: {report:?}");
+    assert!(
+        report.orphans.is_empty(),
+        "no file orphans expected: {report:?}"
+    );
 
     // repair removes exactly the orphan empty dir(s).
     let rep = repair(&h.store, &h.game).unwrap();
@@ -179,7 +200,10 @@ fn empty_orphan_dir_is_reported_and_repair_removes_it() {
         rep.removed_orphan_dirs, 2,
         "both the empty leaf and its now-empty parent are removed bottom-up: {rep:?}"
     );
-    assert!(!orphan_dir.exists(), "repair must remove the orphan empty dir");
+    assert!(
+        !orphan_dir.exists(),
+        "repair must remove the orphan empty dir"
+    );
     assert!(
         !on_disk(&h.install, "Data/leftover").exists(),
         "the parent, now empty, is also removed bottom-up"
@@ -187,7 +211,10 @@ fn empty_orphan_dir_is_reported_and_repair_removes_it() {
 
     // The managed deployment is untouched and the tree verifies pristine again.
     let after = verify(&h.store, &h.game).unwrap();
-    assert!(after.pristine, "after removing orphan dirs the tree is pristine: {after:?}");
+    assert!(
+        after.pristine,
+        "after removing orphan dirs the tree is pristine: {after:?}"
+    );
     assert!(on_disk(&h.install, REL_A).is_file());
     assert!(on_disk(&h.install, REL_B).is_file());
 }
@@ -210,14 +237,23 @@ fn dir_with_unmanaged_file_is_not_orphan_dir_and_file_is_not_deleted() {
     );
     // Its file IS a (report-only) file orphan.
     assert!(
-        report.orphans.iter().any(|p| p.ends_with("usermod/keep.txt")),
+        report
+            .orphans
+            .iter()
+            .any(|p| p.ends_with("usermod/keep.txt")),
         "the unmanaged file must be a report-only file orphan: {report:?}"
     );
 
     // repair removes no orphan dir (the dir is non-empty) and never deletes the file.
     let rep = repair(&h.store, &h.game).unwrap();
-    assert_eq!(rep.removed_orphan_dirs, 0, "no empty orphan dir to remove: {rep:?}");
-    assert!(unmanaged.is_file(), "repair must NEVER delete an unmanaged file (T-01-16)");
+    assert_eq!(
+        rep.removed_orphan_dirs, 0,
+        "no empty orphan dir to remove: {rep:?}"
+    );
+    assert!(
+        unmanaged.is_file(),
+        "repair must NEVER delete an unmanaged file (T-01-16)"
+    );
     assert_eq!(fs::read(&unmanaged).unwrap(), b"user-content");
     assert!(
         unmanaged.parent().unwrap().is_dir(),
@@ -231,7 +267,10 @@ fn clean_deployment_has_no_orphan_dirs() {
     // are explained ancestors of managed targets).
     let h = deploy_two_file_mod();
     let report = verify(&h.store, &h.game).unwrap();
-    assert!(report.pristine, "clean deployment must be pristine: {report:?}");
+    assert!(
+        report.pristine,
+        "clean deployment must be pristine: {report:?}"
+    );
     assert!(
         report.orphan_dirs.is_empty(),
         "clean deployment must have no orphan dirs (managed-target ancestors are explained): {report:?}"

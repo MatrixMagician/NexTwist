@@ -80,8 +80,7 @@ pub fn normalize_to_canonical(target_rel: &Path, casing: &CasingMap) -> PathBuf 
             Some(canonical_rel) => {
                 // canonical_rel is the FULL `/`-joined canonical path to this dir; the
                 // last segment is this component's real casing.
-                let canonical_leaf =
-                    canonical_rel.rsplit('/').next().unwrap_or(canonical_rel);
+                let canonical_leaf = canonical_rel.rsplit('/').next().unwrap_or(canonical_rel);
                 out.push(canonical_leaf);
             }
             None => {
@@ -123,7 +122,10 @@ mod tests {
     fn nested_dirs_use_per_segment_canonical_leaf() {
         let casing = map_with(
             "Data",
-            &[("textures", "Textures"), ("textures/actors", "Textures/Actors")],
+            &[
+                ("textures", "Textures"),
+                ("textures/actors", "Textures/Actors"),
+            ],
         );
         assert_eq!(
             normalize_to_canonical(Path::new("TEXTURES/ACTORS/z.dds"), &casing),

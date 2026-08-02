@@ -6,11 +6,11 @@ use std::fs;
 use std::io::{Cursor, Write};
 use std::path::Path;
 
-use extract::{install_archive, ExtractError};
+use extract::{ExtractError, install_archive};
 use sevenz_rust2::{ArchiveEntry, ArchiveWriter};
 use tempfile::TempDir;
-use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 /// The Data/-rooted fixture contents shared by the zip and 7z cases.
 const FIXTURE: &[(&str, &[u8])] = &[
@@ -38,9 +38,18 @@ fn build_7z(path: &Path) {
 /// regression target: stage `Data/Plugin.esp` only, dropping the junk so it never leaks
 /// into the game `Data/` at deploy time.
 const WRAPPER_FIXTURE: &[(&str, &[u8])] = &[
-    ("Super Cheat Legendary Weapon Fountain/Data/Plugin.esp", b"plugin-bytes"),
-    ("Super Cheat Legendary Weapon Fountain/Info.txt", b"author notes"),
-    ("Super Cheat Legendary Weapon Fountain/Screenshot/shot.png", b"png-bytes"),
+    (
+        "Super Cheat Legendary Weapon Fountain/Data/Plugin.esp",
+        b"plugin-bytes",
+    ),
+    (
+        "Super Cheat Legendary Weapon Fountain/Info.txt",
+        b"author notes",
+    ),
+    (
+        "Super Cheat Legendary Weapon Fountain/Screenshot/shot.png",
+        b"png-bytes",
+    ),
 ];
 
 fn build_zip_from(path: &Path, entries: &[(&str, &[u8])]) {
@@ -175,7 +184,8 @@ fn rar_uses_system_tool_or_reports_missing() {
             eprintln!("note: system tool present but cannot author .rar; skipping rar round-trip");
             return;
         }
-        let staged = install_archive(&archive, &staging).expect("rar should install via system tool");
+        let staged =
+            install_archive(&archive, &staging).expect("rar should install via system tool");
         assert_staged_correctly(&staged, &staging);
     } else {
         // No tool: a .rar (by magic or extension) must yield RarToolMissing.

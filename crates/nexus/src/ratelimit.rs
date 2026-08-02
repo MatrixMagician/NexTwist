@@ -215,7 +215,10 @@ mod tests {
         let rl = RateLimiter::with_hourly_cap(100);
         let start = Instant::now();
         rl.until_ready().await;
-        assert!(start.elapsed() < Duration::from_millis(200), "first token must be immediate");
+        assert!(
+            start.elapsed() < Duration::from_millis(200),
+            "first token must be immediate"
+        );
         assert!(!rl.is_backing_off());
     }
 
@@ -224,7 +227,10 @@ mod tests {
     fn low_remaining_header_records_backoff() {
         let rl = RateLimiter::new();
         assert!(!rl.is_backing_off());
-        rl.note_headers(&hm(&[("x-rl-hourly-remaining", "1"), ("x-rl-hourly-reset", "120")]), false);
+        rl.note_headers(
+            &hm(&[("x-rl-hourly-remaining", "1"), ("x-rl-hourly-reset", "120")]),
+            false,
+        );
         assert!(rl.is_backing_off(), "low remaining must arm a backoff");
     }
 
@@ -244,12 +250,18 @@ mod tests {
     #[test]
     fn healthy_remaining_does_not_clear_future_backoff() {
         let rl = RateLimiter::new();
-        rl.note_headers(&hm(&[("x-rl-hourly-remaining", "0"), ("x-rl-hourly-reset", "60")]), false);
+        rl.note_headers(
+            &hm(&[("x-rl-hourly-remaining", "0"), ("x-rl-hourly-reset", "60")]),
+            false,
+        );
         assert!(rl.is_backing_off());
         // A concurrent healthy response arrives while the 60s backoff is still in the
         // future: it must be IGNORED, not allowed to clear the armed deadline.
         rl.note_headers(&hm(&[("x-rl-hourly-remaining", "99")]), false);
-        assert!(rl.is_backing_off(), "a future backoff must survive a healthy response");
+        assert!(
+            rl.is_backing_off(),
+            "a future backoff must survive a healthy response"
+        );
     }
 
     /// WR-03: an ALREADY-elapsed backoff is cleared by a healthy response (a deadline of
@@ -258,11 +270,17 @@ mod tests {
     fn healthy_remaining_clears_elapsed_backoff() {
         let rl = RateLimiter::new();
         // Reset of 0 → the deadline is effectively now/past immediately.
-        rl.note_headers(&hm(&[("x-rl-hourly-remaining", "0"), ("x-rl-hourly-reset", "0")]), false);
+        rl.note_headers(
+            &hm(&[("x-rl-hourly-remaining", "0"), ("x-rl-hourly-reset", "0")]),
+            false,
+        );
         // is_backing_off compares strictly `> now`, so a 0s deadline already reads false.
         assert!(!rl.is_backing_off(), "a 0s deadline is already elapsed");
         rl.note_headers(&hm(&[("x-rl-hourly-remaining", "99")]), false);
-        assert!(!rl.is_backing_off(), "an elapsed backoff is cleared by a healthy response");
+        assert!(
+            !rl.is_backing_off(),
+            "an elapsed backoff is cleared by a healthy response"
+        );
     }
 
     /// WR-03: a stronger (later) backoff is never shortened by a weaker concurrent signal.
@@ -272,7 +290,10 @@ mod tests {
         rl.note_headers(&hm(&[("x-rl-hourly-reset", "300")]), true); // arm a long 300s backoff
         assert!(rl.is_backing_off());
         // A concurrent low-remaining response with a SHORTER reset must not cut it down.
-        rl.note_headers(&hm(&[("x-rl-hourly-remaining", "1"), ("x-rl-hourly-reset", "10")]), false);
+        rl.note_headers(
+            &hm(&[("x-rl-hourly-remaining", "1"), ("x-rl-hourly-reset", "10")]),
+            false,
+        );
         assert!(rl.is_backing_off(), "the longer backoff must remain armed");
     }
 }

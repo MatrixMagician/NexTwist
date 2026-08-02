@@ -255,9 +255,7 @@ pub(crate) mod editor {
     pub(crate) fn current_resource_value(bytes: &[u8]) -> Option<String> {
         let body = &bytes[detect_bom(bytes)..];
         let raw = raw_lines(body);
-        let h = raw
-            .iter()
-            .position(|ln| is_archive_header(ln))?;
+        let h = raw.iter().position(|ln| is_archive_header(ln))?;
         for ln in raw.iter().skip(h + 1) {
             let t = trim(strip_eol(ln));
             if is_section(t) {
@@ -301,7 +299,10 @@ pub(crate) mod editor {
     ///   one `[Archive]` block when the section is absent; every other byte is untouched.
     ///
     /// Idempotent: planning against this function's own output yields byte-identical bytes.
-    pub(crate) fn plan_merge(current: Option<&[u8]>, resolution: IniConflictResolution) -> MergePlan {
+    pub(crate) fn plan_merge(
+        current: Option<&[u8]>,
+        resolution: IniConflictResolution,
+    ) -> MergePlan {
         let Some(bytes) = current else {
             // New file: CRLF + no BOM (CE2/Windows convention, Assumption A2).
             let s = format!(
@@ -553,11 +554,7 @@ pub fn ini_drift(store: &Store, game: &Game) -> Result<Option<IniDrift>, DeployE
 /// inferred from disk): a real hash → copy original bytes back; the [`ABSENCE_MARKER`] →
 /// remove our file + prune the dirs we created; no row → safe no-op. Drops the provenance
 /// row at the end so a future user file is never mistaken for ours. Idempotent.
-pub(crate) fn restore_ini_at(
-    store: &Store,
-    game: &Game,
-    target: &Path,
-) -> Result<(), DeployError> {
+pub(crate) fn restore_ini_at(store: &Store, game: &Game, target: &Path) -> Result<(), DeployError> {
     let sentinel = Path::new(INI_FILENAME);
     let Some(hash) = store.vanilla_for(game.appid, sentinel)? else {
         return Ok(()); // Never activated (or already restored) → never touch a user file.
@@ -631,7 +628,11 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), DeployError> {
 fn prune_created_dirs(target: &Path) {
     // target = <Documents>/My Games/<game>/StarfieldCustom.ini
     // documents = target.parent(<game>).parent(My Games).parent(Documents)
-    let Some(documents) = target.parent().and_then(Path::parent).and_then(Path::parent) else {
+    let Some(documents) = target
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+    else {
         return;
     };
     let mut dir = target.parent().map(Path::to_path_buf);
@@ -709,8 +710,13 @@ mod editor_tests {
         let input = b"[General]\r\nsLang=en\r\n"; // CRLF file, no [Archive]
         let out = planned(Some(input), Block);
         let text = String::from_utf8(out).unwrap();
-        assert!(text.starts_with("[General]\r\nsLang=en\r\n"), "prior bytes untouched");
-        assert!(text.contains("[Archive]\r\nbInvalidateOlderFiles=1\r\nsResourceDataDirsFinal=\r\n"));
+        assert!(
+            text.starts_with("[General]\r\nsLang=en\r\n"),
+            "prior bytes untouched"
+        );
+        assert!(
+            text.contains("[Archive]\r\nbInvalidateOlderFiles=1\r\nsResourceDataDirsFinal=\r\n")
+        );
         assert_eq!(text.matches("[Archive]").count(), 1);
     }
 
@@ -732,7 +738,10 @@ mod editor_tests {
             b"[Archive]\r\nbInvalidateOlderFiles=1\r\nsResourceDataDirsFinal=\r\n[Other]\r\nx=1\r\n",
         );
         let out = planned(Some(&input), Block);
-        assert_eq!(out, input, "no-op re-merge of a CRLF+BOM file must be identical");
+        assert_eq!(
+            out, input,
+            "no-op re-merge of a CRLF+BOM file must be identical"
+        );
         assert_eq!(detect_bom(&out), 3, "BOM preserved");
     }
 
@@ -741,7 +750,10 @@ mod editor_tests {
         // A stale bInvalidateOlderFiles=0 is corrected to 1 without touching CRLF/order.
         let input = b"[Archive]\r\nbInvalidateOlderFiles=0\r\nsResourceDataDirsFinal=\r\n";
         let out = planned(Some(input), Block);
-        assert_eq!(out, b"[Archive]\r\nbInvalidateOlderFiles=1\r\nsResourceDataDirsFinal=\r\n");
+        assert_eq!(
+            out,
+            b"[Archive]\r\nbInvalidateOlderFiles=1\r\nsResourceDataDirsFinal=\r\n"
+        );
     }
 
     #[test]
@@ -763,9 +775,15 @@ mod editor_tests {
         for u in "[Archive]\r\nsResourceDataDirsFinal=Mods\r\n".encode_utf16() {
             le.extend_from_slice(&u.to_le_bytes());
         }
-        assert!(matches!(plan_merge(Some(&le), Block), MergePlan::Unsupported));
+        assert!(matches!(
+            plan_merge(Some(&le), Block),
+            MergePlan::Unsupported
+        ));
         // UTF-16 BE and UTF-32 BE too.
-        assert!(matches!(plan_merge(Some(&[0xFE, 0xFF, 0x00, b'x']), Block), MergePlan::Unsupported));
+        assert!(matches!(
+            plan_merge(Some(&[0xFE, 0xFF, 0x00, b'x']), Block),
+            MergePlan::Unsupported
+        ));
         assert!(matches!(
             plan_merge(Some(&[0x00, 0x00, 0xFE, 0xFF, 0x00]), Block),
             MergePlan::Unsupported
@@ -773,7 +791,10 @@ mod editor_tests {
         // A UTF-8 BOM file is still editable (NOT refused).
         let mut utf8 = vec![0xEF, 0xBB, 0xBF];
         utf8.extend_from_slice(b"[Archive]\r\nsResourceDataDirsFinal=\r\n");
-        assert!(matches!(plan_merge(Some(&utf8), Block), MergePlan::Write(_)));
+        assert!(matches!(
+            plan_merge(Some(&utf8), Block),
+            MergePlan::Write(_)
+        ));
     }
 
     #[test]
@@ -789,15 +810,24 @@ mod editor_tests {
         let input = b"[Archive]\r\nsResourceDataDirsFinal=Textures\\\r\n";
         let out = planned(Some(input), UseNexTwist);
         let text = String::from_utf8(out).unwrap();
-        assert!(text.contains("sResourceDataDirsFinal=\r\n"), "value cleared to empty");
-        assert!(!text.contains("Textures"), "user value overwritten under UseNexTwist");
+        assert!(
+            text.contains("sResourceDataDirsFinal=\r\n"),
+            "value cleared to empty"
+        );
+        assert!(
+            !text.contains("Textures"),
+            "user value overwritten under UseNexTwist"
+        );
     }
 
     #[test]
     fn owned_lines_are_the_two_recipe_keys() {
         assert_eq!(
             owned_lines(),
-            vec!["bInvalidateOlderFiles=1".to_string(), "sResourceDataDirsFinal=".to_string()]
+            vec![
+                "bInvalidateOlderFiles=1".to_string(),
+                "sResourceDataDirsFinal=".to_string()
+            ]
         );
     }
 }
@@ -847,8 +877,13 @@ mod wrapper_tests {
     #[test]
     fn preview_existing_empty_reports_will_edit_no_conflict() {
         let dir = TempDir::new().unwrap();
-        let (_store, game) =
-            fixture(&dir, MyGamesOpts { marker: Some(INI_FILENAME), ..Default::default() });
+        let (_store, game) = fixture(
+            &dir,
+            MyGamesOpts {
+                marker: Some(INI_FILENAME),
+                ..Default::default()
+            },
+        );
         std::fs::write(ini_path(&game), b"[Archive]\r\nsResourceDataDirsFinal=\r\n").unwrap();
         let p = preview_ini_activation(&game).unwrap();
         assert!(p.will_edit && !p.will_create);
@@ -858,13 +893,22 @@ mod wrapper_tests {
     #[test]
     fn preview_conflict_reports_value_no_write() {
         let dir = TempDir::new().unwrap();
-        let (_store, game) =
-            fixture(&dir, MyGamesOpts { marker: Some(INI_FILENAME), ..Default::default() });
+        let (_store, game) = fixture(
+            &dir,
+            MyGamesOpts {
+                marker: Some(INI_FILENAME),
+                ..Default::default()
+            },
+        );
         let original = b"[Archive]\r\nsResourceDataDirsFinal=Mods\\\r\n";
         std::fs::write(ini_path(&game), original).unwrap();
         let p = preview_ini_activation(&game).unwrap();
         assert_eq!(p.conflict.as_deref(), Some("Mods\\"));
-        assert_eq!(std::fs::read(ini_path(&game)).unwrap(), original, "preview writes nothing");
+        assert_eq!(
+            std::fs::read(ini_path(&game)).unwrap(),
+            original,
+            "preview writes nothing"
+        );
     }
 
     #[test]
@@ -876,7 +920,10 @@ mod wrapper_tests {
             IniOutcome::Activated
         );
         let written = std::fs::read(ini_path(&game)).unwrap();
-        assert_eq!(written, b"[Archive]\r\nbInvalidateOlderFiles=1\r\nsResourceDataDirsFinal=\r\n");
+        assert_eq!(
+            written,
+            b"[Archive]\r\nbInvalidateOlderFiles=1\r\nsResourceDataDirsFinal=\r\n"
+        );
         // Intent-before-act fully resolved.
         assert!(store.pending_ops().unwrap().is_empty());
         // Second call converges without a rewrite.
@@ -891,14 +938,21 @@ mod wrapper_tests {
     #[test]
     fn ensure_blocks_nonempty_user_value_and_use_nextwist_overwrites() {
         let dir = TempDir::new().unwrap();
-        let (store, game) =
-            fixture(&dir, MyGamesOpts { marker: Some(INI_FILENAME), ..Default::default() });
+        let (store, game) = fixture(
+            &dir,
+            MyGamesOpts {
+                marker: Some(INI_FILENAME),
+                ..Default::default()
+            },
+        );
         let original = b"[Archive]\r\nsResourceDataDirsFinal=Mods\\\r\n";
         std::fs::write(ini_path(&game), original).unwrap();
         // Block → surfaced, NOTHING written, Ok (not Err).
         assert_eq!(
             ensure_ini_active(&store, &game, IniConflictResolution::Block).unwrap(),
-            IniOutcome::Blocked { current_value: "Mods\\".into() }
+            IniOutcome::Blocked {
+                current_value: "Mods\\".into()
+            }
         );
         assert_eq!(std::fs::read(ini_path(&game)).unwrap(), original);
         assert!(store.pending_ops().unwrap().is_empty());
@@ -914,12 +968,22 @@ mod wrapper_tests {
     #[test]
     fn restore_preexisting_restores_original_bytes() {
         let dir = TempDir::new().unwrap();
-        let (store, game) =
-            fixture(&dir, MyGamesOpts { marker: Some(INI_FILENAME), ..Default::default() });
-        let original = b"; user config\r\n[Display]\r\niSize=1080\r\n[Archive]\r\nsResourceDataDirsFinal=\r\n";
+        let (store, game) = fixture(
+            &dir,
+            MyGamesOpts {
+                marker: Some(INI_FILENAME),
+                ..Default::default()
+            },
+        );
+        let original =
+            b"; user config\r\n[Display]\r\niSize=1080\r\n[Archive]\r\nsResourceDataDirsFinal=\r\n";
         std::fs::write(ini_path(&game), original).unwrap();
         ensure_ini_active(&store, &game, IniConflictResolution::Block).unwrap();
-        assert_ne!(std::fs::read(ini_path(&game)).unwrap(), original, "activation edited it");
+        assert_ne!(
+            std::fs::read(ini_path(&game)).unwrap(),
+            original,
+            "activation edited it"
+        );
         assert_eq!(restore_ini(&store, &game).unwrap(), IniOutcome::Restored);
         assert_eq!(
             std::fs::read(ini_path(&game)).unwrap(),
@@ -947,7 +1011,10 @@ mod wrapper_tests {
         assert!(ini.exists(), "activation created the INI (and its dirs)");
         assert_eq!(restore_ini(&store, &game).unwrap(), IniOutcome::Restored);
         assert!(!ini.exists(), "CreatedByNexTwist INI deleted on restore");
-        assert!(!ini.parent().unwrap().exists(), "NexTwist-created Starfield dir pruned");
+        assert!(
+            !ini.parent().unwrap().exists(),
+            "NexTwist-created Starfield dir pruned"
+        );
         // Documents (the boundary) is never removed.
         let documents = ini.parent().unwrap().parent().unwrap().parent().unwrap();
         assert!(documents.exists(), "Documents boundary dir preserved");
@@ -957,8 +1024,13 @@ mod wrapper_tests {
     fn restore_is_a_safe_noop_when_never_activated() {
         // A user's own INI that NexTwist never touched must survive a restore untouched.
         let dir = TempDir::new().unwrap();
-        let (store, game) =
-            fixture(&dir, MyGamesOpts { marker: Some(INI_FILENAME), ..Default::default() });
+        let (store, game) = fixture(
+            &dir,
+            MyGamesOpts {
+                marker: Some(INI_FILENAME),
+                ..Default::default()
+            },
+        );
         let user_bytes = b"[Archive]\r\nsResourceDataDirsFinal=MyMods\\\r\n";
         std::fs::write(ini_path(&game), user_bytes).unwrap();
         assert_eq!(restore_ini(&store, &game).unwrap(), IniOutcome::NotActive);
@@ -972,8 +1044,13 @@ mod wrapper_tests {
     #[test]
     fn ensure_refuses_to_write_through_a_symlink() {
         let dir = TempDir::new().unwrap();
-        let (store, game) =
-            fixture(&dir, MyGamesOpts { marker: Some("x"), ..Default::default() });
+        let (store, game) = fixture(
+            &dir,
+            MyGamesOpts {
+                marker: Some("x"),
+                ..Default::default()
+            },
+        );
         let ini = ini_path(&game);
         let elsewhere = dir.path().join("outside.ini");
         std::fs::write(&elsewhere, b"x").unwrap();
@@ -993,7 +1070,10 @@ mod wrapper_tests {
         assert!(verify_contained(&ok, prefix).is_ok());
         let escape = Path::new("/etc/passwd");
         assert!(
-            matches!(verify_contained(escape, prefix), Err(DeployError::PathEscape(_))),
+            matches!(
+                verify_contained(escape, prefix),
+                Err(DeployError::PathEscape(_))
+            ),
             "a target outside <prefix>/drive_c must be refused (T-08-01)"
         );
     }

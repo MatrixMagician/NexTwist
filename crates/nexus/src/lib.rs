@@ -32,19 +32,18 @@ pub mod replay;
 pub mod resolve;
 
 pub use auth::{
-    build_authorize_url, exchange_code, validate_api_key, AuthorizeRequest, API_BASE, TOKEN_BASE,
+    API_BASE, AuthorizeRequest, TOKEN_BASE, build_authorize_url, exchange_code, validate_api_key,
 };
-pub use client::{FileAvailability, NexusAuth, NexusClient, NEXUS_API_BASE};
+pub use client::{FileAvailability, NEXUS_API_BASE, NexusAuth, NexusClient};
 pub use collection::{
     ChoiceGroup, ChoiceOption, ChoiceStep, Choices, Collection, CollectionInfo, CollectionMod,
     CollectionModRule, ModReference, ModRuleType, SourceInfo, SourceType,
 };
-pub use download::{download_to, CancelFlag};
+pub use download::{CancelFlag, download_to};
 pub use error::NexusError;
 pub use model::{DownloadLink, ModFile, NxmLink, NxmLinkKind, OAuthTokens, UserInfo};
 pub use ratelimit::RateLimiter;
 pub use replay::{
-    compute_collection_ranks, is_auto_fetchable, map_rules_to_ranks, replay_choices,
-    RankAdjustment,
+    RankAdjustment, compute_collection_ranks, is_auto_fetchable, map_rules_to_ranks, replay_choices,
 };
-pub use resolve::{resolve_collection, ModStatus, ResolveReport, ResolvedMod};
+pub use resolve::{ModStatus, ResolveReport, ResolvedMod, resolve_collection};

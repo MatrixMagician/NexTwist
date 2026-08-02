@@ -251,11 +251,16 @@ mod tests {
         let (_d, store) = store();
         let appid = 489830;
         // A real profile to link, so the FK validates.
-        let profile_id = store.create_profile(appid, "Collection: Essentials").unwrap();
+        let profile_id = store
+            .create_profile(appid, "Collection: Essentials")
+            .unwrap();
         let mut c = a_collection();
         c.profile_id = Some(profile_id);
         let id = store.add_collection(&c).unwrap();
-        assert_eq!(store.get_collection(id).unwrap().unwrap().profile_id, Some(profile_id));
+        assert_eq!(
+            store.get_collection(id).unwrap().unwrap().profile_id,
+            Some(profile_id)
+        );
     }
 
     /// Upsert idempotency on the UNIQUE (appid, slug, revision) key: same id, updated fields.
@@ -267,7 +272,10 @@ mod tests {
         let mut renamed = a_collection();
         renamed.name = "Skyrim Essentials (revised)".into();
         let id2 = store.add_collection(&renamed).unwrap();
-        assert_eq!(id1, id2, "re-resolving the same revision must reuse the row");
+        assert_eq!(
+            id1, id2,
+            "re-resolving the same revision must reuse the row"
+        );
         assert_eq!(
             store.get_collection(id1).unwrap().unwrap().name,
             "Skyrim Essentials (revised)"
@@ -322,7 +330,11 @@ mod tests {
         let mut cm = a_collection_mod(mod_a);
         cm.choices_json = Some(r#"{"type":"fomod","options":[]}"#.into());
         let id1 = store.add_collection_mod(cid, &cm).unwrap();
-        assert!(store.list_collection_mods(cid).unwrap()[0].choices_json.is_some());
+        assert!(
+            store.list_collection_mods(cid).unwrap()[0]
+                .choices_json
+                .is_some()
+        );
 
         // Re-record with the choices cleared and a new rank.
         cm.choices_json = None;
@@ -331,7 +343,10 @@ mod tests {
         assert_eq!(id1, id2, "same membership must reuse the row");
         let mods = store.list_collection_mods(cid).unwrap();
         assert_eq!(mods[0].rank, 9);
-        assert_eq!(mods[0].choices_json, None, "clearing choices drops the fomod_choice row");
+        assert_eq!(
+            mods[0].choices_json, None,
+            "clearing choices drops the fomod_choice row"
+        );
     }
 
     /// CASCADE: deleting a collection removes its collection_mod and fomod_choice rows.
@@ -354,7 +369,10 @@ mod tests {
             .conn
             .query_row("SELECT count(*) FROM fomod_choice", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(choice_rows, 0, "fomod_choice must CASCADE-delete with its collection_mod");
+        assert_eq!(
+            choice_rows, 0,
+            "fomod_choice must CASCADE-delete with its collection_mod"
+        );
         // Removing again is a no-op.
         assert!(!store.remove_collection(cid).unwrap());
     }
@@ -391,14 +409,19 @@ mod tests {
     fn dropping_profile_nulls_collection_link_not_the_collection() {
         let (_d, store) = store();
         let appid = 489830;
-        let profile_id = store.create_profile(appid, "Collection: Essentials").unwrap();
+        let profile_id = store
+            .create_profile(appid, "Collection: Essentials")
+            .unwrap();
         let mut c = a_collection();
         c.profile_id = Some(profile_id);
         let cid = store.add_collection(&c).unwrap();
 
         assert!(store.delete_profile(profile_id).unwrap());
         let got = store.get_collection(cid).unwrap().unwrap();
-        assert_eq!(got.profile_id, None, "the profile FK is SET NULL, collection survives");
+        assert_eq!(
+            got.profile_id, None,
+            "the profile FK is SET NULL, collection survives"
+        );
     }
 
     /// Migration-reach (mirrors db.rs's v4 guard): reach a genuine V4-only state, then
@@ -458,7 +481,10 @@ mod tests {
 
         // managed_mod's columns are UNCHANGED (V5 is additive, never ALTERs a prior table).
         let cols_v5: Vec<String> = {
-            let mut stmt = store.conn.prepare("PRAGMA table_info(managed_mod)").unwrap();
+            let mut stmt = store
+                .conn
+                .prepare("PRAGMA table_info(managed_mod)")
+                .unwrap();
             stmt.query_map([], |r| r.get::<_, String>(1))
                 .unwrap()
                 .map(|c| c.unwrap())

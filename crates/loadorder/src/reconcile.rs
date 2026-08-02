@@ -69,8 +69,10 @@ pub fn reconcile_plugins_txt(
         .filter(|p| p.enabled && !protected.contains(&p.name))
         .map(|p| p.name.as_str())
         .collect();
-    let recorded_active_set: HashSet<String> =
-        recorded_active.iter().map(|n| n.to_ascii_lowercase()).collect();
+    let recorded_active_set: HashSet<String> = recorded_active
+        .iter()
+        .map(|n| n.to_ascii_lowercase())
+        .collect();
 
     let mut drift: Vec<String> = Vec::new();
 

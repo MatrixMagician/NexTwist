@@ -29,8 +29,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use deploy::{purge, switch_profile};
-use nexus::Collection as NexusCollection;
 use nextwist_core::{Collection, CollectionMod, Game, ManagedMod};
+use nexus::Collection as NexusCollection;
 use store::Store;
 use tempfile::TempDir;
 use testkit::{assert_trees_identical, fake_staged_mod, snapshot_tree};
@@ -142,18 +142,32 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
     let manifest = NexusCollection::parse(MANIFEST_JSON).expect("manifest parses");
     let ranks = nexus::compute_collection_ranks(&manifest);
     // manifest index 0 = modB, index 1 = modA. "modA after modB" pushes modA down.
-    assert_eq!(ranks.get(&0).copied(), Some(1), "modB keeps its manifest-order rank (wins)");
-    assert_eq!(ranks.get(&1).copied(), Some(3), "modA is pushed DOWN by the `after` rule (loses)");
+    assert_eq!(
+        ranks.get(&0).copied(),
+        Some(1),
+        "modB keeps its manifest-order rank (wins)"
+    );
+    assert_eq!(
+        ranks.get(&1).copied(),
+        Some(3),
+        "modA is pushed DOWN by the `after` rule (loses)"
+    );
 
     // Two collection mods. modA + modB contest Data/shared.esp (different bytes). Each has a
     // unique file too. modB's manifest-derived rank (1) beats modA's (3) on the shared path.
     let mod_a_root = fx.stage_mod(
         "modA",
-        &[("Data/shared.esp", b"A-SHARED"), ("Data/onlyA.esp", b"A-ONLY")],
+        &[
+            ("Data/shared.esp", b"A-SHARED"),
+            ("Data/onlyA.esp", b"A-ONLY"),
+        ],
     );
     let mod_b_root = fx.stage_mod(
         "modB",
-        &[("Data/shared.esp", b"B-SHARED"), ("Data/onlyB.esp", b"B-ONLY")],
+        &[
+            ("Data/shared.esp", b"B-SHARED"),
+            ("Data/onlyB.esp", b"B-ONLY"),
+        ],
     );
 
     let store = fx.open_store();
@@ -163,7 +177,10 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
     // only because the ranks below come from `compute_collection_ranks`, not a literal 1.
     let m_a = add_mod(&store, game.appid, "modA", &mod_a_root, 1);
     let m_b = add_mod(&store, game.appid, "modB", &mod_b_root, 1);
-    assert!(m_a < m_b, "modA must have the lower managed_mod id (the tie-break it would win)");
+    assert!(
+        m_a < m_b,
+        "modA must have the lower managed_mod id (the tie-break it would win)"
+    );
 
     // ── Persist the Collection + its mods (V5 facade), as download_collection would — using
     //    the manifest-derived ranks read out of `compute_collection_ranks` per manifest index.
@@ -181,7 +198,10 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
     // Map each manifest mod (by name) to its staged managed_mod id + its rule-derived rank.
     let mod_id_for = |name: &str| if name == "modA" { m_a } else { m_b };
     for (idx, m) in manifest.mods.iter().enumerate() {
-        let rank = ranks.get(&idx).copied().expect("every mod has a computed rank");
+        let rank = ranks
+            .get(&idx)
+            .copied()
+            .expect("every mod has a computed rank");
         store
             .add_collection_mod(
                 collection_id,
@@ -200,14 +220,21 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
 
     // ── DEPLOY (COLL-04): create the dedicated profile, set membership by the STORED
     //    (rule-derived) rank, deploy via the SAME switch_profile path (no new primitive). ──
-    let profile_id = store.create_profile(game.appid, "Collection: Test Collection").unwrap();
+    let profile_id = store
+        .create_profile(game.appid, "Collection: Test Collection")
+        .unwrap();
     let cmods = store.list_collection_mods(collection_id).unwrap();
     assert_eq!(cmods.len(), 2, "both collection mods persisted");
     for cm in &cmods {
-        store.set_profile_mod(profile_id, cm.mod_id, true, cm.rank).unwrap();
+        store
+            .set_profile_mod(profile_id, cm.mod_id, true, cm.rank)
+            .unwrap();
     }
     let report = switch_profile(&store, &game, profile_id).unwrap();
-    assert_eq!(report.deployed.deployed, 3, "deploys shared + onlyA + onlyB");
+    assert_eq!(
+        report.deployed.deployed, 3,
+        "deploys shared + onlyA + onlyB"
+    );
 
     // The rule-ranked winner owns the contested path. modB (manifest rank 1) WINS over modA
     // (manifest rank 3) — the OPPOSITE of the mod_id tie-break modA would win under a flat
@@ -229,7 +256,11 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
     // ── UNINSTALL (COLL-05): purge → clear active flag → delete_profile → drop rows. ──
     // 1. Purge to pristine (the deployment is restored byte-for-byte vanilla).
     let purged = purge(&store, &game).unwrap();
-    assert!(purged.orphans.is_empty(), "purge leaves no orphans: {:?}", purged.orphans);
+    assert!(
+        purged.orphans.is_empty(),
+        "purge leaves no orphans: {:?}",
+        purged.orphans
+    );
 
     // 2. delete_profile REJECTS an active profile — clear the (now-pristine) active flag
     //    first, exactly as uninstall_collection does. This is the ordering CONTRACT.
@@ -245,12 +276,20 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
 
     // 3. Remove the staged trees + managed_mod rows + the V5 collection rows.
     for cm in &cmods {
-        if let Some(m) = store.list_mods(game.appid).unwrap().into_iter().find(|m| m.id == cm.mod_id) {
+        if let Some(m) = store
+            .list_mods(game.appid)
+            .unwrap()
+            .into_iter()
+            .find(|m| m.id == cm.mod_id)
+        {
             let _ = fs::remove_dir_all(&m.staging_root);
         }
         store.remove_mod(cm.mod_id).unwrap();
     }
-    assert!(store.remove_collection(collection_id).unwrap(), "collection rows removed");
+    assert!(
+        store.remove_collection(collection_id).unwrap(),
+        "collection rows removed"
+    );
 
     // ── NON-NEGOTIABLE: the install is byte-for-byte pristine after uninstall (COLL-05). ──
     let after = snapshot_tree(&fx.install).unwrap();
@@ -265,7 +304,10 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
         "the collection row is gone"
     );
     assert!(
-        store.list_collection_mods(collection_id).unwrap().is_empty(),
+        store
+            .list_collection_mods(collection_id)
+            .unwrap()
+            .is_empty(),
         "collection_mod rows CASCADE-deleted with the collection"
     );
 }

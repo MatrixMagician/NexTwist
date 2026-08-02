@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use fomod::{
-    eval, parse_module_config, plugin_type_state, resolve, validate_selection, FlagSet, FomodError,
-    GroupType, InstalledFiles, PluginType, Selection,
+    FlagSet, FomodError, GroupType, InstalledFiles, PluginType, Selection, eval,
+    parse_module_config, plugin_type_state, resolve, validate_selection,
 };
 
 /// Absolute path to a fixture's tree root (the dir that CONTAINS the `fomod/` folder).
@@ -100,7 +100,11 @@ fn nested_and_or_composite_parses() {
 fn dependency_type_parses_default_and_patterns() {
     let m = parse_module_config(&fixture("dependency_type")).expect("dependency_type parses");
     let main = &m.steps.as_ref().unwrap().steps[1];
-    let plugin = &main.groups.as_ref().unwrap().groups[0].plugins.as_ref().unwrap().plugins[0];
+    let plugin = &main.groups.as_ref().unwrap().groups[0]
+        .plugins
+        .as_ref()
+        .unwrap()
+        .plugins[0];
     let td = plugin.type_descriptor.as_ref().expect("has typeDescriptor");
     let dt = td.dependency_type.as_ref().expect("is a dependencyType");
     assert_eq!(dt.default_type.name, PluginType::NotUsable);
@@ -146,8 +150,14 @@ fn eval_reads_flag_condition() {
     let m = parse_module_config(&fixture("flags")).unwrap();
     let visible = m.steps.unwrap().steps[1].visible.clone().unwrap();
     let files = InstalledFiles::default();
-    assert!(eval(&visible, &flags(&[("hires", "on")]), &files), "hires=on ⇒ visible");
-    assert!(!eval(&visible, &flags(&[("hires", "off")]), &files), "hires=off ⇒ hidden");
+    assert!(
+        eval(&visible, &flags(&[("hires", "on")]), &files),
+        "hires=on ⇒ visible"
+    );
+    assert!(
+        !eval(&visible, &flags(&[("hires", "off")]), &files),
+        "hires=off ⇒ hidden"
+    );
     assert!(!eval(&visible, &flags(&[]), &files), "no flag ⇒ hidden");
 }
 
@@ -160,12 +170,18 @@ fn eval_nested_and_or_semantics() {
         .unwrap();
     let files = InstalledFiles::default();
     // Or( a=1 , And(b=1,c=1) )
-    assert!(eval(&dep, &flags(&[("a", "1")]), &files), "a=1 alone satisfies the Or");
+    assert!(
+        eval(&dep, &flags(&[("a", "1")]), &files),
+        "a=1 alone satisfies the Or"
+    );
     assert!(
         eval(&dep, &flags(&[("b", "1"), ("c", "1")]), &files),
         "b=1 AND c=1 satisfies the nested And"
     );
-    assert!(!eval(&dep, &flags(&[("b", "1")]), &files), "b=1 alone does not");
+    assert!(
+        !eval(&dep, &flags(&[("b", "1")]), &files),
+        "b=1 alone does not"
+    );
     assert!(!eval(&dep, &flags(&[]), &files), "no flags ⇒ false");
 }
 
@@ -184,7 +200,10 @@ fn plugin_type_state_walks_dependency_type() {
     let td = plugin.type_descriptor.as_ref().unwrap();
     let files = InstalledFiles::default();
     // defaultType=NotUsable; the prereq=yes pattern flips it to Recommended.
-    assert_eq!(plugin_type_state(td, &flags(&[]), &files), PluginType::NotUsable);
+    assert_eq!(
+        plugin_type_state(td, &flags(&[]), &files),
+        PluginType::NotUsable
+    );
     assert_eq!(
         plugin_type_state(td, &flags(&[("prereq", "yes")]), &files),
         PluginType::Recommended
@@ -215,8 +234,14 @@ fn resolve_includes_required_and_conditional() {
     };
     let plan = resolve(&m, &sel).expect("resolve conditional");
     let dests: Vec<PathBuf> = plan.iter().map(|f| f.dest_rel.clone()).collect();
-    assert!(dests.contains(&PathBuf::from("core.esp")), "required core.esp present");
-    assert!(dests.contains(&PathBuf::from("patchA.esp")), "conditional patchA.esp present");
+    assert!(
+        dests.contains(&PathBuf::from("core.esp")),
+        "required core.esp present"
+    );
+    assert!(
+        dests.contains(&PathBuf::from("patchA.esp")),
+        "conditional patchA.esp present"
+    );
 }
 
 #[test]
@@ -225,8 +250,14 @@ fn resolve_omits_conditional_when_flag_unset() {
     let sel = Selection::default(); // no flags
     let plan = resolve(&m, &sel).expect("resolve conditional (no flag)");
     let dests: Vec<PathBuf> = plan.iter().map(|f| f.dest_rel.clone()).collect();
-    assert!(dests.contains(&PathBuf::from("core.esp")), "required still present");
-    assert!(!dests.contains(&PathBuf::from("patchA.esp")), "conditional absent");
+    assert!(
+        dests.contains(&PathBuf::from("core.esp")),
+        "required still present"
+    );
+    assert!(
+        !dests.contains(&PathBuf::from("patchA.esp")),
+        "conditional absent"
+    );
 }
 
 /// WR-02: server-side group cardinality. The `flags` fixture's first step has a
@@ -236,13 +267,22 @@ fn resolve_omits_conditional_when_flag_unset() {
 fn validate_selection_rejects_two_in_a_select_exactly_one() {
     let m = parse_module_config(&fixture("flags")).unwrap();
     let mut sel = Selection::default();
-    sel.chosen
-        .insert(("Choose Variant".into(), "Variant".into(), "Use Hi-Res".into()));
-    sel.chosen
-        .insert(("Choose Variant".into(), "Variant".into(), "Use Lo-Res".into()));
+    sel.chosen.insert((
+        "Choose Variant".into(),
+        "Variant".into(),
+        "Use Hi-Res".into(),
+    ));
+    sel.chosen.insert((
+        "Choose Variant".into(),
+        "Variant".into(),
+        "Use Lo-Res".into(),
+    ));
     let err = validate_selection(&m, &sel)
         .expect_err("two options in a SelectExactlyOne group must be rejected");
-    assert!(matches!(err, FomodError::InvalidSelection(_)), "got {err:?}");
+    assert!(
+        matches!(err, FomodError::InvalidSelection(_)),
+        "got {err:?}"
+    );
 }
 
 /// WR-02: a `SelectExactlyOne` group with NONE chosen is also invalid (under-selection).
@@ -253,7 +293,10 @@ fn validate_selection_rejects_none_in_a_select_exactly_one() {
     let sel = Selection::default();
     let err = validate_selection(&m, &sel)
         .expect_err("zero options in a SelectExactlyOne group must be rejected");
-    assert!(matches!(err, FomodError::InvalidSelection(_)), "got {err:?}");
+    assert!(
+        matches!(err, FomodError::InvalidSelection(_)),
+        "got {err:?}"
+    );
 }
 
 /// WR-02: a valid one-option selection in the SelectExactlyOne group passes validation.
@@ -261,8 +304,11 @@ fn validate_selection_rejects_none_in_a_select_exactly_one() {
 fn validate_selection_accepts_exactly_one() {
     let m = parse_module_config(&fixture("flags")).unwrap();
     let mut sel = Selection::default();
-    sel.chosen
-        .insert(("Choose Variant".into(), "Variant".into(), "Use Hi-Res".into()));
+    sel.chosen.insert((
+        "Choose Variant".into(),
+        "Variant".into(),
+        "Use Hi-Res".into(),
+    ));
     validate_selection(&m, &sel).expect("exactly one chosen is a valid selection");
 }
 
@@ -274,8 +320,11 @@ fn validate_selection_accepts_exactly_one() {
 fn validate_selection_ignores_invisible_step_groups() {
     let m = parse_module_config(&fixture("flags")).unwrap();
     let mut sel = Selection::default();
-    sel.chosen
-        .insert(("Choose Variant".into(), "Variant".into(), "Use Lo-Res".into()));
+    sel.chosen.insert((
+        "Choose Variant".into(),
+        "Variant".into(),
+        "Use Lo-Res".into(),
+    ));
     // hires is NOT on ⇒ step 2 invisible; its group is skipped by validation.
     validate_selection(&m, &sel).expect("invisible step groups are not enforced");
 }
@@ -291,8 +340,11 @@ fn resolve_skips_invisible_step_files() {
 
     // Select the hidden step's option but do NOT set hires=on ⇒ the step is invisible.
     let mut sel = Selection::default();
-    sel.chosen
-        .insert(("Hi-Res Options".into(), "HiRes Extras".into(), "Extra Textures".into()));
+    sel.chosen.insert((
+        "Hi-Res Options".into(),
+        "HiRes Extras".into(),
+        "Extra Textures".into(),
+    ));
     let plan = resolve(&m, &sel).expect("resolve flags (invisible step)");
     let dests: Vec<PathBuf> = plan.iter().map(|f| f.dest_rel.clone()).collect();
     assert!(
@@ -309,9 +361,13 @@ fn resolve_includes_visible_step_files() {
 
     // hires=on makes step 2 visible; selecting its option installs the hi-res file.
     let sel = Selection {
-        chosen: [("Hi-Res Options".into(), "HiRes Extras".into(), "Extra Textures".into())]
-            .into_iter()
-            .collect(),
+        chosen: [(
+            "Hi-Res Options".into(),
+            "HiRes Extras".into(),
+            "Extra Textures".into(),
+        )]
+        .into_iter()
+        .collect(),
         flags: flags(&[("hires", "on")]),
         ..Default::default()
     };
@@ -340,5 +396,8 @@ fn resolve_performs_no_filesystem_write() {
     let _plan = resolve(&m, &sel).expect("resolve");
 
     let after: Vec<_> = std::fs::read_dir(tmp.path()).unwrap().collect();
-    assert!(after.is_empty(), "resolve must not write to disk (temp dir stayed empty)");
+    assert!(
+        after.is_empty(),
+        "resolve must not write to disk (temp dir stayed empty)"
+    );
 }

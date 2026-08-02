@@ -8,7 +8,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use deploy::{deploy, purge, StagedFiles};
+use deploy::{StagedFiles, deploy, purge};
 use nextwist_core::Game;
 use store::Store;
 use tempfile::TempDir;
@@ -50,7 +50,11 @@ fn replaced_vanilla_file_is_restored_byte_for_byte_on_purge() {
     let staged_root = game.staging_dir.join("mod1");
     fs::create_dir_all(staged_root.join("Data/textures")).unwrap();
     fs::create_dir_all(staged_root.join("Data/meshes")).unwrap();
-    fs::write(staged_root.join("Data/textures/x.dds"), b"MODDED-REPLACEMENT").unwrap();
+    fs::write(
+        staged_root.join("Data/textures/x.dds"),
+        b"MODDED-REPLACEMENT",
+    )
+    .unwrap();
     fs::write(staged_root.join("Data/meshes/new.nif"), b"BRAND-NEW-MESH").unwrap();
 
     let staged = StagedFiles {
@@ -63,7 +67,10 @@ fn replaced_vanilla_file_is_restored_byte_for_byte_on_purge() {
 
     let report = deploy(&store, &game, &staged).unwrap();
     assert_eq!(report.deployed, 2);
-    assert_eq!(report.backed_up, 1, "exactly the one vanilla overwrite backed up");
+    assert_eq!(
+        report.backed_up, 1,
+        "exactly the one vanilla overwrite backed up"
+    );
 
     // The deployed file content differs from vanilla (proves the overwrite happened).
     assert_eq!(
@@ -79,12 +86,18 @@ fn replaced_vanilla_file_is_restored_byte_for_byte_on_purge() {
     // Purge restores the original bytes and removes the added file.
     let purge_report = purge(&store, &game).unwrap();
     assert_eq!(purge_report.removed, 2);
-    assert_eq!(purge_report.restored, 1, "the one vanilla original restored");
+    assert_eq!(
+        purge_report.restored, 1,
+        "the one vanilla original restored"
+    );
 
     let after = snapshot_tree(&game.install_dir).unwrap();
     assert_trees_identical(&pristine, &after);
     // The restored vanilla file is byte-for-byte the original.
-    assert_eq!(fs::read(&vanilla_target).unwrap(), b"ORIGINAL-VANILLA-BYTES");
+    assert_eq!(
+        fs::read(&vanilla_target).unwrap(),
+        b"ORIGINAL-VANILLA-BYTES"
+    );
 }
 
 #[test]

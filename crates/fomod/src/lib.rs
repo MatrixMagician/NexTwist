@@ -33,7 +33,7 @@ pub mod model;
 pub mod parse;
 pub mod resolve;
 
-pub use condition::{eval, plugin_type_state, FlagSet, InstalledFiles};
+pub use condition::{FlagSet, InstalledFiles, eval, plugin_type_state};
 pub use error::FomodError;
 pub use model::{
     CompositeDependency, ConditionalFileInstalls, Dependency, DependencyType, FileItem, FileList,
@@ -41,4 +41,4 @@ pub use model::{
     TypeDescriptor,
 };
 pub use parse::{parse_module_config, resolve_source_path};
-pub use resolve::{resolve, validate_selection, FileInstall, Selection};
+pub use resolve::{FileInstall, Selection, resolve, validate_selection};

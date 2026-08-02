@@ -134,7 +134,10 @@ mod tests {
         newer.version = "2.0.0".into();
         let id2 = store.add_nexus_source(&newer).unwrap();
         assert_eq!(id1, id2, "upsert must reuse the same row");
-        assert_eq!(store.get_nexus_source(mod_id).unwrap().unwrap().version, "2.0.0");
+        assert_eq!(
+            store.get_nexus_source(mod_id).unwrap().unwrap().version,
+            "2.0.0"
+        );
     }
 
     /// FK CASCADE: deleting the managed_mod sheds its nexus_source row.

@@ -21,10 +21,10 @@
 use std::fs;
 use std::path::Path;
 
+use loadorder::LoadOrderError;
 use loadorder::loot::{
     appdata_local_path, game_type_for, load_canonical_order, open_game, set_order_and_save,
 };
-use loadorder::LoadOrderError;
 use tempfile::TempDir;
 
 const SKYRIM_SE: u32 = 489830;
@@ -48,7 +48,11 @@ fn write_min_plugin(data_dir: &Path, name: &str, master: bool) {
     bytes.extend_from_slice(&flags.to_le_bytes());
     bytes.extend_from_slice(&0u32.to_le_bytes()); // form_id
     bytes.extend_from_slice(&[0u8; 8]); // version control + unknown (ignored)
-    assert_eq!(bytes.len(), 24, "minimal TES4 header must be exactly 24 bytes");
+    assert_eq!(
+        bytes.len(),
+        24,
+        "minimal TES4 header must be exactly 24 bytes"
+    );
     fs::write(data_dir.join(name), &bytes).unwrap();
 }
 

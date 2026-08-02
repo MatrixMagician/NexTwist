@@ -207,7 +207,11 @@ pub fn starfield_status_for(appid: u32) -> Result<crate::ce2::StarfieldStatus, S
     let resolved = resolve_game(appid)?;
     let library_root =
         library_root_of(&resolved.install_dir).ok_or(SteamError::NotInstalled(appid))?;
-    Ok(crate::ce2::starfield_status(&resolved.prefix, library_root, appid))
+    Ok(crate::ce2::starfield_status(
+        &resolved.prefix,
+        library_root,
+        appid,
+    ))
 }
 
 /// Build a [`ResolvedGame`] from a library root + the app's `installdir`.
@@ -414,11 +418,7 @@ mod tests {
         let acf = format!(
             "\"AppState\"\n{{\n\t\"appid\"\t\"{appid}\"\n\t\"name\"\t\"Test Game\"\n\t\"installdir\"\t\"{installdir}\"\n}}\n"
         );
-        std::fs::write(
-            steamapps.join(format!("appmanifest_{appid}.acf")),
-            acf,
-        )
-        .unwrap();
+        std::fs::write(steamapps.join(format!("appmanifest_{appid}.acf")), acf).unwrap();
         dir
     }
 
@@ -533,8 +533,14 @@ mod tests {
         // SFDET-01: 1716740 resolves an install dir + Proton prefix, not NotInstalled.
         let resolved = resolve_from_root(root, STARFIELD).unwrap();
         assert_eq!(resolved.appid, STARFIELD);
-        assert_eq!(resolved.install_dir, root.join("steamapps/common/Starfield"));
-        assert_eq!(resolved.prefix, root.join("steamapps/compatdata/1716740/pfx"));
+        assert_eq!(
+            resolved.install_dir,
+            root.join("steamapps/common/Starfield")
+        );
+        assert_eq!(
+            resolved.prefix,
+            root.join("steamapps/compatdata/1716740/pfx")
+        );
         assert!(resolved.prefix_exists);
     }
 

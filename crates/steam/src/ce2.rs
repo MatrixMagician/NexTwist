@@ -270,7 +270,10 @@ mod tests {
         let root = fake_my_games_prefix(
             dir.path(),
             STARFIELD_FOLDER,
-            MyGamesOpts { case_variant: true, ..Default::default() },
+            MyGamesOpts {
+                case_variant: true,
+                ..Default::default()
+            },
         )
         .unwrap();
         let resolved = my_games_path(&root);
@@ -288,10 +291,8 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let root = dir.path().to_path_buf();
         // Seed the redirected Documents tree directly.
-        std::fs::create_dir_all(
-            root.join("drive_c/users/steamuser/Redirected/My Games/Starfield"),
-        )
-        .unwrap();
+        std::fs::create_dir_all(root.join("drive_c/users/steamuser/Redirected/My Games/Starfield"))
+            .unwrap();
         std::fs::write(
             root.join("user.reg"),
             "[Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Explorer\\\\User Shell Folders]\n\"Personal\"=\"C:\\\\users\\\\steamuser\\\\Redirected\"\n",
@@ -331,7 +332,7 @@ mod tests {
         for value in [
             "C:\\users/../../../etc", // forward-slash traversal inside one backslash segment
             "C:\\/etc",               // absolute unix segment (would become /etc)
-            "C:\\foo/../../etc\\bar",  // mixed-separator escape out of drive_c
+            "C:\\foo/../../etc\\bar", // mixed-separator escape out of drive_c
         ] {
             let dir = tempfile::TempDir::new().unwrap();
             let root = dir.path().to_path_buf();
@@ -362,10 +363,8 @@ mod tests {
         // is the default for a genuine Documents redirect and must be honored.
         let dir = tempfile::TempDir::new().unwrap();
         let root = dir.path().to_path_buf();
-        std::fs::create_dir_all(
-            root.join("drive_c/users/steamuser/Documents/My Games/Starfield"),
-        )
-        .unwrap();
+        std::fs::create_dir_all(root.join("drive_c/users/steamuser/Documents/My Games/Starfield"))
+            .unwrap();
         std::fs::write(
             root.join("user.reg"),
             "[Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Explorer\\\\User Shell Folders]\n\"Personal\"=str(2):\"%USERPROFILE%\\\\Documents\"\n",
@@ -421,12 +420,18 @@ mod tests {
         let root = fake_my_games_prefix(
             dir.path(),
             STARFIELD_FOLDER,
-            MyGamesOpts { marker: Some("StarfieldCustom.ini"), ..Default::default() },
+            MyGamesOpts {
+                marker: Some("StarfieldCustom.ini"),
+                ..Default::default()
+            },
         )
         .unwrap();
         match resolve_ce2_config(&root) {
             Ce2ConfigState::Ready(p) => {
-                assert_eq!(p, root.join("drive_c/users/steamuser/Documents/My Games/Starfield"))
+                assert_eq!(
+                    p,
+                    root.join("drive_c/users/steamuser/Documents/My Games/Starfield")
+                )
             }
             other => panic!("expected Ready, got {other:?}"),
         }
@@ -455,7 +460,10 @@ mod tests {
             fake_my_games_prefix(dir.path(), STARFIELD_FOLDER, MyGamesOpts::default()).unwrap();
         let status = starfield_status(&root, root.as_path(), STARFIELD_APPID);
         assert_eq!(status.validated_build, VALIDATED_BUILD);
-        assert!(matches!(status.ce2_state, Ce2ConfigState::FirstLaunchPending(_)));
+        assert!(matches!(
+            status.ce2_state,
+            Ce2ConfigState::FirstLaunchPending(_)
+        ));
         // Drift is dormant in Phase 6 (VALIDATED_BUILD == 0).
         assert!(status.drift.is_none());
         // The whole aggregate serializes (the Tauri adapter forwards it).

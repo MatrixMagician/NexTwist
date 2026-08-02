@@ -127,15 +127,16 @@ is SvelteKit (Svelte 5 runes) built as a static SPA into `frontend/build` and em
 
 Before claiming a change is complete:
 
-1. `cargo test --workspace --locked` passes (or the affected `-p` crates when the host
+1. `cargo fmt --all --check` is clean (CI gates on this).
+2. `cargo test --workspace --locked` passes (or the affected `-p` crates when the host
    lacks WebKitGTK, and say so).
-2. `cargo clippy --workspace --all-targets -- -D warnings` is clean.
-3. `cargo deny check advisories bans licenses sources` passes if dependencies changed.
-4. `npm --prefix frontend run check` passes if frontend files changed.
-5. Anything touching `deploy`/`store` has a test proving the reversibility or
+3. `cargo clippy --workspace --all-targets -- -D warnings` is clean.
+4. `cargo deny check advisories bans licenses sources` passes if dependencies changed.
+5. `npm --prefix frontend run check` passes if frontend files changed.
+6. Anything touching `deploy`/`store` has a test proving the reversibility or
    crash-recovery property still holds.
 
-All four gates were run green on `main` as of 2026-08-02, so a failure you see is
+All gates were run green on `main` as of 2026-08-02, so a failure you see is
 something you introduced, not pre-existing noise. Two caveats worth knowing:
 
 - `cargo deny` carries two documented `ignore`d advisories (RUSTSEC-2026-0194/0195) for

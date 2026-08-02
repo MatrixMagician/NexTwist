@@ -65,10 +65,11 @@ WebKitGTK 4.1 dev libs.
 
 ## Before you open a pull request
 
-All three of the following must pass locally. CI runs the same commands and will block
+All four of the following must pass locally. CI runs the same commands and will block
 the PR if any fail:
 
 ```bash
+cargo fmt --all --check
 cargo test --workspace --locked
 cargo clippy --workspace --all-targets -- -D warnings
 cargo deny check advisories bans licenses sources
@@ -91,8 +92,8 @@ submitting.
   byte-for-byte pristine-tree assertions for this.
 - **Respect the crate boundary:** no Tauri/UI/`reqwest` dependencies in `crates/*`, and
   no business logic in `src-tauri/` command adapters.
-- **Ensure the three pre-PR checks pass** (tests, clippy, cargo-deny) before requesting
-  review.
+- **Ensure the four pre-PR checks pass** (fmt, tests, clippy, cargo-deny) before
+  requesting review.
 - **Describe the change** in the PR: what it does, why, and how you verified the safety
   invariant is preserved.
 

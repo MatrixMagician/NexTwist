@@ -177,7 +177,11 @@ pub(crate) async fn run_download_to_window(
             );
             Ok(res.result)
         }
-        Err(DownloadFailure { reason, is_redeem, retry_after }) => {
+        Err(DownloadFailure {
+            reason,
+            is_redeem,
+            retry_after,
+        }) => {
             // WR-02: a rate-limit is transient and auto-recoverable — surface it as a
             // distinct "ratelimited" state (which drives the WR-01 UI notice and a paused,
             // retryable row), NOT a terminal "failed" row. An expired free-user link is
@@ -255,22 +259,18 @@ async fn run_download(
 ) -> Result<RunOk, DownloadFailure> {
     // WR-03: build the client with the SHARED process-wide limiter (not a fresh one) so
     // parallel downloads honour one budget + one backoff deadline.
-    let client =
-        NexusClient::with_limiter(nexus::NEXUS_API_BASE, auth, limiter).map_err(fail)?;
+    let client = NexusClient::with_limiter(nexus::NEXUS_API_BASE, auth, limiter).map_err(fail)?;
 
     // 1. REST v1 download link (premium omits key/expires; free passes them).
     let links = client
         .download_link(game_domain, nexus_mod_id, file_id, key, expires)
         .await
         .map_err(fail)?;
-    let link = links
-        .into_iter()
-        .next()
-        .ok_or_else(|| DownloadFailure {
-            reason: "no download link returned".into(),
-            is_redeem: false,
-            retry_after: None,
-        })?;
+    let link = links.into_iter().next().ok_or_else(|| DownloadFailure {
+        reason: "no download link returned".into(),
+        is_redeem: false,
+        retry_after: None,
+    })?;
 
     // 2. REST v1 file-info metadata (version + display name) for the provenance record + label.
     let meta = client
@@ -285,7 +285,10 @@ async fn run_download(
     tokio::fs::create_dir_all(staging_dir)
         .await
         .map_err(|e| DownloadFailure {
-            reason: format!("could not create staging dir {}: {e}", staging_dir.display()),
+            reason: format!(
+                "could not create staging dir {}: {e}",
+                staging_dir.display()
+            ),
             is_redeem: false,
             retry_after: None,
         })?;
@@ -305,12 +308,17 @@ async fn run_download(
     let total_seen = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(u64::MAX));
     let total_for_cb = total_seen.clone();
     let written = client
-        .download(&link.uri, &archive_path, cancel, move |downloaded, total| {
-            if let Some(t) = total {
-                total_for_cb.store(t, std::sync::atomic::Ordering::Relaxed);
-            }
-            emit_progress(&win, &id_owned, downloaded, total, "downloading", None);
-        })
+        .download(
+            &link.uri,
+            &archive_path,
+            cancel,
+            move |downloaded, total| {
+                if let Some(t) = total {
+                    total_for_cb.store(t, std::sync::atomic::Ordering::Relaxed);
+                }
+                emit_progress(&win, &id_owned, downloaded, total, "downloading", None);
+            },
+        )
         .await
         .map_err(fail)?;
     let total_hint = match total_seen.load(std::sync::atomic::Ordering::Relaxed) {
@@ -390,19 +398,31 @@ impl From<nexus::NexusError> for NexusErrorLike {
             nexus::NexusError::RateLimited(secs) => Some(*secs),
             _ => None,
         };
-        NexusErrorLike { reason: e.to_string(), is_redeem, retry_after }
+        NexusErrorLike {
+            reason: e.to_string(),
+            is_redeem,
+            retry_after,
+        }
     }
 }
 
 impl From<extract::ExtractError> for NexusErrorLike {
     fn from(e: extract::ExtractError) -> Self {
-        NexusErrorLike { reason: e.to_string(), is_redeem: false, retry_after: None }
+        NexusErrorLike {
+            reason: e.to_string(),
+            is_redeem: false,
+            retry_after: None,
+        }
     }
 }
 
 impl From<nextwist_core::StoreError> for NexusErrorLike {
     fn from(e: nextwist_core::StoreError) -> Self {
-        NexusErrorLike { reason: e.to_string(), is_redeem: false, retry_after: None }
+        NexusErrorLike {
+            reason: e.to_string(),
+            is_redeem: false,
+            retry_after: None,
+        }
     }
 }
 
@@ -433,7 +453,13 @@ fn emit_progress(
 fn sanitize(name: &str) -> String {
     let cleaned: String = name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let trimmed = cleaned.trim();
     if trimmed.is_empty() {

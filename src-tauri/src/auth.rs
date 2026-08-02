@@ -65,8 +65,8 @@ pub async fn complete_oauth(
         redirect,
         nexus::TOKEN_BASE,
         code,
-        state,                  // returned state
-        &pending.csrf_state,    // expected state
+        state,               // returned state
+        &pending.csrf_state, // expected state
         &pending.pkce_verifier,
     )
     .await?;

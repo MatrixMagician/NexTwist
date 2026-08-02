@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use deploy::{conflict, deploy_winners, purge, redeploy_winners, ModInput, WinnerFile};
+use deploy::{ModInput, WinnerFile, conflict, deploy_winners, purge, redeploy_winners};
 use nextwist_core::Game;
 use store::Store;
 use tempfile::TempDir;
@@ -83,17 +83,31 @@ fn conflict_winner_set_deploys_unique_and_pristine() {
     // TWO mods both provide Data/shared.esp (different bytes) + each a unique file.
     let mod_a = fx.stage_mod(
         "A",
-        &[("Data/shared.esp", b"A-SHARED"), ("Data/only_a.esp", b"A-ONLY")],
+        &[
+            ("Data/shared.esp", b"A-SHARED"),
+            ("Data/only_a.esp", b"A-ONLY"),
+        ],
     );
     let mod_b = fx.stage_mod(
         "B",
-        &[("Data/shared.esp", b"B-SHARED"), ("Data/only_b.esp", b"B-ONLY")],
+        &[
+            ("Data/shared.esp", b"B-SHARED"),
+            ("Data/only_b.esp", b"B-ONLY"),
+        ],
     );
 
     // mod A rank=1 (winner), mod B rank=2.
     let mods = vec![
-        ModInput { mod_id: 1, staging_root: mod_a.clone(), rank: 1 },
-        ModInput { mod_id: 2, staging_root: mod_b.clone(), rank: 2 },
+        ModInput {
+            mod_id: 1,
+            staging_root: mod_a.clone(),
+            rank: 1,
+        },
+        ModInput {
+            mod_id: 2,
+            staging_root: mod_b.clone(),
+            rank: 2,
+        },
     ];
     let (winners, conflicts) = conflict::resolve(&mods).unwrap();
 
@@ -132,12 +146,19 @@ fn conflict_winner_set_deploys_unique_and_pristine() {
         .iter()
         .find(|e| e.target_rel == std::path::Path::new("Data/shared.esp"))
         .unwrap();
-    assert_eq!(shared_entry.source_mod, 1, "manifest records the winning mod id (D-03)");
+    assert_eq!(
+        shared_entry.source_mod, 1,
+        "manifest records the winning mod id (D-03)"
+    );
 
     // Relaunch (fresh store) then purge -> byte-for-byte pristine.
     let store = fx.open_store();
     let purged = purge(&store, &game).unwrap();
-    assert!(purged.orphans.is_empty(), "purge leaves no orphans: {:?}", purged.orphans);
+    assert!(
+        purged.orphans.is_empty(),
+        "purge leaves no orphans: {:?}",
+        purged.orphans
+    );
     let after = snapshot_tree(&fx.install).unwrap();
     assert_trees_identical(&pristine, &after);
     assert!(store.list_deployed_files(game.appid).unwrap().is_empty());
@@ -153,23 +174,40 @@ fn rank_change_redeploy_stays_pristine() {
 
     let mod_a = fx.stage_mod(
         "A",
-        &[("Data/shared.esp", b"A-SHARED"), ("Data/only_a.esp", b"A-ONLY")],
+        &[
+            ("Data/shared.esp", b"A-SHARED"),
+            ("Data/only_a.esp", b"A-ONLY"),
+        ],
     );
     let mod_b = fx.stage_mod(
         "B",
-        &[("Data/shared.esp", b"B-SHARED"), ("Data/only_b.esp", b"B-ONLY")],
+        &[
+            ("Data/shared.esp", b"B-SHARED"),
+            ("Data/only_b.esp", b"B-ONLY"),
+        ],
     );
 
     // First deploy: A wins (rank 1).
     {
         let (winners, _) = conflict::resolve(&[
-            ModInput { mod_id: 1, staging_root: mod_a.clone(), rank: 1 },
-            ModInput { mod_id: 2, staging_root: mod_b.clone(), rank: 2 },
+            ModInput {
+                mod_id: 1,
+                staging_root: mod_a.clone(),
+                rank: 1,
+            },
+            ModInput {
+                mod_id: 2,
+                staging_root: mod_b.clone(),
+                rank: 2,
+            },
         ])
         .unwrap();
         let store = fx.open_store();
         deploy_winners(&store, &game, &winners).unwrap();
-        assert_eq!(fs::read(fx.install.join("Data/shared.esp")).unwrap(), b"A-SHARED");
+        assert_eq!(
+            fs::read(fx.install.join("Data/shared.esp")).unwrap(),
+            b"A-SHARED"
+        );
     }
 
     // Purge back to pristine (the switch contract: purge old, then deploy new).
@@ -183,8 +221,16 @@ fn rank_change_redeploy_stays_pristine() {
     // Flip ranks so B wins, resolve + redeploy.
     {
         let (winners, conflicts) = conflict::resolve(&[
-            ModInput { mod_id: 1, staging_root: mod_a, rank: 2 },
-            ModInput { mod_id: 2, staging_root: mod_b, rank: 1 },
+            ModInput {
+                mod_id: 1,
+                staging_root: mod_a,
+                rank: 2,
+            },
+            ModInput {
+                mod_id: 2,
+                staging_root: mod_b,
+                rank: 1,
+            },
         ])
         .unwrap();
         assert_eq!(conflicts[0].winner, 2, "after the flip mod B wins");
@@ -201,7 +247,11 @@ fn rank_change_redeploy_stays_pristine() {
     {
         let store = fx.open_store();
         let purged = purge(&store, &game).unwrap();
-        assert!(purged.orphans.is_empty(), "no orphans after redeploy purge: {:?}", purged.orphans);
+        assert!(
+            purged.orphans.is_empty(),
+            "no orphans after redeploy purge: {:?}",
+            purged.orphans
+        );
         let after = snapshot_tree(&fx.install).unwrap();
         assert_trees_identical(&pristine, &after);
     }
@@ -232,23 +282,40 @@ fn redeploy_winners_reconciles_without_manual_purge() {
     );
     let mod_b = fx.stage_mod(
         "B",
-        &[("Data/shared.esp", b"B-SHARED"), ("Data/only_b.esp", b"B-ONLY")],
+        &[
+            ("Data/shared.esp", b"B-SHARED"),
+            ("Data/only_b.esp", b"B-ONLY"),
+        ],
     );
 
     // First reconcile: BOTH mods enabled, A wins (rank 1). A's Skyrim.esm override is
     // deployed over the vanilla master (which is backed up as pre_existing).
     {
         let (winners, _) = conflict::resolve(&[
-            ModInput { mod_id: 1, staging_root: mod_a.clone(), rank: 1 },
-            ModInput { mod_id: 2, staging_root: mod_b.clone(), rank: 2 },
+            ModInput {
+                mod_id: 1,
+                staging_root: mod_a.clone(),
+                rank: 1,
+            },
+            ModInput {
+                mod_id: 2,
+                staging_root: mod_b.clone(),
+                rank: 2,
+            },
         ])
         .unwrap();
         let store = fx.open_store();
         let (_purged, deployed) = redeploy_winners(&store, &game, &winners).unwrap();
         // 4 unique paths: Skyrim.esm, shared.esp, only_a.esp, only_b.esp.
         assert_eq!(deployed.deployed, 4);
-        assert_eq!(fs::read(fx.install.join("Data/Skyrim.esm")).unwrap(), b"A-MASTER-OVERRIDE");
-        assert_eq!(fs::read(fx.install.join("Data/shared.esp")).unwrap(), b"A-SHARED");
+        assert_eq!(
+            fs::read(fx.install.join("Data/Skyrim.esm")).unwrap(),
+            b"A-MASTER-OVERRIDE"
+        );
+        assert_eq!(
+            fs::read(fx.install.join("Data/shared.esp")).unwrap(),
+            b"A-SHARED"
+        );
     }
 
     // Second reconcile, NO manual purge between: mod A is DISABLED (drops Skyrim.esm,
@@ -266,13 +333,25 @@ fn redeploy_winners_reconciles_without_manual_purge() {
         let store = fx.open_store();
         let (purged, deployed) = redeploy_winners(&store, &game, &winners).unwrap();
         // The reconcile purged the 4 prior files (one a vanilla restore) then deployed B's 2.
-        assert_eq!(purged.removed, 4, "the prior winner set is purged before redeploy");
+        assert_eq!(
+            purged.removed, 4,
+            "the prior winner set is purged before redeploy"
+        );
         assert_eq!(purged.restored, 1, "the vanilla Skyrim.esm is restored");
         assert_eq!(deployed.deployed, 2, "only mod B's files are now deployed");
         // The vanilla master is back; A's dropped files are gone, not orphaned.
-        assert_eq!(fs::read(fx.install.join("Data/Skyrim.esm")).unwrap(), b"VANILLA-MASTER");
-        assert!(!fx.install.join("Data/only_a.esp").exists(), "A's unique file is not orphaned");
-        assert_eq!(fs::read(fx.install.join("Data/shared.esp")).unwrap(), b"B-SHARED");
+        assert_eq!(
+            fs::read(fx.install.join("Data/Skyrim.esm")).unwrap(),
+            b"VANILLA-MASTER"
+        );
+        assert!(
+            !fx.install.join("Data/only_a.esp").exists(),
+            "A's unique file is not orphaned"
+        );
+        assert_eq!(
+            fs::read(fx.install.join("Data/shared.esp")).unwrap(),
+            b"B-SHARED"
+        );
     }
 
     // Final purge -> byte-for-byte pristine, proving the repeated live reconcile never
@@ -280,7 +359,11 @@ fn redeploy_winners_reconciles_without_manual_purge() {
     {
         let store = fx.open_store();
         let purged = purge(&store, &game).unwrap();
-        assert!(purged.orphans.is_empty(), "no orphans after live reconcile: {:?}", purged.orphans);
+        assert!(
+            purged.orphans.is_empty(),
+            "no orphans after live reconcile: {:?}",
+            purged.orphans
+        );
         let after = snapshot_tree(&fx.install).unwrap();
         assert_trees_identical(&pristine, &after);
         assert!(store.list_deployed_files(game.appid).unwrap().is_empty());

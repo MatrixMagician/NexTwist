@@ -156,11 +156,7 @@ impl NexusClient {
         // Built manually (no `serde_urlencoded`) so the workspace reqwest stays on its
         // minimal rustls-only feature set. Both values are url-encoded.
         if let (Some(k), Some(e)) = (key, expires) {
-            url.push_str(&format!(
-                "?key={}&expires={}",
-                urlencode(k),
-                urlencode(e)
-            ));
+            url.push_str(&format!("?key={}&expires={}", urlencode(k), urlencode(e)));
         }
 
         let rb = self.authed(self.http.get(&url));
@@ -175,10 +171,13 @@ impl NexusClient {
         let status = resp.status();
         let headers = resp.headers().clone();
         // Reactive: feed the X-RL-* headers (and a possible 429) into the limiter.
-        self.limiter.note_headers(&headers, status == StatusCode::TOO_MANY_REQUESTS);
+        self.limiter
+            .note_headers(&headers, status == StatusCode::TOO_MANY_REQUESTS);
 
         if status == StatusCode::TOO_MANY_REQUESTS {
-            return Err(NexusError::RateLimited(RateLimiter::retry_after_secs(&headers)));
+            return Err(NexusError::RateLimited(RateLimiter::retry_after_secs(
+                &headers,
+            )));
         }
         if !status.is_success() {
             // Diagnostic (secret-free per V7 — NEVER log key/expires/uri): record the real
@@ -250,10 +249,13 @@ impl NexusClient {
 
         let status = resp.status();
         let headers = resp.headers().clone();
-        self.limiter.note_headers(&headers, status == StatusCode::TOO_MANY_REQUESTS);
+        self.limiter
+            .note_headers(&headers, status == StatusCode::TOO_MANY_REQUESTS);
 
         if status == StatusCode::TOO_MANY_REQUESTS {
-            return Err(NexusError::RateLimited(RateLimiter::retry_after_secs(&headers)));
+            return Err(NexusError::RateLimited(RateLimiter::retry_after_secs(
+                &headers,
+            )));
         }
         if !status.is_success() {
             // A 404 here means the mod/file id pair has no such file (deleted/wrong id);
@@ -310,10 +312,13 @@ impl NexusClient {
 
         let status = resp.status();
         let headers = resp.headers().clone();
-        self.limiter.note_headers(&headers, status == StatusCode::TOO_MANY_REQUESTS);
+        self.limiter
+            .note_headers(&headers, status == StatusCode::TOO_MANY_REQUESTS);
 
         if status == StatusCode::TOO_MANY_REQUESTS {
-            return Err(NexusError::RateLimited(RateLimiter::retry_after_secs(&headers)));
+            return Err(NexusError::RateLimited(RateLimiter::retry_after_secs(
+                &headers,
+            )));
         }
         // A 404 means the pinned file was removed — a normal `Unavailable` classification,
         // not a transport error (the resolve report must show it, not abort the batch).

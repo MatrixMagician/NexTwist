@@ -12,8 +12,8 @@
 //! [`KeyringBackend`] trait so a simulated `NoStorageAccess` can be exercised in CI
 //! without a real DBus session (RESEARCH Environment Availability).
 
-use keyring::error::Error as KrError;
 use keyring::Entry;
+use keyring::error::Error as KrError;
 use thiserror::Error;
 
 /// The keyring service + account the refresh token / API key is stored under.
@@ -118,7 +118,9 @@ mod tests {
     }
     impl NoBackend {
         fn new() -> Self {
-            Self { attempted: Cell::new(false) }
+            Self {
+                attempted: Cell::new(false),
+            }
         }
         fn fail(&self) -> KrError {
             self.attempted.set(true);
@@ -164,10 +166,17 @@ mod tests {
             matches!(err, KeyringError::NoKeyringBackend),
             "no backend must hard-fail with NoKeyringBackend, got {err:?}"
         );
-        assert!(backend.attempted.get(), "the backend op should have been attempted");
+        assert!(
+            backend.attempted.get(),
+            "the backend op should have been attempted"
+        );
         // NEXUS-02: nothing was written anywhere (this module has no file path at all).
         let after: Vec<_> = std::fs::read_dir(tmp.path()).unwrap().collect();
-        assert_eq!(before.len(), after.len(), "no credential file may be created");
+        assert_eq!(
+            before.len(),
+            after.len(),
+            "no credential file may be created"
+        );
     }
 
     #[test]
@@ -181,7 +190,10 @@ mod tests {
     fn auth_keyring_clear_is_idempotent_on_missing_entry() {
         // Both the no-backend... no: a MISSING ENTRY (NoEntry) must be treated as success.
         let backend = EmptyBackend;
-        assert!(clear_with(&backend).is_ok(), "clearing a missing entry is Ok (idempotent logout)");
+        assert!(
+            clear_with(&backend).is_ok(),
+            "clearing a missing entry is Ok (idempotent logout)"
+        );
     }
 
     #[test]

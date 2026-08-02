@@ -285,7 +285,10 @@ fn route_oauth_callback(app: &tauri::AppHandle, code: String, state_param: Strin
             }
             Err(_e) => {
                 // Surface a generic auth-failure Warning; do NOT log `_e` (may carry detail).
-                emit_expired(&app, "NexusMods login failed. Try again, or use an API key.");
+                emit_expired(
+                    &app,
+                    "NexusMods login failed. Try again, or use an API key.",
+                );
             }
         }
     });
@@ -293,5 +296,10 @@ fn route_oauth_callback(app: &tauri::AppHandle, code: String, state_param: Strin
 
 /// Emit the secret-free expired/invalid-link Warning to the main window (UI-SPEC §C.3).
 fn emit_expired(app: &tauri::AppHandle, reason: &str) {
-    let _ = app.emit("nxm://expired", NxmExpired { reason: reason.to_string() });
+    let _ = app.emit(
+        "nxm://expired",
+        NxmExpired {
+            reason: reason.to_string(),
+        },
+    );
 }

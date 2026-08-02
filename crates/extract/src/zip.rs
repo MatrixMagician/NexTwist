@@ -11,7 +11,7 @@ use std::path::Path;
 
 use zip::ZipArchive;
 
-use crate::validate::{validate_entry, ExtractError};
+use crate::validate::{ExtractError, validate_entry};
 
 /// Unix mode mask selecting the file-type bits, and the symlink file-type value.
 const S_IFMT: u32 = 0o170000;
@@ -62,8 +62,7 @@ pub fn extract_zip(archive: &Path, temp_root: &Path) -> Result<(), ExtractError>
 
         // Regular file.
         let dest = validate_entry(&raw_name, temp_root, false)?;
-        let mut out =
-            std::fs::File::create(&dest).map_err(|e| ExtractError::io(&dest, e))?;
+        let mut out = std::fs::File::create(&dest).map_err(|e| ExtractError::io(&dest, e))?;
         io::copy(&mut entry, &mut out).map_err(|e| ExtractError::io(&dest, e))?;
     }
 

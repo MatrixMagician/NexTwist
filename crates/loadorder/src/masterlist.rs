@@ -212,10 +212,7 @@ mod tests {
     #[test]
     fn cache_path_is_namespaced_by_appid() {
         let p = cache_path(Path::new("/data"), SKYRIM_SE);
-        assert_eq!(
-            p,
-            Path::new("/data/masterlists/489830/masterlist.yaml")
-        );
+        assert_eq!(p, Path::new("/data/masterlists/489830/masterlist.yaml"));
     }
 
     #[test]
@@ -238,10 +235,12 @@ mod tests {
             called.set(true);
             Ok(String::new())
         };
-        let err =
-            ensure_masterlist_with_fetcher(dir.path(), 220, true, fetch).unwrap_err();
+        let err = ensure_masterlist_with_fetcher(dir.path(), 220, true, fetch).unwrap_err();
         assert!(matches!(err, LoadOrderError::UnsupportedGame(220)));
-        assert!(!called.get(), "no fetch is attempted for an unsupported game");
+        assert!(
+            !called.get(),
+            "no fetch is attempted for an unsupported game"
+        );
     }
 
     #[test]
@@ -257,10 +256,12 @@ mod tests {
             called.set(true);
             Ok("fetched: should-not-happen\n".into())
         };
-        let got =
-            ensure_masterlist_with_fetcher(dir.path(), SKYRIM_SE, false, fetch).unwrap();
+        let got = ensure_masterlist_with_fetcher(dir.path(), SKYRIM_SE, false, fetch).unwrap();
         assert_eq!(got, cache);
-        assert!(!called.get(), "refresh=false + fresh cache must NOT hit the network");
+        assert!(
+            !called.get(),
+            "refresh=false + fresh cache must NOT hit the network"
+        );
         assert_eq!(std::fs::read_to_string(&got).unwrap(), "seeded: true\n");
     }
 
@@ -271,8 +272,7 @@ mod tests {
             assert!(url.contains("/loot/skyrimse/v0.29/"));
             Ok("fetched: yes\n".into())
         };
-        let got =
-            ensure_masterlist_with_fetcher(dir.path(), SKYRIM_SE, true, fetch).unwrap();
+        let got = ensure_masterlist_with_fetcher(dir.path(), SKYRIM_SE, true, fetch).unwrap();
         assert_eq!(std::fs::read_to_string(&got).unwrap(), "fetched: yes\n");
     }
 
@@ -283,8 +283,7 @@ mod tests {
         let fetch = |_: &str| -> Result<String, String> {
             Err("dns error: failed to lookup unreachable.invalid".into())
         };
-        let got =
-            ensure_masterlist_with_fetcher(dir.path(), SKYRIM_SE, true, fetch).unwrap();
+        let got = ensure_masterlist_with_fetcher(dir.path(), SKYRIM_SE, true, fetch).unwrap();
         // The cache now holds the bundled CC0 snapshot (non-empty, valid YAML-ish).
         let body = std::fs::read_to_string(&got).unwrap();
         assert!(!body.is_empty(), "bundled snapshot seeds the cache offline");
@@ -298,12 +297,14 @@ mod tests {
         // snapshot (non-empty). Mirrors `falls_back_to_bundled_snapshot_when_offline`.
         assert_eq!(game_slug(STARFIELD), Some("starfield"));
         assert_eq!(bundled_snapshot(STARFIELD), Some(STARFIELD_SNAPSHOT));
-        assert!(!STARFIELD_SNAPSHOT.is_empty(), "bundled Starfield snapshot is non-empty");
+        assert!(
+            !STARFIELD_SNAPSHOT.is_empty(),
+            "bundled Starfield snapshot is non-empty"
+        );
 
         let dir = TempDir::new().unwrap();
         let fetch = |_: &str| -> Result<String, String> { Err("offline".into()) };
-        let got =
-            ensure_masterlist_with_fetcher(dir.path(), STARFIELD, true, fetch).unwrap();
+        let got = ensure_masterlist_with_fetcher(dir.path(), STARFIELD, true, fetch).unwrap();
         assert_eq!(std::fs::read_to_string(&got).unwrap(), STARFIELD_SNAPSHOT);
     }
 
@@ -316,8 +317,10 @@ mod tests {
         // refresh=true forces a fetch attempt, which fails; the stale cache is preferred
         // over re-seeding from the bundled snapshot.
         let fetch = |_: &str| -> Result<String, String> { Err("offline".into()) };
-        let got =
-            ensure_masterlist_with_fetcher(dir.path(), FALLOUT4, true, fetch).unwrap();
-        assert_eq!(std::fs::read_to_string(&got).unwrap(), "stale-but-present\n");
+        let got = ensure_masterlist_with_fetcher(dir.path(), FALLOUT4, true, fetch).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&got).unwrap(),
+            "stale-but-present\n"
+        );
     }
 }

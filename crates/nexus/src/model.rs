@@ -183,7 +183,9 @@ impl NxmLink {
         // 5. Download link: path must be exactly /mods/<id>/files/<id>, both ids u64.
         let segs: Vec<&str> = path.trim_start_matches('/').split('/').collect();
         // Reject anything but the exact 4-segment shape (no trailing slash, no extras).
-        if segs.len() != 4 || !segs[0].eq_ignore_ascii_case("mods") || !segs[2].eq_ignore_ascii_case("files")
+        if segs.len() != 4
+            || !segs[0].eq_ignore_ascii_case("mods")
+            || !segs[2].eq_ignore_ascii_case("files")
         {
             return Err(bad("path is not /mods/<id>/files/<id>"));
         }
@@ -309,7 +311,8 @@ mod tests {
     #[test]
     fn download_link_parses_nexus_uri_field() {
         // NexusMods serialises the URI as the upper-case `URI`; the rename must catch it.
-        let json = r#"[{"name":"Nexus CDN","short_name":"Nexus","URI":"https://cdn.example/file.zip"}]"#;
+        let json =
+            r#"[{"name":"Nexus CDN","short_name":"Nexus","URI":"https://cdn.example/file.zip"}]"#;
         let links: Vec<DownloadLink> = serde_json::from_str(json).unwrap();
         assert_eq!(links.len(), 1);
         assert_eq!(links[0].uri, "https://cdn.example/file.zip");

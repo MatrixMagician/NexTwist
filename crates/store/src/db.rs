@@ -77,9 +77,7 @@ impl Store {
     /// Return the active SQLite journal mode (e.g. `"wal"`). Test/diagnostic helper.
     pub fn journal_mode(&self) -> Result<String, StoreError> {
         self.conn
-            .query_row("PRAGMA journal_mode;", [], |row| {
-                row.get::<_, String>(0)
-            })
+            .query_row("PRAGMA journal_mode;", [], |row| row.get::<_, String>(0))
             .map(|m| m.to_ascii_lowercase())
             .map_err(|e| StoreError::Db(e.to_string()))
     }
@@ -294,7 +292,10 @@ mod tests {
 
         // managed_mod's columns are UNCHANGED (V4 is additive, never ALTERs a safety table).
         let cols_v4: Vec<String> = {
-            let mut stmt = store.conn.prepare("PRAGMA table_info(managed_mod)").unwrap();
+            let mut stmt = store
+                .conn
+                .prepare("PRAGMA table_info(managed_mod)")
+                .unwrap();
             stmt.query_map([], |r| r.get::<_, String>(1))
                 .unwrap()
                 .map(|c| c.unwrap())
