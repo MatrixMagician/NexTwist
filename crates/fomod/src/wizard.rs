@@ -14,7 +14,7 @@
 use crate::model::{FomodModule, GroupType, OrderKind, Plugin, PluginType};
 
 /// The parsed module projected for a wizard: the module name plus its ordered steps.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct WizardProjection {
     /// `<moduleName>` — the install's display name.
     pub module_name: String,
@@ -23,7 +23,7 @@ pub struct WizardProjection {
 }
 
 /// One wizard install step.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct WizardStep {
     /// Step name.
     pub name: String,
@@ -36,7 +36,7 @@ pub struct WizardStep {
 }
 
 /// One option group within a step.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct WizardGroup {
     /// Group name.
     pub name: String,
@@ -47,7 +47,7 @@ pub struct WizardGroup {
 }
 
 /// One selectable option (`<plugin>`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct WizardOption {
     /// Option name — also the selection identity's third element.
     pub name: String,
@@ -350,5 +350,36 @@ mod tests {
         let p = project(&m);
         assert_eq!(p.module_name, "Bare");
         assert!(p.steps.is_empty());
+    }
+
+    /// The serialized shape is the UI's wire contract (mirrored by `frontend/src/lib/api.ts`):
+    /// snake_case field names, PascalCase enum variants, and `[name, value]` flag pairs.
+    /// Pinned here because a rename would silently break the wizard rather than fail a build.
+    #[test]
+    fn the_serialized_wire_shape_is_stable() {
+        let mut pl = plugin("Opt");
+        pl.description = "d".to_string();
+        pl.image = Some(Image {
+            path: "img.png".to_string(),
+        });
+        pl.condition_flags = Some(ConditionFlags {
+            flags: vec![SetFlag {
+                name: "f".to_string(),
+                value: "v".to_string(),
+            }],
+        });
+        let p = project(&module(
+            OrderKind::Explicit,
+            vec![step(
+                "S",
+                OrderKind::Explicit,
+                vec![group("G", OrderKind::Explicit, vec![pl])],
+            )],
+        ));
+        let json = serde_json::to_string(&p).expect("serialize");
+        assert_eq!(
+            json,
+            r#"{"module_name":"Test","steps":[{"name":"S","conditional":false,"groups":[{"name":"G","group_type":"SelectAny","options":[{"name":"Opt","description":"d","image":"img.png","default_type":"Optional","flags":[["f","v"]]}]}]}]}"#
+        );
     }
 }

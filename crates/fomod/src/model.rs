@@ -93,7 +93,9 @@ pub struct Group {
 }
 
 /// The 5 FOMOD selection-group types (XSD `groupType` enum).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+///
+/// `Serialize` so a UI can render the constraint without the shell mirroring the enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
 pub enum GroupType {
     /// Exactly one option must be selected (radio).
     SelectExactlyOne,
@@ -223,7 +225,9 @@ pub struct TypePattern {
 }
 
 /// The 5-state FOMOD plugin-type enum (XSD `pluginTypeEnum`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+///
+/// `Serialize` so a UI can render the type-state without the shell mirroring the enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
 pub enum PluginType {
     /// Pre-selected and locked on.
     Required,

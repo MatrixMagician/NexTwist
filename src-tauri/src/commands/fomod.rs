@@ -28,9 +28,7 @@
 use std::path::{Path, PathBuf};
 
 use extract::ArchiveFormat;
-use fomod::{
-    FomodModule, GroupType, PluginType, Selection, parse_module_config, resolve, validate_selection,
-};
+use fomod::{Selection, parse_module_config, resolve, validate_selection};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tempfile::TempDir;
@@ -46,112 +44,6 @@ use crate::state::AppState;
 // Live re-evaluation (option type-state flips, step visibility) is driven by repeated
 // `resolve_fomod` calls; the static projection carries the authored structure + the
 // authored default type, and the dependency-conditions the engine evaluates.
-
-/// The parsed FOMOD module, projected for the wizard (FOMOD-01).
-#[derive(Debug, Clone, Serialize)]
-pub struct FomodProjection {
-    /// `<moduleName>` — the wizard modal title.
-    pub module_name: String,
-    /// The ordered wizard steps (already name-sorted per the authored `order`).
-    pub steps: Vec<StepProjection>,
-}
-
-/// One wizard install step.
-#[derive(Debug, Clone, Serialize)]
-pub struct StepProjection {
-    /// Step name (the "· {step name}" in the counter).
-    pub name: String,
-    /// Whether this step carries a `<visible>` condition (its live truth is decided by
-    /// the engine in `resolve_fomod`; the wizard skips an invisible step).
-    pub conditional: bool,
-    /// The option groups in this step.
-    pub groups: Vec<GroupProjection>,
-}
-
-/// One option group within a step.
-#[derive(Debug, Clone, Serialize)]
-pub struct GroupProjection {
-    /// Group name.
-    pub name: String,
-    /// The FOMOD selection constraint (drives radio-vs-checkbox + min/max).
-    pub group_type: GroupTypeDto,
-    /// The selectable options.
-    pub options: Vec<OptionProjection>,
-}
-
-/// One selectable option (`<plugin>`).
-#[derive(Debug, Clone, Serialize)]
-pub struct OptionProjection {
-    /// Option name (the label + the selection identity).
-    pub name: String,
-    /// `<description>` (muted when unselected).
-    pub description: String,
-    /// Archive-relative `<image path>` if present (the wizard bounds it ≤96px).
-    pub image: Option<String>,
-    /// The authored default/static type-state (Required/Optional/Recommended/NotUsable/
-    /// CouldBeUsable). The LIVE type-state after choices is recomputed by `resolve_fomod`.
-    pub default_type: PluginTypeDto,
-    /// The `(flag, value)` pairs this option sets when selected (`<conditionFlags>`). The
-    /// wizard accumulates these into the flag set it passes back to `resolve_fomod`, so the
-    /// engine re-evaluates `conditionalFileInstalls` (and type-states) live on each choice.
-    pub flags: Vec<[String; 2]>,
-}
-
-/// Serializable mirror of [`fomod::GroupType`].
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub enum GroupTypeDto {
-    /// Exactly one (radio).
-    SelectExactlyOne,
-    /// At most one (radio, none allowed).
-    SelectAtMostOne,
-    /// At least one (checkbox, min 1).
-    SelectAtLeastOne,
-    /// All (checkbox, locked on).
-    SelectAll,
-    /// Any (checkbox, free).
-    SelectAny,
-}
-
-impl From<GroupType> for GroupTypeDto {
-    fn from(g: GroupType) -> Self {
-        match g {
-            GroupType::SelectExactlyOne => GroupTypeDto::SelectExactlyOne,
-            GroupType::SelectAtMostOne => GroupTypeDto::SelectAtMostOne,
-            GroupType::SelectAtLeastOne => GroupTypeDto::SelectAtLeastOne,
-            GroupType::SelectAll => GroupTypeDto::SelectAll,
-            GroupType::SelectAny => GroupTypeDto::SelectAny,
-        }
-    }
-}
-
-/// Serializable mirror of [`fomod::PluginType`] (the 5-state option type).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub enum PluginTypeDto {
-    /// Pre-selected and locked on.
-    Required,
-    /// Freely selectable.
-    Optional,
-    /// Pre-selected but unlockable.
-    Recommended,
-    /// Disabled / cannot be selected.
-    NotUsable,
-    /// Selectable but warns.
-    CouldBeUsable,
-}
-
-impl From<PluginType> for PluginTypeDto {
-    fn from(p: PluginType) -> Self {
-        match p {
-            PluginType::Required => PluginTypeDto::Required,
-            PluginType::Optional => PluginTypeDto::Optional,
-            PluginType::Recommended => PluginTypeDto::Recommended,
-            PluginType::NotUsable => PluginTypeDto::NotUsable,
-            PluginType::CouldBeUsable => PluginTypeDto::CouldBeUsable,
-        }
-    }
-}
 
 // ── Serializable selection (webview → adapter) ─────────────────────────────────────
 
@@ -241,14 +133,14 @@ pub async fn parse_fomod(
     state: State<'_, Mutex<AppState>>,
     appid: u32,
     archive: PathBuf,
-) -> Result<FomodProjection, String> {
+) -> Result<fomod::WizardProjection, String> {
     // Resolve the game only to assert it is managed (parity with the install path); the
     // parse itself reads the archive, not the game tree.
     let _game = require_game(&state, appid).await?;
 
     let (_temp, tree_root) = extract_to_temp(&archive).map_err(boundary_err)?;
     let module = parse_module_config(&tree_root).map_err(boundary_err)?;
-    Ok(project_module(&module))
+    Ok(fomod::project(&module))
 }
 
 /// The PURE dry-run resolve (FOMOD-02): turn the user's selection into the file-install
@@ -320,9 +212,7 @@ pub async fn apply_fomod(
 
     // 2. Stage the validated archive into a per-mod staging subdir (the SAME defended
     //    extractor the local-archive + download paths use). No new write primitive.
-    let staging_root = game
-        .staging_dir
-        .join(extract::staging_dir_name(&name, "fomod-mod"));
+    let staging_root = fomod_staging_root(&game.staging_dir, &name);
     let staged = extract::install_archive(&archive, &staging_root).map_err(boundary_err)?;
 
     // 3. Persist as an ordinary ManagedMod so it appears in the existing mod list.
@@ -393,43 +283,14 @@ fn extract_to_temp(archive: &Path) -> Result<(TempDir, PathBuf), extract::Extrac
     Ok((temp, tree_root))
 }
 
-/// Map the engine's [`fomod::WizardProjection`] onto the serializable wire shape.
+/// The per-mod staging subdir a FOMOD install stages into: the game's staging dir plus ONE
+/// safe component derived from the module's display name.
 ///
-/// Pure serde plumbing: `fomod::wizard::project` owns the FOMOD `order` rule and the
-/// authored type-state, so this adapter only renames the fields the webview consumes and
-/// flattens the flag tuples into the `[name, value]` arrays JSON carries.
-fn project_module(module: &FomodModule) -> FomodProjection {
-    let projected = fomod::project(module);
-    FomodProjection {
-        module_name: projected.module_name,
-        steps: projected
-            .steps
-            .into_iter()
-            .map(|step| StepProjection {
-                name: step.name,
-                conditional: step.conditional,
-                groups: step
-                    .groups
-                    .into_iter()
-                    .map(|group| GroupProjection {
-                        name: group.name,
-                        group_type: group.group_type.into(),
-                        options: group
-                            .options
-                            .into_iter()
-                            .map(|opt| OptionProjection {
-                                name: opt.name,
-                                description: opt.description,
-                                image: opt.image,
-                                default_type: opt.default_type.into(),
-                                flags: opt.flags.into_iter().map(|(n, v)| [n, v]).collect(),
-                            })
-                            .collect(),
-                    })
-                    .collect(),
-            })
-            .collect(),
-    }
+/// The naming rules are the engine's ([`extract::staging_dir_name`]); what this adapter
+/// decides is the fallback used when the module name is blank, and that the result is joined
+/// under the game's staging dir rather than anywhere else. Extracted so both are testable.
+fn fomod_staging_root(staging_dir: &Path, module_name: &str) -> PathBuf {
+    staging_dir.join(extract::staging_dir_name(module_name, "fomod-mod"))
 }
 
 /// Project the resolved plan into the dry-run preview rows + a conflict classification
@@ -467,7 +328,7 @@ fn classify_plan(plan: &[fomod::FileInstall]) -> ResolvePreview {
 #[cfg(test)]
 mod tests {
     //! Headless adapter tests (no webview). They exercise the adapter's REAL logic — the
-    //! validated temp extraction (`extract_to_temp`), the AST projection (`project_module`),
+    //! validated temp extraction (`extract_to_temp`), the ordered AST projection (`fomod::project`),
     //! the dry-run plan + classification (`classify_plan` over `fomod::resolve`), and the
     //! malformed-FOMOD `Err` path — by zipping a Plan-01 fixture tree into a real archive
     //! and flowing it through the SAME functions the `#[tauri::command]`s call. The Tauri
@@ -530,7 +391,7 @@ mod tests {
         // The adapter's validated extraction + the pure parse + the projection.
         let (_guard, tree_root) = super::extract_to_temp(&archive).expect("extract simple.zip");
         let module = fomod::parse_module_config(&tree_root).expect("parse simple fixture");
-        let proj = super::project_module(&module);
+        let proj = fomod::project(&module);
 
         assert_eq!(proj.module_name, "Simple Mod");
         assert_eq!(proj.steps.len(), 1);
@@ -540,12 +401,12 @@ mod tests {
         let group = &step.groups[0];
         assert!(matches!(
             group.group_type,
-            super::GroupTypeDto::SelectExactlyOne
+            fomod::GroupType::SelectExactlyOne
         ));
         assert_eq!(group.options.len(), 1);
         let opt = &group.options[0];
         assert_eq!(opt.name, "Standard Edition");
-        assert_eq!(opt.default_type, super::PluginTypeDto::Required);
+        assert_eq!(opt.default_type, fomod::PluginType::Required);
     }
 
     #[test]
@@ -614,10 +475,28 @@ mod tests {
         assert_eq!(sel.flags.get("color").map(String::as_str), Some("red"));
     }
 
+    /// The staging root stays UNDER the game's staging dir and is exactly one component
+    /// deeper, even for a hostile module name — the adapter cannot be talked into staging
+    /// outside the directory it was given. A blank name still yields a usable subdir.
     #[test]
-    fn staging_subdir_name_comes_from_the_engine_with_the_fomod_fallback() {
-        // The rules themselves are tested in `extract`; this pins the fallback this
-        // adapter passes so a blank module name still yields a usable subdir.
-        assert_eq!(extract::staging_dir_name("   ", "fomod-mod"), "fomod-mod");
+    fn fomod_staging_root_stays_one_component_under_the_staging_dir() {
+        let staging = Path::new("/games/staging");
+        for name in ["My Mod", "../../etc/passwd", "/abs", "   ", ""] {
+            let root = super::fomod_staging_root(staging, name);
+            assert!(
+                root.starts_with(staging),
+                "{name:?} escaped the staging dir: {root:?}"
+            );
+            assert_eq!(
+                root.strip_prefix(staging).unwrap().components().count(),
+                1,
+                "{name:?} produced more than one component: {root:?}"
+            );
+        }
+        assert_eq!(
+            super::fomod_staging_root(staging, "   "),
+            staging.join("fomod-mod"),
+            "a blank module name falls back to the FOMOD default"
+        );
     }
 }

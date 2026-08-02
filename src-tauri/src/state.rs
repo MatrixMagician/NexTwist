@@ -69,7 +69,7 @@ impl AppState {
             Some(tok) => Ok(NexusAuth::Bearer(tok)),
             None => {
                 let api_key = crate::keyring::load_refresh_token()
-                    .map_err(|e| e.to_string())?
+                    .map_err(crate::commands::boundary_err)?
                     .ok_or_else(|| "not logged in: no NexusMods session".to_string())?;
                 Ok(NexusAuth::ApiKey(api_key))
             }
@@ -89,7 +89,7 @@ impl AppState {
             self.session_auth()?,
             self.rate_limiter.clone(),
         )
-        .map_err(|e| e.to_string())
+        .map_err(crate::commands::boundary_err)
     }
 
     /// Build the app state: ensure the app-data dir exists and open the store DB under it.
@@ -117,19 +117,20 @@ impl AppState {
 mod tests {
     use super::*;
 
-    fn state() -> AppState {
+    /// Build a state over a temp data dir, returning the `TempDir` guard alongside it so the
+    /// directory is cleaned up when the test ends (the state holds the open DB handle, so the
+    /// guard must outlive it).
+    fn state() -> (AppState, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("tempdir");
-        let s = AppState::init(dir.path().to_path_buf()).expect("init");
-        // Keep the tempdir alive for the process; the state holds the open DB handle.
-        std::mem::forget(dir);
-        s
+        let state = AppState::init(dir.path().to_path_buf()).expect("init");
+        (state, dir)
     }
 
     /// An OAuth session prefers the in-memory bearer and must NOT consult the keyring —
     /// this is what lets the auth path work on a machine with no Secret Service backend.
     #[test]
     fn session_auth_prefers_the_in_memory_oauth_bearer() {
-        let mut st = state();
+        let (mut st, _dir) = state();
         st.access_token = Some("tok-123".to_string());
         match st.session_auth() {
             Ok(NexusAuth::Bearer(t)) => assert_eq!(t, "tok-123"),
@@ -141,7 +142,7 @@ mod tests {
     /// parallel requests share a budget instead of each carving out a fresh one.
     #[test]
     fn nexus_client_shares_the_one_process_wide_limiter() {
-        let mut st = state();
+        let (mut st, _dir) = state();
         st.access_token = Some("tok-123".to_string());
         let before = Arc::strong_count(&st.rate_limiter);
         let client = st.nexus_client().expect("client");
