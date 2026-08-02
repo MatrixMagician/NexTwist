@@ -35,6 +35,7 @@ cargo deny check advisories bans licenses sources      # supply-chain gate
 npm --prefix frontend ci
 npm --prefix frontend run build     # -> frontend/build (Tauri's frontendDist)
 npm --prefix frontend run check     # svelte-check
+npm --prefix frontend test          # vitest over the pure $lib modules
 
 # Full desktop app (needs WebKitGTK 4.1 dev libs — see .github/workflows/ci.yml)
 cargo tauri dev
@@ -109,6 +110,11 @@ Commands lock `AppState` and call the engine. The frontend
 is SvelteKit (Svelte 5 runes) built as a static SPA into `frontend/build` and embedded via
 `frontendDist`. New commands need a matching binding in `frontend/src/lib/api.ts`.
 
+The frontend mirrors the engine boundary: `routes/+page.svelte` holds only state wiring
+and markup, while pure rules live in unit-tested `$lib` modules (`fomod.ts` for wizard
+selection, `plugins.ts` for the masters-first/protected reorder rules, `format.ts` for
+display formatting). New UI logic with a testable rule belongs in `$lib`, not the route.
+
 ## Conventions and guardrails
 
 - **Errors**: `thiserror` enums in engine crates; `anyhow` only at the app/Tauri boundary.
@@ -132,7 +138,8 @@ Before claiming a change is complete:
    lacks WebKitGTK, and say so).
 3. `cargo clippy --workspace --all-targets -- -D warnings` is clean.
 4. `cargo deny check advisories bans licenses sources` passes if dependencies changed.
-5. `npm --prefix frontend run check` passes if frontend files changed.
+5. `npm --prefix frontend run check` and `npm --prefix frontend test` pass if frontend
+   files changed (both are CI-gated).
 6. Anything touching `deploy`/`store` has a test proving the reversibility or
    crash-recovery property still holds.
 

@@ -31,6 +31,7 @@ cargo deny check advisories bans licenses sources      # supply-chain gate (see 
 npm --prefix frontend ci               # install
 npm --prefix frontend run build        # build to frontend/build (Tauri's frontendDist)
 npm --prefix frontend run check        # svelte-check type check
+npm --prefix frontend test             # vitest over the pure $lib modules
 
 # Full desktop app (needs WebKitGTK 4.1 dev libs — see CI for the apt list)
 cargo tauri dev                        # run app (auto-runs frontend dev server)
