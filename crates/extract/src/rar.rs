@@ -89,9 +89,7 @@ fn run_tool(tool: &RarTool, archive: &Path, temp_root: &Path) -> Result<(), Extr
     };
 
     let mut cmd = output;
-    let out = cmd
-        .output()
-        .map_err(|e| ExtractError::io(archive, e))?;
+    let out = cmd.output().map_err(|e| ExtractError::io(archive, e))?;
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
         let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();

@@ -74,7 +74,9 @@ fn recover_all_on_launch(state: &AppState) {
 /// Build and run the NexTwist desktop app.
 pub fn run() {
     // Plain fmt subscriber (no env-filter feature needed); ignore a double-init in tests.
-    let _ = tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .try_init();
 
     tauri::Builder::default()
         // OS-integration plugins (NXM-01). ORDER IS LOAD-BEARING: tauri-plugin-single-instance

@@ -6,11 +6,16 @@
 
 use std::collections::HashSet;
 
-use loadorder::{reconcile_plugins_txt, ReconcileState};
+use loadorder::{ReconcileState, reconcile_plugins_txt};
 use nextwist_core::{Plugin, PluginKind};
 
 fn plugin(name: &str, kind: PluginKind, enabled: bool) -> Plugin {
-    Plugin { name: name.into(), kind, enabled, order: 0 }
+    Plugin {
+        name: name.into(),
+        kind,
+        enabled,
+        order: 0,
+    }
 }
 
 fn protected(names: &[&str]) -> HashSet<String> {
@@ -27,7 +32,11 @@ fn reconcile_expected_deltas() {
         plugin("BlueprintShips-Starfield.esm", PluginKind::Esm, true), // re-added on launch
         plugin("MyMod.esp", PluginKind::Esp, true),     // the real user intent
     ];
-    let prot = protected(&["Starfield.esm", "BlueprintShips-Starfield.esm", "Constellation.ccc"]);
+    let prot = protected(&[
+        "Starfield.esm",
+        "BlueprintShips-Starfield.esm",
+        "Constellation.ccc",
+    ]);
     // On disk: user mod present; blueprint re-added; a `.ccc` added; the implicit master
     // Starfield.esm stripped (absent). All deltas involve protected names → expected.
     let on_disk = "*MyMod.esp\n*BlueprintShips-Starfield.esm\n*Constellation.ccc\n";

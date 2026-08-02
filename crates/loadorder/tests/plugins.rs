@@ -40,7 +40,12 @@ fn write_min_plugin(data_dir: &Path, name: &str, master: bool) {
 }
 
 fn plugin(name: &str, kind: PluginKind, enabled: bool, order: u32) -> Plugin {
-    Plugin { name: name.into(), kind, enabled, order }
+    Plugin {
+        name: name.into(),
+        kind,
+        enabled,
+        order,
+    }
 }
 
 /// PLUGIN-02: apply a desired order and assert the written Plugins.txt is asterisk-format,
@@ -83,7 +88,10 @@ fn writes_asterisk_masters_first() {
     // .esm masters are implicitly active and governed by the load order, not the
     // active-plugins file (verified against libloot 0.29.5 output). So the enabled regular
     // plugin appears with a leading asterisk, and masters are NOT listed here.
-    assert!(body.contains("*Mod.esp"), "active regular plugin is asterisk-listed:\n{body}");
+    assert!(
+        body.contains("*Mod.esp"),
+        "active regular plugin is asterisk-listed:\n{body}"
+    );
     assert!(
         !body.contains("Skyrim.esm") && !body.contains("Update.esm"),
         "masters are implicitly active and NOT written to the asterisk file:\n{body}"
@@ -100,7 +108,10 @@ fn writes_asterisk_masters_first() {
     let pos_update = order.iter().position(|n| *n == "Update.esm");
     let pos_mod = order.iter().position(|n| *n == "Mod.esp");
     if let (Some(su), Some(up), Some(md)) = (pos_skyrim, pos_update, pos_mod) {
-        assert!(su < md && up < md, "masters must load before Mod.esp: {order:?}");
+        assert!(
+            su < md && up < md,
+            "masters must load before Mod.esp: {order:?}"
+        );
     }
     assert!(game.is_plugin_active("Mod.esp"), "Mod.esp is active");
     assert!(!game.is_plugin_active("Off.esp"), "Off.esp is inactive");
@@ -157,7 +168,10 @@ fn missing_on_disk_plugin_is_dropped_not_fatal() {
     // order before libloot header-parses it).
     let written = apply_load_order(SKYRIM_SE, &install, &appdata_local, &desired).unwrap();
     let body = fs::read_to_string(&written).unwrap();
-    assert!(!body.contains("Ghost.esp"), "missing plugin dropped:\n{body}");
+    assert!(
+        !body.contains("Ghost.esp"),
+        "missing plugin dropped:\n{body}"
+    );
     // Skyrim.esm (a master, implicitly active) is loaded but not written to the file.
     let mut game = loadorder::loot::open_game(SKYRIM_SE, &install, &appdata_local).unwrap();
     game.load_current_load_order_state().unwrap();
@@ -218,8 +232,7 @@ fn propose_sort_returns_order_without_writing() {
     let plugins_txt = appdata_local.join("Plugins.txt");
     assert!(!plugins_txt.exists(), "no Plugins.txt before propose");
 
-    let proposal =
-        propose_sort(SKYRIM_SE, &install, &appdata_local, &app_data, &desired).unwrap();
+    let proposal = propose_sort(SKYRIM_SE, &install, &appdata_local, &app_data, &desired).unwrap();
 
     // A proposed order is returned over the loaded plugins.
     assert!(
@@ -303,20 +316,38 @@ fn fo4_multi_master_game_master_first_active_survives() {
     let coast = pos("DLCCoast.esm").expect("DLCCoast.esm present");
     let ws01 = pos("DLCworkshop01.esm").expect("DLCworkshop01.esm present");
 
-    assert!(fo4 < robot && fo4 < coast && fo4 < ws01, "Fallout4.esm must be first: {order:?}");
+    assert!(
+        fo4 < robot && fo4 < coast && fo4 < ws01,
+        "Fallout4.esm must be first: {order:?}"
+    );
     // Hardcoded FO4 order is Fallout4, DLCRobot, DLCworkshop01, DLCCoast — NOT alphabetical.
-    assert!(robot < coast, "DLCRobot.esm must precede DLCCoast.esm (hardcoded order): {order:?}");
-    assert!(ws01 < coast, "DLCworkshop01.esm must precede DLCCoast.esm (hardcoded order): {order:?}");
+    assert!(
+        robot < coast,
+        "DLCRobot.esm must precede DLCCoast.esm (hardcoded order): {order:?}"
+    );
+    assert!(
+        ws01 < coast,
+        "DLCworkshop01.esm must precede DLCCoast.esm (hardcoded order): {order:?}"
+    );
 
     // Active state: DLC masters are implicitly active; mods follow the seed.
     assert!(game.is_plugin_active("Fallout4.esm"), "game master active");
     assert!(game.is_plugin_active("DLCRobot.esm"), "DLC master active");
-    assert!(game.is_plugin_active("EnabledMod.esp"), "enabled mod active");
-    assert!(!game.is_plugin_active("DisabledMod.esp"), "disabled mod inactive");
+    assert!(
+        game.is_plugin_active("EnabledMod.esp"),
+        "enabled mod active"
+    );
+    assert!(
+        !game.is_plugin_active("DisabledMod.esp"),
+        "disabled mod inactive"
+    );
 
     // Plugins.txt: regular mods only (DLC .esm are early-loaders, omitted by libloot).
     let body = fs::read_to_string(&written).unwrap();
-    assert!(body.contains("*EnabledMod.esp"), "enabled mod is asterisk-active:\n{body}");
+    assert!(
+        body.contains("*EnabledMod.esp"),
+        "enabled mod is asterisk-active:\n{body}"
+    );
     assert!(
         body.contains("DisabledMod.esp") && !body.contains("*DisabledMod.esp"),
         "disabled mod present without asterisk:\n{body}"
@@ -387,7 +418,10 @@ fn starfield_locked_master_saves_at_resting_state() {
         .expect("a locked master at its resting enabled==false state must save (CR-01)");
 
     let body = fs::read_to_string(&written).unwrap();
-    assert!(body.contains("*Mod.esp"), "enabled regular plugin is asterisk-listed:\n{body}");
+    assert!(
+        body.contains("*Mod.esp"),
+        "enabled regular plugin is asterisk-listed:\n{body}"
+    );
     assert!(
         !body.contains("Starfield.esm"),
         "the implicit master is NOT written to the asterisk file:\n{body}"
@@ -468,7 +502,10 @@ fn starfield_asterisk() {
         "plugins.txt {written:?} must be under the Starfield prefix AppData {appdata_local:?}"
     );
     let body = fs::read_to_string(&written).unwrap();
-    assert!(body.contains("*Mod.esp"), "active regular plugin is asterisk-listed:\n{body}");
+    assert!(
+        body.contains("*Mod.esp"),
+        "active regular plugin is asterisk-listed:\n{body}"
+    );
     assert!(
         !body.contains("*Off.esp"),
         "disabled regular plugin has no asterisk:\n{body}"

@@ -56,11 +56,7 @@ pub fn begin_deploy(
 /// `sentinel_rel` is the bare `StarfieldCustom.ini` (NO `Data/` prefix, Pitfall 2) so it
 /// can never collide with a `Data/`-rooted manifest relpath. Mirrors [`begin_purge`]
 /// (`method: None`, `source_hash: None`).
-pub fn begin_ini(
-    store: &Store,
-    appid: u32,
-    sentinel_rel: &Path,
-) -> Result<JournalId, DeployError> {
+pub fn begin_ini(store: &Store, appid: u32, sentinel_rel: &Path) -> Result<JournalId, DeployError> {
     let intent = OpIntent {
         appid,
         target_rel: sentinel_rel.to_path_buf(),
@@ -72,11 +68,7 @@ pub fn begin_ini(
 }
 
 /// Record a `pending` purge intent for `target_rel` and return its id.
-pub fn begin_purge(
-    store: &Store,
-    appid: u32,
-    target_rel: &Path,
-) -> Result<JournalId, DeployError> {
+pub fn begin_purge(store: &Store, appid: u32, target_rel: &Path) -> Result<JournalId, DeployError> {
     let intent = OpIntent {
         appid,
         target_rel: target_rel.to_path_buf(),
@@ -151,7 +143,10 @@ pub fn replay(store: &Store, game: &Game) -> Result<ReplayOutcome, DeployError> 
             }
             KIND_INI => replay_ini(store, game, row)?,
             other => {
-                tracing::warn!(kind = other, "unknown journal kind; marking done to avoid a stuck row");
+                tracing::warn!(
+                    kind = other,
+                    "unknown journal kind; marking done to avoid a stuck row"
+                );
                 store.mark_done(row.id)?;
             }
         }
@@ -212,8 +207,7 @@ fn replay_purge(store: &Store, game: &Game, row: &JournalRow) -> Result<(), Depl
 /// byte-for-byte untouched, SFINI-04). Rolling a crashed *ensure* back to provenance is a
 /// valid recovery: the activation simply didn't take, and re-runs on the next deploy.
 fn replay_ini(store: &Store, game: &Game, row: &JournalRow) -> Result<(), DeployError> {
-    let target =
-        steam::my_games_path(&game.prefix).join(crate::gameconfig::INI_FILENAME);
+    let target = steam::my_games_path(&game.prefix).join(crate::gameconfig::INI_FILENAME);
     crate::gameconfig::restore_ini_at(store, game, &target)?;
     // The sentinel is never in the deploy manifest, so this is a harmless no-op mirror of
     // replay_purge; kept for symmetry.
@@ -249,8 +243,7 @@ mod ini_replay_tests {
         };
         // Activate: creates the INI under the PREFIX (CreatedByNexTwist).
         ensure_ini_active(&store, &game, IniConflictResolution::Block).unwrap();
-        let prefix_ini =
-            steam::my_games_path(&game.prefix).join(gameconfig::INI_FILENAME);
+        let prefix_ini = steam::my_games_path(&game.prefix).join(gameconfig::INI_FILENAME);
         assert!(prefix_ini.exists());
 
         // Simulate a crash mid-op: a lingering pending KIND_INI row.
@@ -260,10 +253,16 @@ mod ini_replay_tests {
         // Recovery replays it to provenance (absence) idempotently.
         let outcome = replay(&store, &game).unwrap();
         assert_eq!(outcome.replayed, 1);
-        assert!(!prefix_ini.exists(), "rolled back to CreatedByNexTwist absence");
+        assert!(
+            !prefix_ini.exists(),
+            "rolled back to CreatedByNexTwist absence"
+        );
         // The replay resolved via my_games_path, never Data/ — no stray Data/ INI exists.
         let data_ini = crate::deploy_root(&game.install_dir).join(gameconfig::INI_FILENAME);
-        assert!(!data_ini.exists(), "replay_ini must NEVER touch the Data/ root");
+        assert!(
+            !data_ini.exists(),
+            "replay_ini must NEVER touch the Data/ root"
+        );
         assert!(store.pending_ops().unwrap().is_empty());
     }
 }

@@ -27,7 +27,12 @@ pub async fn list_profiles(
     appid: u32,
 ) -> Result<Vec<Profile>, String> {
     require_game(&state, appid).await?;
-    state.lock().await.store.list_profiles(appid).map_err(boundary_err)
+    state
+        .lock()
+        .await
+        .store
+        .list_profiles(appid)
+        .map_err(boundary_err)
 }
 
 /// Create a new (inactive) profile for a game and return it (PROF-01). The store assigns
@@ -40,8 +45,16 @@ pub async fn create_profile(
 ) -> Result<Profile, String> {
     require_game(&state, appid).await?;
     let guard = state.lock().await;
-    let id = guard.store.create_profile(appid, &name).map_err(boundary_err)?;
-    Ok(Profile { id, appid, name, active: false })
+    let id = guard
+        .store
+        .create_profile(appid, &name)
+        .map_err(boundary_err)?;
+    Ok(Profile {
+        id,
+        appid,
+        name,
+        active: false,
+    })
 }
 
 /// Switch the active profile (PROF-02), reconciling the deployment through the safe
@@ -74,5 +87,10 @@ pub async fn delete_profile(
     profile_id: i64,
 ) -> Result<bool, String> {
     require_game(&state, appid).await?;
-    state.lock().await.store.delete_profile(profile_id).map_err(boundary_err)
+    state
+        .lock()
+        .await
+        .store
+        .delete_profile(profile_id)
+        .map_err(boundary_err)
 }

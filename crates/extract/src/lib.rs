@@ -30,8 +30,8 @@ pub mod staging;
 pub mod validate;
 pub mod zip;
 
-pub use staging::{install_archive, StagedMod};
-pub use validate::{validate_entry, ExtractError};
+pub use staging::{StagedMod, install_archive};
+pub use validate::{ExtractError, validate_entry};
 
 /// The archive formats NexTwist can install.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,7 +77,10 @@ fn magic_format(path: &Path) -> Result<Option<ArchiveFormat>, ExtractError> {
     let n = f.read(&mut head).map_err(|e| ExtractError::io(path, e))?;
     let head = &head[..n];
     // PK\x03\x04 (local file header) / PK\x05\x06 (empty) / PK\x07\x08 (spanned).
-    if head.starts_with(b"PK\x03\x04") || head.starts_with(b"PK\x05\x06") || head.starts_with(b"PK\x07\x08") {
+    if head.starts_with(b"PK\x03\x04")
+        || head.starts_with(b"PK\x05\x06")
+        || head.starts_with(b"PK\x07\x08")
+    {
         return Ok(Some(ArchiveFormat::Zip));
     }
     // 7z signature: 37 7A BC AF 27 1C.
@@ -99,9 +102,8 @@ fn magic_format(path: &Path) -> Result<Option<ArchiveFormat>, ExtractError> {
 /// and, if needed, removed during purge bookkeeping.
 pub(crate) fn mark_tree_readonly(root: &Path) -> Result<(), ExtractError> {
     for entry in walkdir::WalkDir::new(root).follow_links(false) {
-        let entry = entry.map_err(|e| {
-            ExtractError::Decode(format!("walking staged tree failed: {e}"))
-        })?;
+        let entry =
+            entry.map_err(|e| ExtractError::Decode(format!("walking staged tree failed: {e}")))?;
         if entry.file_type().is_file() {
             let p = entry.path();
             let mut perms = std::fs::metadata(p)
@@ -118,9 +120,8 @@ pub(crate) fn mark_tree_readonly(root: &Path) -> Result<(), ExtractError> {
 pub(crate) fn list_files_rel(root: &Path) -> Result<Vec<PathBuf>, ExtractError> {
     let mut files = Vec::new();
     for entry in walkdir::WalkDir::new(root).follow_links(false) {
-        let entry = entry.map_err(|e| {
-            ExtractError::Decode(format!("walking staged tree failed: {e}"))
-        })?;
+        let entry =
+            entry.map_err(|e| ExtractError::Decode(format!("walking staged tree failed: {e}")))?;
         if entry.file_type().is_file() {
             let rel = entry
                 .path()

@@ -148,7 +148,10 @@ mod tests {
 
         // Incoming mod path "textures" → on-disk "Textures".
         assert_eq!(map.canonical_dir("textures"), Some("Textures"));
-        assert_eq!(map.canonical_dir("textures/actors"), Some("Textures/Actors"));
+        assert_eq!(
+            map.canonical_dir("textures/actors"),
+            Some("Textures/Actors")
+        );
         assert_eq!(map.canonical_dir("meshes"), Some("Meshes"));
         assert_eq!(map.canonical_dir("scripts"), Some("Scripts"));
         assert_eq!(map.canonical_dir("interface"), Some("Interface"));

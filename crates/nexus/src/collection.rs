@@ -158,7 +158,10 @@ impl SourceType {
     /// Whether this source is off-Nexus and must be surfaced as a manual step rather than
     /// fetched (the SSRF-safe classification, T-04-08).
     pub fn is_off_nexus(self) -> bool {
-        matches!(self, SourceType::Direct | SourceType::Browse | SourceType::Manual)
+        matches!(
+            self,
+            SourceType::Direct | SourceType::Browse | SourceType::Manual
+        )
     }
 }
 
@@ -320,7 +323,11 @@ mod tests {
         assert_eq!(choices.options[0].groups[0].choices[0].idx, 0);
 
         // bundle source
-        let bundle = c.mods.iter().find(|m| m.name == "Collection Config Patch").unwrap();
+        let bundle = c
+            .mods
+            .iter()
+            .find(|m| m.name == "Collection Config Patch")
+            .unwrap();
         assert_eq!(bundle.source.kind, SourceType::Bundle);
         assert!(bundle.patches.is_some());
         assert_eq!(bundle.phase, 2);
@@ -333,7 +340,11 @@ mod tests {
         assert!(skse.instructions.is_some());
 
         // browse source is off-Nexus too
-        let browse = c.mods.iter().find(|m| m.name == "Browse-Only Dependency").unwrap();
+        let browse = c
+            .mods
+            .iter()
+            .find(|m| m.name == "Browse-Only Dependency")
+            .unwrap();
         assert_eq!(browse.source.kind, SourceType::Browse);
         assert!(browse.source.kind.is_off_nexus());
 
@@ -342,10 +353,7 @@ mod tests {
         assert_eq!(c.mod_rules[0].kind, ModRuleType::After);
         assert_eq!(c.mod_rules[1].kind, ModRuleType::Before);
         assert_eq!(c.mod_rules[2].kind, ModRuleType::Conflicts);
-        assert_eq!(
-            c.mod_rules[0].source.tag.as_deref(),
-            Some("skyui-tag")
-        );
+        assert_eq!(c.mod_rules[0].source.tag.as_deref(), Some("skyui-tag"));
     }
 
     #[test]
@@ -361,10 +369,9 @@ mod tests {
     #[test]
     fn sparse_manifest_parses_with_defaults() {
         // The minimal valid shape: info.name + info.domainName, no mods, no rules.
-        let c = Collection::parse(
-            r#"{"info":{"name":"Tiny","domainName":"skyrimspecialedition"}}"#,
-        )
-        .expect("a sparse manifest must parse");
+        let c =
+            Collection::parse(r#"{"info":{"name":"Tiny","domainName":"skyrimspecialedition"}}"#)
+                .expect("a sparse manifest must parse");
         assert_eq!(c.info.name, "Tiny");
         assert!(c.mods.is_empty());
         assert!(c.mod_rules.is_empty());

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 
 use crate::validate::ExtractError;
-use crate::{list_files_rel, mark_tree_readonly, rar, sevenz, zip, ArchiveFormat};
+use crate::{ArchiveFormat, list_files_rel, mark_tree_readonly, rar, sevenz, zip};
 
 /// A validated, read-only per-mod staging tree produced by [`install_archive`].
 ///
@@ -128,7 +128,10 @@ pub(crate) enum MoveSource {
     /// children (`Data/`, `SKSE/`, …) and drop non-game siblings (`Info.txt`,
     /// `Screenshot/`, readmes, `fomod/` config dir, …) which would otherwise leak into the
     /// game `Data/` directory at deploy time.
-    WrapperChildren { wrapper: PathBuf, children: Vec<PathBuf> },
+    WrapperChildren {
+        wrapper: PathBuf,
+        children: Vec<PathBuf>,
+    },
 }
 
 /// Detect whether the validated `temp_root` is wrapped in a single cosmetic top-level
@@ -157,7 +160,9 @@ pub(crate) fn detect_archive_root(temp_root: &Path) -> Result<MoveSource, Extrac
         entries.push((path, ft.is_dir()));
     }
 
-    let whole = || MoveSource::Whole { root: temp_root.to_path_buf() };
+    let whole = || MoveSource::Whole {
+        root: temp_root.to_path_buf(),
+    };
 
     // Exactly one top-level entry, and it must be a directory.
     let single_dir = match entries.as_slice() {
@@ -238,8 +243,7 @@ fn move_into_staging(plan: &MoveSource, staging_root: &Path) -> Result<(), Extra
             // siblings are left behind in the temp dir (cleaned up by the TempDir guard or
             // simply discarded). Create the staging root explicitly since we move into it
             // child-by-child rather than renaming a whole directory onto it.
-            std::fs::create_dir_all(staging_root)
-                .map_err(|e| ExtractError::io(staging_root, e))?;
+            std::fs::create_dir_all(staging_root).map_err(|e| ExtractError::io(staging_root, e))?;
             for child in children {
                 let dst = staging_root.join(
                     child
@@ -315,7 +319,7 @@ fn recursive_move(from: &Path, to: &Path) -> Result<(), ExtractError> {
 
 #[cfg(test)]
 mod root_detection_tests {
-    use super::{detect_archive_root, MoveSource};
+    use super::{MoveSource, detect_archive_root};
     use std::fs;
     use std::path::{Path, PathBuf};
 

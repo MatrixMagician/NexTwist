@@ -13,7 +13,7 @@ use std::path::Path;
 
 use sevenz_rust2::{ArchiveReader, Password};
 
-use crate::validate::{validate_entry, ExtractError};
+use crate::validate::{ExtractError, validate_entry};
 
 /// Extract `archive` (a `.7z`) into the already-created temp dir `temp_root`,
 /// validating every entry before writing it.
@@ -34,7 +34,9 @@ pub fn extract_7z(archive: &Path, temp_root: &Path) -> Result<(), ExtractError> 
             let probe = raw_name.join(".nextwist-dir-probe");
             if let Err(e) = validate_entry(&probe, temp_root, false) {
                 pending = Some(e);
-                return Err(sevenz_rust2::Error::Other("entry rejected by validator".into()));
+                return Err(sevenz_rust2::Error::Other(
+                    "entry rejected by validator".into(),
+                ));
             }
             return Ok(true);
         }
@@ -45,7 +47,9 @@ pub fn extract_7z(archive: &Path, temp_root: &Path) -> Result<(), ExtractError> 
             Ok(d) => d,
             Err(e) => {
                 pending = Some(e);
-                return Err(sevenz_rust2::Error::Other("entry rejected by validator".into()));
+                return Err(sevenz_rust2::Error::Other(
+                    "entry rejected by validator".into(),
+                ));
             }
         };
         let mut out = match std::fs::File::create(&dest) {

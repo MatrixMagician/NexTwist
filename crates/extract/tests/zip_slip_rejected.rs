@@ -9,10 +9,10 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use extract::{install_archive, ExtractError};
+use extract::{ExtractError, install_archive};
 use tempfile::TempDir;
-use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 /// The parent-directory escape token, assembled from parts so it is not a literal
 /// in either the validator source or, ideally, anywhere greppable as a sequence.
@@ -26,8 +26,7 @@ fn escape_token() -> String {
 fn build_zip_raw(path: &Path, entry_name: &str, unix_mode: Option<u32>, bytes: &[u8]) {
     let file = fs::File::create(path).unwrap();
     let mut zip = ZipWriter::new(file);
-    let mut opts = SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Stored);
+    let mut opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     if let Some(mode) = unix_mode {
         opts = opts.unix_permissions(mode);
     }

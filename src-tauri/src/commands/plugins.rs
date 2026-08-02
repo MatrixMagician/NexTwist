@@ -34,8 +34,8 @@ fn merged_plugins_locked(
         .get_game(appid)
         .map_err(boundary_err)?
         .ok_or_else(|| format!("game {appid} is not managed"))?;
-    let game_id =
-        loadorder::esplugin_game_id(appid).ok_or_else(|| format!("game {appid} is not supported"))?;
+    let game_id = loadorder::esplugin_game_id(appid)
+        .ok_or_else(|| format!("game {appid} is not supported"))?;
     let roots: Vec<std::path::PathBuf> = guard
         .store
         .list_mods(appid)
@@ -55,7 +55,10 @@ fn merged_plugins_locked(
         .map_err(boundary_err)?
         .map(|p| p.id)
         .ok_or_else(|| format!("game {appid} has no active profile"))?;
-    let stored = guard.store.list_plugin_state(profile_id).map_err(boundary_err)?;
+    let stored = guard
+        .store
+        .list_plugin_state(profile_id)
+        .map_err(boundary_err)?;
 
     // Merge the per-profile enable/order onto the scanned view (match by name).
     for view in &mut merged {
@@ -114,10 +117,7 @@ fn protected_set(
 
 /// Resolve the active profile id for a game, or a clear boundary error if none is set.
 /// Plugin enable/order is per-profile, so every plugin op needs the active profile.
-async fn active_profile_id(
-    state: &State<'_, Mutex<AppState>>,
-    appid: u32,
-) -> Result<i64, String> {
+async fn active_profile_id(state: &State<'_, Mutex<AppState>>, appid: u32) -> Result<i64, String> {
     state
         .lock()
         .await
@@ -188,7 +188,10 @@ pub async fn set_plugin_enabled(
         enabled,
         order: view.order,
     };
-    guard.store.set_plugin_state(profile_id, &plugin).map_err(boundary_err)
+    guard
+        .store
+        .set_plugin_state(profile_id, &plugin)
+        .map_err(boundary_err)
 }
 
 /// Persist a plugin load order (PLUGIN-02) and write the asterisk `plugins.txt` at the
@@ -241,9 +244,8 @@ fn save_plugin_order_inner(
     let folder = loadorder::appdata_folder_name(game.appid)
         .ok_or_else(|| format!("game {} is not supported", game.appid))?;
     let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
-    let written =
-        loadorder::apply_load_order(game.appid, &game.install_dir, &appdata_local, order)
-            .map_err(boundary_err)?;
+    let written = loadorder::apply_load_order(game.appid, &game.install_dir, &appdata_local, order)
+        .map_err(boundary_err)?;
 
     // 2. Only AFTER the file write succeeded, persist each plugin's enable/order to the
     //    active profile (the index = order).
@@ -254,7 +256,9 @@ fn save_plugin_order_inner(
             enabled: p.enabled,
             order: idx as u32,
         };
-        store.set_plugin_state(profile_id, &row).map_err(boundary_err)?;
+        store
+            .set_plugin_state(profile_id, &row)
+            .map_err(boundary_err)?;
     }
 
     Ok(written)
@@ -330,7 +334,10 @@ pub async fn reconcile_plugins(
         .map_err(boundary_err)?
         .map(|p| p.id)
         .ok_or_else(|| format!("game {appid} has no active profile"))?;
-    let recorded = guard.store.list_plugin_state(profile_id).map_err(boundary_err)?;
+    let recorded = guard
+        .store
+        .list_plugin_state(profile_id)
+        .map_err(boundary_err)?;
 
     let folder = loadorder::appdata_folder_name(appid)
         .ok_or_else(|| format!("game {appid} is not supported"))?;
@@ -356,7 +363,11 @@ pub async fn reconcile_plugins(
         .collect();
     let protected = protected_set(&game, appid, &enabled_names);
 
-    Ok(loadorder::reconcile_plugins_txt(&recorded, &on_disk_txt, &protected))
+    Ok(loadorder::reconcile_plugins_txt(
+        &recorded,
+        &on_disk_txt,
+        &protected,
+    ))
 }
 
 #[cfg(test)]

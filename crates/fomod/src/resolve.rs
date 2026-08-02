@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::condition::{eval, plugin_type_state, FlagSet, InstalledFiles};
+use crate::condition::{FlagSet, InstalledFiles, eval, plugin_type_state};
 use crate::error::FomodError;
 use crate::model::{FileItem, FileList, FomodModule, GroupType, PluginType};
 
@@ -95,7 +95,9 @@ pub fn validate_selection(module: &FomodModule, selection: &Selection) -> Result
         }
         let Some(groups) = &step.groups else { continue };
         for group in &groups.groups {
-            let Some(plugins) = &group.plugins else { continue };
+            let Some(plugins) = &group.plugins else {
+                continue;
+            };
             let chosen = plugins
                 .plugins
                 .iter()
@@ -122,7 +124,10 @@ pub fn validate_selection(module: &FomodModule, selection: &Selection) -> Result
 /// Resolve the concrete, ordered file-install plan for `module` under `selection`.
 ///
 /// PURE — never writes to disk. See the module docs for the ordering + dedup contract.
-pub fn resolve(module: &FomodModule, selection: &Selection) -> Result<Vec<FileInstall>, FomodError> {
+pub fn resolve(
+    module: &FomodModule,
+    selection: &Selection,
+) -> Result<Vec<FileInstall>, FomodError> {
     let mut plan: Vec<FileInstall> = Vec::new();
 
     // 1. requiredInstallFiles — unconditional.
@@ -173,7 +178,11 @@ pub fn resolve(module: &FomodModule, selection: &Selection) -> Result<Vec<FileIn
     }
 
     // 3. conditionalFileInstalls — every pattern whose dependencies hold.
-    if let Some(list) = module.conditional.as_ref().and_then(|c| c.patterns.as_ref()) {
+    if let Some(list) = module
+        .conditional
+        .as_ref()
+        .and_then(|c| c.patterns.as_ref())
+    {
         for pattern in &list.patterns {
             let holds = pattern
                 .dependencies
@@ -202,16 +211,9 @@ fn append_file_list(list: &FileList, plan: &mut Vec<FileInstall>) {
 ///
 /// * `selected` — the option is chosen.
 /// * `usable` — the option's live type is not `NotUsable`.
-fn append_plugin_files(
-    list: &FileList,
-    selected: bool,
-    usable: bool,
-    plan: &mut Vec<FileInstall>,
-) {
+fn append_plugin_files(list: &FileList, selected: bool, usable: bool, plan: &mut Vec<FileInstall>) {
     for item in list.files.iter().chain(list.folders.iter()) {
-        let install = selected
-            || item.always_install
-            || (item.install_if_usable && usable);
+        let install = selected || item.always_install || (item.install_if_usable && usable);
         if install {
             plan.push(file_install(item));
         }

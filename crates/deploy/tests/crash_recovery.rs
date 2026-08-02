@@ -15,7 +15,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use deploy::{deploy_with_abort, purge, recover_on_launch, DeployError, StagedFiles};
+use deploy::{DeployError, StagedFiles, deploy_with_abort, purge, recover_on_launch};
 use nextwist_core::Game;
 use store::Store;
 use tempfile::TempDir;
@@ -36,7 +36,12 @@ impl Fixture {
         let db = root.path().join("app/nextwist.db");
         fs::create_dir_all(install.join("Data")).unwrap();
         fs::create_dir_all(&staging).unwrap();
-        Fixture { root, install, staging, db }
+        Fixture {
+            root,
+            install,
+            staging,
+            db,
+        }
     }
 
     fn game(&self) -> Game {

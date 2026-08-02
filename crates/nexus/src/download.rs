@@ -14,8 +14,8 @@
 //! abort an in-flight download promptly. SECRET DISCIPLINE (V7): no URI is ever logged.
 
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;

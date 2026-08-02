@@ -45,7 +45,11 @@ use crate::error::NexusError;
 pub fn replay_choices(module: &FomodModule, choices: &Choices) -> Result<Selection, NexusError> {
     let mut selection = Selection::default();
 
-    let steps = module.steps.as_ref().map(|s| s.steps.as_slice()).unwrap_or(&[]);
+    let steps = module
+        .steps
+        .as_ref()
+        .map(|s| s.steps.as_slice())
+        .unwrap_or(&[]);
 
     for step in &choices.options {
         let module_step = steps
@@ -77,15 +81,16 @@ pub fn replay_choices(module: &FomodModule, choices: &Choices) -> Result<Selecti
                 .unwrap_or(&[]);
 
             for option in &group.choices {
-                let module_plugin = plugins
-                    .iter()
-                    .find(|p| p.name == option.name)
-                    .ok_or_else(|| {
-                        stale(format!(
-                            "option '{}' no longer exists in group '{}' (step '{}')",
-                            option.name, group.name, step.name
-                        ))
-                    })?;
+                let module_plugin =
+                    plugins
+                        .iter()
+                        .find(|p| p.name == option.name)
+                        .ok_or_else(|| {
+                            stale(format!(
+                                "option '{}' no longer exists in group '{}' (step '{}')",
+                                option.name, group.name, step.name
+                            ))
+                        })?;
 
                 // Mark the option chosen — keyed exactly as fomod::resolve looks it up.
                 selection.chosen.insert((
@@ -97,7 +102,9 @@ pub fn replay_choices(module: &FomodModule, choices: &Choices) -> Result<Selecti
                 // Accumulate the flags this option sets (what the live wizard does on pick).
                 if let Some(cf) = &module_plugin.condition_flags {
                     for flag in &cf.flags {
-                        selection.flags.insert(flag.name.clone(), flag.value.clone());
+                        selection
+                            .flags
+                            .insert(flag.name.clone(), flag.value.clone());
                     }
                 }
             }
@@ -367,8 +374,14 @@ mod tests {
             .iter()
             .map(|f| f.dest_rel.to_string_lossy().to_string())
             .collect();
-        assert!(dests.iter().any(|d| d.contains("a.esp")), "a.esp installed: {dests:?}");
-        assert!(!dests.iter().any(|d| d.contains("b.esp")), "b.esp NOT installed: {dests:?}");
+        assert!(
+            dests.iter().any(|d| d.contains("a.esp")),
+            "a.esp installed: {dests:?}"
+        );
+        assert!(
+            !dests.iter().any(|d| d.contains("b.esp")),
+            "b.esp NOT installed: {dests:?}"
+        );
     }
 
     #[test]
@@ -443,7 +456,10 @@ mod tests {
             key_for,
         );
         // No adjustment recorded — the rule had an unresolved endpoint.
-        assert!(out.is_empty(), "a rule with an unresolved endpoint is skipped: {out:?}");
+        assert!(
+            out.is_empty(),
+            "a rule with an unresolved endpoint is skipped: {out:?}"
+        );
     }
 
     #[test]
@@ -522,8 +538,16 @@ mod tests {
         };
         let ranks = compute_collection_ranks(&collection_with(mods, vec![rule]));
         // modA pushed down (after) from baseline 1 → 2; modB keeps baseline 2.
-        assert_eq!(ranks.get(&0), Some(&2), "modA (after) is pushed DOWN the ladder");
-        assert_eq!(ranks.get(&1), Some(&2), "modB keeps its manifest-order baseline");
+        assert_eq!(
+            ranks.get(&0),
+            Some(&2),
+            "modA (after) is pushed DOWN the ladder"
+        );
+        assert_eq!(
+            ranks.get(&1),
+            Some(&2),
+            "modB keeps its manifest-order baseline"
+        );
     }
 
     /// `before` pulls the source UP so it wins; a mod no rule touches keeps its baseline.
@@ -543,7 +567,11 @@ mod tests {
         };
         let ranks = compute_collection_ranks(&collection_with(mods, vec![rule]));
         assert_eq!(ranks.get(&0), Some(&1), "modA keeps baseline 1");
-        assert_eq!(ranks.get(&1), Some(&1), "modB (before) pulled UP from 2 to 1");
+        assert_eq!(
+            ranks.get(&1),
+            Some(&1),
+            "modB (before) pulled UP from 2 to 1"
+        );
         assert_eq!(ranks.get(&2), Some(&3), "modC, untouched, keeps baseline 3");
     }
 
@@ -557,6 +585,10 @@ mod tests {
             reference: reference_with_tag("ghost"), // matches nothing
         };
         let ranks = compute_collection_ranks(&collection_with(mods, vec![rule]));
-        assert_eq!(ranks.get(&0), Some(&1), "an unresolved-endpoint rule leaves the baseline");
+        assert_eq!(
+            ranks.get(&0),
+            Some(&1),
+            "an unresolved-endpoint rule leaves the baseline"
+        );
     }
 }

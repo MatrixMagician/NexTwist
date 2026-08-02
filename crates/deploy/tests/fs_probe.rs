@@ -35,8 +35,16 @@ fn probe_same_dir_reports_same_device_and_hardlink_ok() {
         Casefold::On | Casefold::Off | Casefold::Unknown
     ));
     // The probe must leave no probe files behind in either directory.
-    assert_eq!(count_entries(&staging), 0, "staging must be clean post-probe");
-    assert_eq!(count_entries(&game), 0, "game data must be clean post-probe");
+    assert_eq!(
+        count_entries(&staging),
+        0,
+        "staging must be clean post-probe"
+    );
+    assert_eq!(
+        count_entries(&game),
+        0,
+        "game data must be clean post-probe"
+    );
 }
 
 /// When a second, distinct filesystem is available (e.g. `/dev/shm` or `/tmp` tmpfs

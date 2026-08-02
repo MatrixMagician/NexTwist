@@ -21,8 +21,7 @@ pub fn parse_module_config(tree_root: &Path) -> Result<FomodModule, FomodError> 
     let config_path = locate_module_config(tree_root)
         .ok_or_else(|| FomodError::ConfigNotFound(tree_root.to_path_buf()))?;
 
-    let raw = std::fs::read_to_string(&config_path)
-        .map_err(|e| FomodError::io(&config_path, e))?;
+    let raw = std::fs::read_to_string(&config_path).map_err(|e| FomodError::io(&config_path, e))?;
     let xml = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
 
     let module: FomodModule = from_str(xml).map_err(|e| FomodError::Xml(e.to_string()))?;
@@ -33,7 +32,11 @@ pub fn parse_module_config(tree_root: &Path) -> Result<FomodModule, FomodError> 
 /// Find a `fomod` directory (any case) under `tree_root` and return the path to its
 /// `ModuleConfig.xml` (any case). Returns `None` if no such file exists.
 fn locate_module_config(tree_root: &Path) -> Option<PathBuf> {
-    for entry in WalkDir::new(tree_root).follow_links(false).into_iter().flatten() {
+    for entry in WalkDir::new(tree_root)
+        .follow_links(false)
+        .into_iter()
+        .flatten()
+    {
         if !entry.file_type().is_dir() {
             continue;
         }

@@ -55,7 +55,10 @@ pub struct AuthorizeRequest {
 /// opens `authorize_url` in the system browser, keeps `pkce_verifier` + `csrf_state` in
 /// memory, and feeds them back to [`exchange_code`] when the `nxm://oauth/callback`
 /// redirect arrives.
-pub fn build_authorize_url(client_id: &str, redirect: &str) -> Result<AuthorizeRequest, NexusError> {
+pub fn build_authorize_url(
+    client_id: &str,
+    redirect: &str,
+) -> Result<AuthorizeRequest, NexusError> {
     let client = oauth_client(client_id, redirect)?;
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();

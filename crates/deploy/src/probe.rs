@@ -25,7 +25,7 @@ use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
-use reflink_copy::{check_reflink_support, ReflinkSupport};
+use reflink_copy::{ReflinkSupport, check_reflink_support};
 
 /// Result of [`probe`] for a `(staging, game_data)` directory pair.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,9 +105,7 @@ fn throwaway_hardlink_ok(staging: &Path, game_data: &Path) -> bool {
     let _ = fs::remove_file(&dst);
     let ok = match fs::hard_link(&src, &dst) {
         Ok(()) => true,
-        Err(e)
-            if e.kind() == io::ErrorKind::CrossesDevices || e.raw_os_error() == Some(18) =>
-        {
+        Err(e) if e.kind() == io::ErrorKind::CrossesDevices || e.raw_os_error() == Some(18) => {
             false
         }
         Err(_) => false,
@@ -172,8 +170,11 @@ type libc_request_t = std::os::raw::c_ulong;
 unsafe extern "C" {
     /// `int ioctl(int fd, unsigned long request, ...)`
     #[link_name = "ioctl"]
-    fn raw_ioctl(fd: std::os::raw::c_int, request: libc_request_t, arg: *mut i64)
-        -> std::os::raw::c_int;
+    fn raw_ioctl(
+        fd: std::os::raw::c_int,
+        request: libc_request_t,
+        arg: *mut i64,
+    ) -> std::os::raw::c_int;
 }
 
 #[cfg(test)]
@@ -189,9 +190,15 @@ mod tests {
         fs::create_dir_all(&a).unwrap();
         fs::create_dir_all(&b).unwrap();
         let caps = probe(&a, &b).unwrap();
-        assert!(caps.same_device, "two dirs under one tempdir share a device");
+        assert!(
+            caps.same_device,
+            "two dirs under one tempdir share a device"
+        );
         // hardlink within the same tmpfs device must work.
-        assert!(caps.hardlink_ok, "same-device hardlink probe should succeed");
+        assert!(
+            caps.hardlink_ok,
+            "same-device hardlink probe should succeed"
+        );
         // casefold is best-effort; any of the three verdicts is acceptable here.
         assert!(matches!(
             caps.casefold,

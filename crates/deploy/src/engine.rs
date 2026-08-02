@@ -31,7 +31,7 @@ use crate::gameconfig::{self, IniConflictResolution};
 use crate::journal;
 use crate::method::{apply_idempotent, choose_method};
 use crate::path_guard::{guard_within_root, lexical_normalize};
-use crate::probe::{probe, Casefold, FsCaps};
+use crate::probe::{Casefold, FsCaps, probe};
 
 /// An unsafe-filesystem warning surfaced through [`DeployReport`] so the UI (Plan 06)
 /// can warn the user before/at deploy (ENV-04 "warn about unsafe configurations").
@@ -115,7 +115,11 @@ pub struct RecoveryReport {
 /// For each staged file: resolve the target, choose a method from a per-target probe,
 /// record a `pending` journal intent, back up any pre-existing vanilla file, apply the
 /// idempotent file op, then write the manifest row + flip the intent to `done`.
-pub fn deploy(store: &Store, game: &Game, staged: &StagedFiles) -> Result<DeployReport, DeployError> {
+pub fn deploy(
+    store: &Store,
+    game: &Game,
+    staged: &StagedFiles,
+) -> Result<DeployReport, DeployError> {
     let report = deploy_inner(store, game, staged, None)?;
     // SFINI-04 choke point: after the Data/ file loop, auto-activate the loose-file INI for
     // Starfield only. The hook lives on the PUBLIC `deploy` (never `deploy_inner`, which
@@ -208,7 +212,16 @@ fn deploy_inner(
         // journal row is committed + the file is placed but BEFORE the manifest row /
         // `done` flip — exactly the kill-mid-deploy window.
         deploy_one_file(
-            store, game, &data_dir, &src, rel, 0, chosen, &casing, abort_after, &mut report,
+            store,
+            game,
+            &data_dir,
+            &src,
+            rel,
+            0,
+            chosen,
+            &casing,
+            abort_after,
+            &mut report,
         )?;
     }
 
@@ -264,8 +277,8 @@ pub fn deploy_winners(
         }
         // Probe per winner against its OWN staging root (winners come from different
         // roots, each potentially on a different filesystem).
-        let caps = probe(&w.staging_root, &data_dir)
-            .map_err(|e| DeployError::io(&w.staging_root, e))?;
+        let caps =
+            probe(&w.staging_root, &data_dir).map_err(|e| DeployError::io(&w.staging_root, e))?;
         let chosen = choose_method(&caps);
         for warn in fs_warnings_from_caps(&caps) {
             if !seen_warnings.contains(&warn) {
@@ -426,10 +439,7 @@ pub fn purge(store: &Store, game: &Game) -> Result<PurgeReport, DeployError> {
 /// INI is actually restored. Simulates a kill between the last file-purge `finish_purge`
 /// and the INI restore; recovery must still restore the INI from the pending intent.
 #[doc(hidden)]
-pub fn purge_with_abort_before_ini(
-    store: &Store,
-    game: &Game,
-) -> Result<PurgeReport, DeployError> {
+pub fn purge_with_abort_before_ini(store: &Store, game: &Game) -> Result<PurgeReport, DeployError> {
     purge_inner(store, game, true)
 }
 

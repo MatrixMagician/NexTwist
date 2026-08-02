@@ -534,14 +534,20 @@ mod tests {
     fn game_type_for_allow_lists_only_the_supported_games() {
         assert!(matches!(game_type_for(SKYRIM_SE), Some(GameType::SkyrimSE)));
         assert!(matches!(game_type_for(FALLOUT4), Some(GameType::Fallout4)));
-        assert!(matches!(game_type_for(STARFIELD), Some(GameType::Starfield)));
+        assert!(matches!(
+            game_type_for(STARFIELD),
+            Some(GameType::Starfield)
+        ));
         assert!(game_type_for(0).is_none());
         assert!(game_type_for(220).is_none());
     }
 
     #[test]
     fn appdata_folder_name_allow_lists_only_the_supported_games() {
-        assert_eq!(appdata_folder_name(SKYRIM_SE), Some("Skyrim Special Edition"));
+        assert_eq!(
+            appdata_folder_name(SKYRIM_SE),
+            Some("Skyrim Special Edition")
+        );
         assert_eq!(appdata_folder_name(FALLOUT4), Some("Fallout4"));
         // Starfield's Plugins.txt lives in AppData/Local/Starfield (Phase 7 consumes this).
         assert_eq!(appdata_folder_name(STARFIELD), Some("Starfield"));

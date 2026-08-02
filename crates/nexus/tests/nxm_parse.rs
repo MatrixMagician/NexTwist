@@ -107,7 +107,10 @@ fn rejects_malformed_and_spoofed_inputs() {
 
     // Empty / garbage strings.
     assert!(matches!(NxmLink::parse(""), Err(NexusError::Redeem(_))));
-    assert!(matches!(NxmLink::parse("garbage"), Err(NexusError::Redeem(_))));
+    assert!(matches!(
+        NxmLink::parse("garbage"),
+        Err(NexusError::Redeem(_))
+    ));
     assert!(matches!(
         NxmLink::parse("nxm://"),
         Err(NexusError::Redeem(_))

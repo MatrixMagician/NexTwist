@@ -11,9 +11,7 @@
 use std::fs;
 use std::path::Path;
 
-use deploy::method::{
-    CopyMethod, DeploymentMethod, HardlinkMethod, ReflinkMethod, SymlinkMethod,
-};
+use deploy::method::{CopyMethod, DeploymentMethod, HardlinkMethod, ReflinkMethod, SymlinkMethod};
 use deploy::{apply_idempotent, choose_method};
 use nextwist_core::DeployMethod;
 use tempfile::TempDir;
@@ -129,7 +127,11 @@ fn ladder_chooses_and_apply_is_idempotent() {
     // not error and must leave the same content.
     let used_again = apply_idempotent(used, &src, &dst).unwrap();
     assert_eq!(used, used_again, "re-apply must use the same method");
-    assert_eq!(fs::read(&dst).unwrap(), b"alpha", "re-apply must be a no-op");
+    assert_eq!(
+        fs::read(&dst).unwrap(),
+        b"alpha",
+        "re-apply must be a no-op"
+    );
 }
 
 /// Force a real EXDEV: choose `Hardlink` for a cross-device pair and prove the ladder

@@ -39,16 +39,16 @@ mod error;
 mod path_guard;
 
 pub use casefold::normalize_to_canonical;
-pub use conflict::{resolve, ModInput, WinnerFile};
+pub use conflict::{ModInput, WinnerFile, resolve};
 pub use error::DeployError;
 pub use gameconfig::{
-    ensure_ini_active, ini_drift, preview_ini_activation, restore_ini, IniActivationPreview,
-    IniConflictResolution, IniDrift, IniOutcome, INI_FILENAME,
+    INI_FILENAME, IniActivationPreview, IniConflictResolution, IniDrift, IniOutcome,
+    ensure_ini_active, ini_drift, preview_ini_activation, restore_ini,
 };
-pub use profile::{switch_profile, SwitchReport};
-pub use method::{apply_idempotent, choose_method, DeploymentMethod};
-pub use probe::{probe, Casefold, FsCaps};
-pub use verify::{repair, verify, RepairReport, VerifyReport};
+pub use method::{DeploymentMethod, apply_idempotent, choose_method};
+pub use probe::{Casefold, FsCaps, probe};
+pub use profile::{SwitchReport, switch_profile};
+pub use verify::{RepairReport, VerifyReport, repair, verify};
 
 // Engine orchestration (deploy/purge/recover/deploy_winners) plus the deploy-path fs warnings.
 pub use engine::*;

@@ -63,7 +63,10 @@ fn leaf_filename_casing_is_preserved() {
 fn already_canonical_path_is_returned_unchanged() {
     let (_dir, casing) = fixture();
     let p = Path::new("Textures/Actors/a.dds");
-    assert_eq!(normalize_to_canonical(p, &casing), PathBuf::from("Textures/Actors/a.dds"));
+    assert_eq!(
+        normalize_to_canonical(p, &casing),
+        PathBuf::from("Textures/Actors/a.dds")
+    );
 }
 
 #[test]

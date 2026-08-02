@@ -101,7 +101,10 @@ pub async fn resolve_collection(
             }
             SourceType::Nexus => match (m.source.mod_id, m.source.file_id) {
                 (Some(mod_id), Some(file_id)) => {
-                    match client.file_availability(game_domain, mod_id, file_id).await? {
+                    match client
+                        .file_availability(game_domain, mod_id, file_id)
+                        .await?
+                    {
                         FileAvailability::Available => ModStatus::Available,
                         FileAvailability::Archived => ModStatus::Archived,
                         FileAvailability::Unavailable => ModStatus::Unavailable,

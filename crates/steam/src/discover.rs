@@ -69,10 +69,7 @@ pub fn detect_games() -> Result<Vec<DetectedGame>, SteamError> {
                 Ok(Some((app, library))) => {
                     let detected = DetectedGame {
                         appid,
-                        name: app
-                            .name
-                            .clone()
-                            .unwrap_or_else(|| app.install_dir.clone()),
+                        name: app.name.clone().unwrap_or_else(|| app.install_dir.clone()),
                         library_path: library.path().to_path_buf(),
                     };
                     if !found.contains(&detected) {
@@ -95,8 +92,5 @@ pub fn detect_games() -> Result<Vec<DetectedGame>, SteamError> {
 /// Honors `$HOME`. Returns `None` if `$HOME` is unset.
 pub(crate) fn flatpak_steam_root() -> Option<PathBuf> {
     let home = std::env::var_os("HOME")?;
-    Some(
-        PathBuf::from(home)
-            .join(".var/app/com.valvesoftware.Steam/.steam/steam"),
-    )
+    Some(PathBuf::from(home).join(".var/app/com.valvesoftware.Steam/.steam/steam"))
 }

@@ -14,12 +14,12 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use nexus::{CancelFlag, NexusAuth, NexusClient};
 use nextwist_core::{ManagedMod, NexusSource};
+use nexus::{CancelFlag, NexusAuth, NexusClient};
 use store::Store;
 use tempfile::TempDir;
-use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 /// A Data/-rooted fixture, mirroring the extract crate's own format tests.
 const FIXTURE: &[(&str, &[u8])] = &[
@@ -80,7 +80,10 @@ async fn download_streams_extracts_stages_and_persists_provenance() {
     let staging_root = staging_dir.join("SKSE64");
     let staged = extract::install_archive(&downloaded_archive, &staging_root)
         .expect("the downloaded archive must stage through the same extract path");
-    assert!(staged.staging_root.is_dir(), "staging_root must exist on disk");
+    assert!(
+        staged.staging_root.is_dir(),
+        "staging_root must exist on disk"
+    );
     assert!(
         staged.staging_root.join("Data/Mod.esp").is_file(),
         "the fixture's files must be present in the staged tree"

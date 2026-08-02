@@ -150,9 +150,7 @@ fn staged_rels(staging_root: &Path) -> Result<Vec<PathBuf>, DeployError> {
     let root_norm = lexical_normalize(staging_root);
     let mut rels = Vec::new();
     for entry in WalkDir::new(staging_root).follow_links(false) {
-        let entry = entry.map_err(|e| {
-            DeployError::io(staging_root, std::io::Error::other(e))
-        })?;
+        let entry = entry.map_err(|e| DeployError::io(staging_root, std::io::Error::other(e)))?;
         if !entry.file_type().is_file() {
             continue;
         }
@@ -165,7 +163,12 @@ fn staged_rels(staging_root: &Path) -> Result<Vec<PathBuf>, DeployError> {
         }
         let rel = abs_norm
             .strip_prefix(&root_norm)
-            .map_err(|e| DeployError::io(staging_root, std::io::Error::new(std::io::ErrorKind::InvalidInput, e)))?
+            .map_err(|e| {
+                DeployError::io(
+                    staging_root,
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, e),
+                )
+            })?
             .to_path_buf();
         rels.push(rel);
     }
@@ -196,8 +199,16 @@ mod tests {
         .unwrap();
 
         let mods = vec![
-            ModInput { mod_id: 10, staging_root: a.clone(), rank: 1 },
-            ModInput { mod_id: 20, staging_root: b.clone(), rank: 2 },
+            ModInput {
+                mod_id: 10,
+                staging_root: a.clone(),
+                rank: 1,
+            },
+            ModInput {
+                mod_id: 20,
+                staging_root: b.clone(),
+                rank: 2,
+            },
         ];
         let (winners, conflicts) = resolve(&mods).unwrap();
 
@@ -219,20 +230,44 @@ mod tests {
         assert_eq!(conflicts[0].winner, 10);
 
         // The two unique files appear exactly once each.
-        assert_eq!(winners.iter().filter(|w| w.rel == Path::new("Data/only_a.esp")).count(), 1);
-        assert_eq!(winners.iter().filter(|w| w.rel == Path::new("Data/only_b.esp")).count(), 1);
+        assert_eq!(
+            winners
+                .iter()
+                .filter(|w| w.rel == Path::new("Data/only_a.esp"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            winners
+                .iter()
+                .filter(|w| w.rel == Path::new("Data/only_b.esp"))
+                .count(),
+            1
+        );
     }
 
     /// No two mods share a path: zero conflicts, every staged file appears exactly once.
     #[test]
     fn no_shared_paths_no_conflicts() {
         let dir = TempDir::new().unwrap();
-        let a = fake_staged_mod(dir.path().join("a"), &[("Data/a1.esp", b"1"), ("Data/a2.esp", b"2")]).unwrap();
+        let a = fake_staged_mod(
+            dir.path().join("a"),
+            &[("Data/a1.esp", b"1"), ("Data/a2.esp", b"2")],
+        )
+        .unwrap();
         let b = fake_staged_mod(dir.path().join("b"), &[("Data/b1.esp", b"3")]).unwrap();
 
         let mods = vec![
-            ModInput { mod_id: 1, staging_root: a, rank: 1 },
-            ModInput { mod_id: 2, staging_root: b, rank: 2 },
+            ModInput {
+                mod_id: 1,
+                staging_root: a,
+                rank: 1,
+            },
+            ModInput {
+                mod_id: 2,
+                staging_root: b,
+                rank: 2,
+            },
         ];
         let (winners, conflicts) = resolve(&mods).unwrap();
         assert!(conflicts.is_empty(), "no shared paths => no conflicts");
@@ -248,19 +283,47 @@ mod tests {
 
         // A=1, B=2 -> A wins.
         let (w1, _) = resolve(&[
-            ModInput { mod_id: 10, staging_root: a.clone(), rank: 1 },
-            ModInput { mod_id: 20, staging_root: b.clone(), rank: 2 },
+            ModInput {
+                mod_id: 10,
+                staging_root: a.clone(),
+                rank: 1,
+            },
+            ModInput {
+                mod_id: 20,
+                staging_root: b.clone(),
+                rank: 2,
+            },
         ])
         .unwrap();
-        assert_eq!(w1.iter().find(|w| w.rel == Path::new("Data/shared.esp")).unwrap().mod_id, 10);
+        assert_eq!(
+            w1.iter()
+                .find(|w| w.rel == Path::new("Data/shared.esp"))
+                .unwrap()
+                .mod_id,
+            10
+        );
 
         // Flip: B=1, A=2 -> B wins.
         let (w2, _) = resolve(&[
-            ModInput { mod_id: 10, staging_root: a, rank: 2 },
-            ModInput { mod_id: 20, staging_root: b, rank: 1 },
+            ModInput {
+                mod_id: 10,
+                staging_root: a,
+                rank: 2,
+            },
+            ModInput {
+                mod_id: 20,
+                staging_root: b,
+                rank: 1,
+            },
         ])
         .unwrap();
-        assert_eq!(w2.iter().find(|w| w.rel == Path::new("Data/shared.esp")).unwrap().mod_id, 20);
+        assert_eq!(
+            w2.iter()
+                .find(|w| w.rel == Path::new("Data/shared.esp"))
+                .unwrap()
+                .mod_id,
+            20
+        );
     }
 
     /// Pitfall 3 (mandatory): resolve NEVER emits two entries for the same target_rel,
@@ -268,20 +331,44 @@ mod tests {
     #[test]
     fn never_emits_duplicate_target_rel() {
         let dir = TempDir::new().unwrap();
-        let a = fake_staged_mod(dir.path().join("a"), &[("Data/x.esp", b"A"), ("Data/y.esp", b"A")]).unwrap();
-        let b = fake_staged_mod(dir.path().join("b"), &[("Data/x.esp", b"B"), ("Data/y.esp", b"B")]).unwrap();
+        let a = fake_staged_mod(
+            dir.path().join("a"),
+            &[("Data/x.esp", b"A"), ("Data/y.esp", b"A")],
+        )
+        .unwrap();
+        let b = fake_staged_mod(
+            dir.path().join("b"),
+            &[("Data/x.esp", b"B"), ("Data/y.esp", b"B")],
+        )
+        .unwrap();
         let c = fake_staged_mod(dir.path().join("c"), &[("Data/x.esp", b"C")]).unwrap();
 
         let (winners, _) = resolve(&[
-            ModInput { mod_id: 1, staging_root: a, rank: 1 },
-            ModInput { mod_id: 2, staging_root: b, rank: 2 },
-            ModInput { mod_id: 3, staging_root: c, rank: 3 },
+            ModInput {
+                mod_id: 1,
+                staging_root: a,
+                rank: 1,
+            },
+            ModInput {
+                mod_id: 2,
+                staging_root: b,
+                rank: 2,
+            },
+            ModInput {
+                mod_id: 3,
+                staging_root: c,
+                rank: 3,
+            },
         ])
         .unwrap();
 
         let mut seen = std::collections::BTreeSet::new();
         for w in &winners {
-            assert!(seen.insert(w.rel.clone()), "duplicate target_rel emitted: {:?}", w.rel);
+            assert!(
+                seen.insert(w.rel.clone()),
+                "duplicate target_rel emitted: {:?}",
+                w.rel
+            );
         }
         // x.esp + y.esp = two unique winners only.
         assert_eq!(winners.len(), 2);
@@ -313,7 +400,12 @@ mod tests {
     fn empty_mod_is_a_noop() {
         let dir = TempDir::new().unwrap();
         let missing = dir.path().join("does-not-exist");
-        let (winners, conflicts) = resolve(&[ModInput { mod_id: 1, staging_root: missing, rank: 1 }]).unwrap();
+        let (winners, conflicts) = resolve(&[ModInput {
+            mod_id: 1,
+            staging_root: missing,
+            rank: 1,
+        }])
+        .unwrap();
         assert!(winners.is_empty());
         assert!(conflicts.is_empty());
     }

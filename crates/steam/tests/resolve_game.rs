@@ -105,7 +105,10 @@ fn resolves_fallout4_from_synthetic_fixture() {
 
     let resolved = resolve_from_root(root, FALLOUT4).expect("resolve fallout4");
     assert_eq!(resolved.appid, FALLOUT4);
-    assert_eq!(resolved.install_dir, root.join("steamapps/common/Fallout 4"));
+    assert_eq!(
+        resolved.install_dir,
+        root.join("steamapps/common/Fallout 4")
+    );
     assert_eq!(
         resolved.prefix,
         root.join("steamapps/compatdata/377160/pfx")

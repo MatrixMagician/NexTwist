@@ -162,9 +162,7 @@ fn collect_from_root(
         return Ok(());
     }
     for entry in WalkDir::new(root).follow_links(false) {
-        let entry = entry.map_err(|e| {
-            LoadOrderError::io(root, std::io::Error::other(e))
-        })?;
+        let entry = entry.map_err(|e| LoadOrderError::io(root, std::io::Error::other(e)))?;
         if !entry.file_type().is_file() {
             continue;
         }
@@ -221,10 +219,12 @@ pub fn scan_plugins(
     let Some(game_id) = game_id_for_data(enabled_staging_roots, game_data) else {
         return Ok(Vec::new());
     };
-    Ok(scan_plugin_views_for(game_id, enabled_staging_roots, game_data)?
-        .into_iter()
-        .map(view_to_plugin)
-        .collect())
+    Ok(
+        scan_plugin_views_for(game_id, enabled_staging_roots, game_data)?
+            .into_iter()
+            .map(view_to_plugin)
+            .collect(),
+    )
 }
 
 /// Discover the plugins for an EXPLICIT game (PLUGIN-01 discovery): same as
@@ -238,10 +238,12 @@ pub fn scan_plugins_for(
     enabled_staging_roots: &[PathBuf],
     game_data: &Path,
 ) -> Result<Vec<Plugin>, LoadOrderError> {
-    Ok(scan_plugin_views_for(game_id, enabled_staging_roots, game_data)?
-        .into_iter()
-        .map(view_to_plugin)
-        .collect())
+    Ok(
+        scan_plugin_views_for(game_id, enabled_staging_roots, game_data)?
+            .into_iter()
+            .map(view_to_plugin)
+            .collect(),
+    )
 }
 
 /// The medium-aware scan (SFLO-03): identical walk/de-dup to [`scan_plugins_for`] but returns
@@ -324,13 +326,16 @@ mod tests {
         // Game Data/: a master only present in the game.
         write(data.path(), "Update.esm", &tes4_header(true));
 
-        let plugins =
-            scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
+        let plugins = scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
         let by_name: std::collections::HashMap<&str, &Plugin> =
             plugins.iter().map(|p| (p.name.as_str(), p)).collect();
 
         // .dds / .txt are ignored.
-        assert_eq!(plugins.len(), 3, "only the three plugin files are collected");
+        assert_eq!(
+            plugins.len(),
+            3,
+            "only the three plugin files are collected"
+        );
         assert!(by_name.contains_key("Skyrim.esm"));
         assert!(by_name.contains_key("Mod.esp"));
         assert!(by_name.contains_key("Update.esm"));
@@ -348,9 +353,12 @@ mod tests {
         write(staged.path(), "Shared.esm", &tes4_header(true));
         write(data.path(), "Shared.esm", &tes4_header(false));
 
-        let plugins =
-            scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
-        assert_eq!(plugins.len(), 1, "the duplicate filename is collapsed to one");
+        let plugins = scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
+        assert_eq!(
+            plugins.len(),
+            1,
+            "the duplicate filename is collapsed to one"
+        );
         assert_eq!(plugins[0].name, "Shared.esm");
         // The staged copy (master header) wins, proving precedence (not the Data/ regular).
         assert_eq!(plugins[0].kind, PluginKind::Esm);
@@ -364,8 +372,7 @@ mod tests {
         // Different casing of the same logical plugin in Data/ — Wine treats these as one.
         write(data.path(), "mod.ESP", &tes4_header(false));
 
-        let plugins =
-            scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
+        let plugins = scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
         assert_eq!(plugins.len(), 1, "case-variant duplicate collapses to one");
         // The staged casing is preserved for display.
         assert_eq!(plugins[0].name, "Mod.esp");
@@ -376,11 +383,16 @@ mod tests {
         let staged = TempDir::new().unwrap();
         let data = TempDir::new().unwrap();
         write(staged.path(), "A.esp", &tes4_header(false));
-        let plugins =
-            scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
+        let plugins = scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
         assert_eq!(plugins.len(), 1);
-        assert!(!plugins[0].enabled, "discovery defaults enabled=false (store owns it)");
-        assert_eq!(plugins[0].order, 0, "discovery defaults order=0 (store owns it)");
+        assert!(
+            !plugins[0].enabled,
+            "discovery defaults enabled=false (store owns it)"
+        );
+        assert_eq!(
+            plugins[0].order, 0,
+            "discovery defaults order=0 (store owns it)"
+        );
     }
 
     #[test]
@@ -398,11 +410,14 @@ mod tests {
         let staged = TempDir::new().unwrap();
         let data = TempDir::new().unwrap();
         // A file with a plugin extension but garbage content: classified ESP, scan survives.
-        write(staged.path(), "Broken.esp", b"not a real TES4 header at all");
+        write(
+            staged.path(),
+            "Broken.esp",
+            b"not a real TES4 header at all",
+        );
         write(staged.path(), "Good.esm", &tes4_header(true));
 
-        let plugins =
-            scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
+        let plugins = scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
         assert_eq!(plugins.len(), 2, "the corrupt file is still collected");
         let by_name: std::collections::HashMap<&str, &Plugin> =
             plugins.iter().map(|p| (p.name.as_str(), p)).collect();
@@ -441,8 +456,15 @@ mod tests {
         .unwrap();
         assert_eq!(sf.len(), 1);
         assert!(sf[0].medium, "Starfield medium flag → medium == true");
-        assert_eq!(sf[0].kind, PluginKind::Esm, "a medium master is still a master");
-        assert!(!sf[0].protected, "scan defaults protected == false (no live probe)");
+        assert_eq!(
+            sf[0].kind,
+            PluginKind::Esm,
+            "a medium master is still a master"
+        );
+        assert!(
+            !sf[0].protected,
+            "scan defaults protected == false (no live probe)"
+        );
 
         // The SAME header under SkyrimSE / Fallout4: medium == false (flag is Starfield-only).
         for gid in [GameId::SkyrimSE, GameId::Fallout4] {
@@ -468,7 +490,10 @@ mod tests {
         .unwrap();
         let by = |n: &str| v.iter().find(|p| p.name == n).unwrap();
         assert_eq!(by("PlainMaster.esm").kind, PluginKind::Esm);
-        assert!(!by("PlainMaster.esm").medium, "a plain master is not medium");
+        assert!(
+            !by("PlainMaster.esm").medium,
+            "a plain master is not medium"
+        );
         assert_eq!(by("Regular.esp").kind, PluginKind::Esp);
         assert!(!by("Regular.esp").medium, "a regular plugin is not medium");
     }
@@ -490,14 +515,23 @@ mod tests {
         assert_eq!(v.len(), 1, "duplicate filename collapses to one");
         assert_eq!(v[0].name, "Shared.esm");
         assert!(v[0].medium, "the staged medium-master copy wins de-dup");
-        assert!(!v[0].protected, "every scanned view starts protected == false");
+        assert!(
+            !v[0].protected,
+            "every scanned view starts protected == false"
+        );
     }
 
     #[test]
     fn esplugin_game_id_allow_lists_supported_games() {
-        assert!(matches!(esplugin_game_id(SKYRIM_SE), Some(GameId::SkyrimSE)));
+        assert!(matches!(
+            esplugin_game_id(SKYRIM_SE),
+            Some(GameId::SkyrimSE)
+        ));
         assert!(matches!(esplugin_game_id(FALLOUT4), Some(GameId::Fallout4)));
-        assert!(matches!(esplugin_game_id(STARFIELD), Some(GameId::Starfield)));
+        assert!(matches!(
+            esplugin_game_id(STARFIELD),
+            Some(GameId::Starfield)
+        ));
         assert!(esplugin_game_id(0).is_none());
         assert!(esplugin_game_id(220).is_none());
     }

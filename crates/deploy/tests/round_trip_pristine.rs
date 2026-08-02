@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use deploy::{deploy, purge, StagedFiles};
+use deploy::{StagedFiles, deploy, purge};
 use nextwist_core::Game;
 use proptest::prelude::*;
 use store::Store;
@@ -44,7 +44,10 @@ fn rel_path_strategy() -> impl Strategy<Value = PathBuf> {
 }
 
 fn file_strategy() -> impl Strategy<Value = GenFile> {
-    (rel_path_strategy(), prop::collection::vec(any::<u8>(), 0..32))
+    (
+        rel_path_strategy(),
+        prop::collection::vec(any::<u8>(), 0..32),
+    )
         .prop_map(|(rel, bytes)| GenFile { rel, bytes })
 }
 
@@ -145,12 +148,24 @@ fn empty_mod_edge_case_is_pristine() {
 fn all_overwrite_edge_case_is_pristine() {
     // Every mod file overwrites a vanilla file at the same path.
     let vanilla = vec![
-        GenFile { rel: PathBuf::from("Data/textures/a.dds"), bytes: b"van-a".to_vec() },
-        GenFile { rel: PathBuf::from("Data/meshes/b.nif"), bytes: b"van-b".to_vec() },
+        GenFile {
+            rel: PathBuf::from("Data/textures/a.dds"),
+            bytes: b"van-a".to_vec(),
+        },
+        GenFile {
+            rel: PathBuf::from("Data/meshes/b.nif"),
+            bytes: b"van-b".to_vec(),
+        },
     ];
     let modfiles = vec![
-        GenFile { rel: PathBuf::from("Data/textures/a.dds"), bytes: b"MOD-A".to_vec() },
-        GenFile { rel: PathBuf::from("Data/meshes/b.nif"), bytes: b"MOD-B".to_vec() },
+        GenFile {
+            rel: PathBuf::from("Data/textures/a.dds"),
+            bytes: b"MOD-A".to_vec(),
+        },
+        GenFile {
+            rel: PathBuf::from("Data/meshes/b.nif"),
+            bytes: b"MOD-B".to_vec(),
+        },
     ];
     run_round_trip(vanilla, modfiles);
 }

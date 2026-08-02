@@ -33,8 +33,8 @@
 use nextwist_core::{Game, Plugin};
 use store::Store;
 
-use crate::conflict::{resolve, ModInput};
-use crate::engine::{deploy_winners, purge, DeployReport, PurgeReport};
+use crate::conflict::{ModInput, resolve};
+use crate::engine::{DeployReport, PurgeReport, deploy_winners, purge};
 use crate::error::DeployError;
 
 use std::path::PathBuf;

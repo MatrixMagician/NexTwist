@@ -20,7 +20,10 @@ pub async fn deploy(
     staged: StagedMod,
 ) -> Result<DeployReport, String> {
     let game = require_game(&state, appid).await?;
-    let work = StagedFiles { staging_root: staged.staging_root, files: staged.files };
+    let work = StagedFiles {
+        staging_root: staged.staging_root,
+        files: staged.files,
+    };
     deploy::deploy(&state.lock().await.store, &game, &work).map_err(boundary_err)
 }
 
