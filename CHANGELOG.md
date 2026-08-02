@@ -8,7 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No changes yet._
+### Changed
+
+- **Frontend logic moved behind a testable seam** — the FOMOD wizard selection rules, the
+  masters-first / protected-master reorder rules, and the display formatters now live in
+  pure `frontend/src/lib/{fomod,plugins,format}.ts` modules instead of inline in
+  `+page.svelte`, covered by 25 vitest cases.
+- **Plugin state merge moved into the engine** — `loadorder::merge_plugin_state` /
+  `enabled_names` now own the D-07/D-13 merge (stored enable/order + protected stamping +
+  display sort) that the Tauri adapter previously hand-rolled.
+- **Staging subdir naming consolidated** — `extract::staging_dir_name` replaces the
+  byte-identical `sanitize()` copies in the download and FOMOD adapters, with a
+  property-style test asserting the result is always exactly one normal path component.
+
+### Fixed
+
+- Two stray NUL bytes in `frontend/src/routes/+page.svelte` made git treat the file as
+  binary, so every diff and code review of the UI showed only `Bin`.
+
+### CI
+
+- `svelte-check` and the frontend unit tests are now gated in CI; the definition of done
+  listed them but no workflow step ran them.
 
 ## [1.0.0] - 2026-06-23
 
