@@ -3,6 +3,9 @@
   // purge round-trip. Visual polish is deferred (CONTEXT.md); every action goes
   // through lib/api.ts and the UI holds NO business logic / path resolution.
   import * as api from "$lib/api";
+  import { fmtBytes, pct } from "$lib/format";
+  import * as fomodLogic from "$lib/fomod";
+  import * as order from "$lib/plugins";
   import type {
     DetectedGame,
     Game,
@@ -453,18 +456,6 @@
     expiredLink = x.reason;
   }
 
-  /** Human percent for a row, or null when the total is unknown. */
-  function pct(d: DownloadItem): number | null {
-    return d.total && d.total > 0 ? Math.floor((d.downloaded / d.total) * 100) : null;
-  }
-
-  function fmtBytes(n: number): string {
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-  }
-
   async function onDetect() {
     const games = await run("Detect games", api.detectGames);
     if (games) detected = games;
@@ -517,10 +508,6 @@
   // --- FOMOD guided installer (UI-SPEC §A). Everything routes through api.ts; the engine
   //     owns parse/condition/resolve. The wizard only renders + gates. ---
 
-  /** A stable key for a chosen option identity (the Set membership key). */
-  const fomodKey = (step: string, group: string, option: string): string =>
-    JSON.stringify([step, group, option]);
-
   /** The steps currently VISIBLE. A step with a `<visible>` condition is re-evaluated by
    *  the engine via resolveFomod; until we have a live answer we show authored steps and
    *  rely on the dry-run resolve for the file-plan truth. (Live visibility skipping is a
@@ -532,51 +519,13 @@
   );
   const fomodOnFirstStep = $derived(fomodStepIdx === 0);
 
-  /** The accumulated flag set from every currently-chosen option's authored flags. */
-  const fomodFlags = $derived.by((): [string, string][] => {
-    const out: [string, string][] = [];
-    if (!fomodProj) return out;
-    for (const step of fomodProj.steps) {
-      for (const group of step.groups) {
-        for (const opt of group.options) {
-          if (fomodChosen.has(fomodKey(step.name, group.name, opt.name))) {
-            for (const f of opt.flags) out.push(f);
-          }
-        }
-      }
-    }
-    return out;
-  });
-
   /** The selection payload the engine consumes (chosen identities + accumulated flags). */
-  function fomodSelection(): { chosen: [string, string, string][]; flags: [string, string][] } {
-    const chosen: [string, string, string][] = [];
-    if (fomodProj) {
-      for (const step of fomodProj.steps) {
-        for (const group of step.groups) {
-          for (const opt of group.options) {
-            if (fomodChosen.has(fomodKey(step.name, group.name, opt.name))) {
-              chosen.push([step.name, group.name, opt.name]);
-            }
-          }
-        }
-      }
-    }
-    return { chosen, flags: fomodFlags };
+  function fomodSelection(): api.FomodSelection {
+    return fomodLogic.selectionOf(fomodProj, fomodChosen);
   }
 
   /** Whether the current step's group-selection constraints (min/max) are satisfied. */
-  const fomodStepValid = $derived.by((): boolean => {
-    if (!fomodStep) return true;
-    for (const group of fomodStep.groups) {
-      const n = group.options.filter((o) =>
-        fomodChosen.has(fomodKey(fomodStep.name, group.name, o.name)),
-      ).length;
-      if (group.group_type === "SelectExactlyOne" && n !== 1) return false;
-      if (group.group_type === "SelectAtLeastOne" && n < 1) return false;
-    }
-    return true;
-  });
+  const fomodStepValid = $derived(fomodLogic.stepValid(fomodStep, fomodChosen));
 
   /** Try to open the FOMOD wizard for `archive`; fall back to plain install on no-FOMOD. */
   async function tryOpenFomodWizard(appid: number, archive: string) {
@@ -593,17 +542,7 @@
       fomodPreview = null;
       // Pre-select Required options (the engine installs a plugin's files only when its
       // option is selected; Required is author-locked-on).
-      const preselect = new Set<string>();
-      for (const step of proj.steps) {
-        for (const group of step.groups) {
-          for (const opt of group.options) {
-            if (opt.default_type === "Required" || group.group_type === "SelectAll") {
-              preselect.add(fomodKey(step.name, group.name, opt.name));
-            }
-          }
-        }
-      }
-      fomodChosen = preselect;
+      fomodChosen = fomodLogic.preselected(proj);
       status = "FOMOD installer opened";
     } catch (e) {
       // §A.8: a missing fomod/ModuleConfig.xml is the common "plain mod" case — install it
@@ -623,24 +562,7 @@
   }
 
   function fomodToggle(step: string, group: string, option: string, groupType: string) {
-    const key = fomodKey(step, group, option);
-    const next = new Set(fomodChosen);
-    const isRadio = groupType === "SelectExactlyOne" || groupType === "SelectAtMostOne";
-    if (isRadio) {
-      // Radio: clear the other options in this group, then set (AtMostOne allows toggle-off).
-      const g = fomodStep?.groups.find((x) => x.name === group);
-      if (g) for (const o of g.options) next.delete(fomodKey(step, group, o.name));
-      if (groupType === "SelectAtMostOne" && fomodChosen.has(key)) {
-        // toggling the same AtMostOne option off → "none"
-      } else {
-        next.add(key);
-      }
-    } else if (next.has(key)) {
-      next.delete(key);
-    } else {
-      next.add(key);
-    }
-    fomodChosen = next;
+    fomodChosen = fomodLogic.toggle(fomodChosen, fomodStep, step, group, option, groupType);
     // Live re-eval: the conditional file plan / type-states change with the flag set.
     fomodPreview = null; // a choice invalidates a previously-shown preview (must re-resolve)
   }
@@ -756,20 +678,11 @@
 
   // --- Plugin manager (UI-SPEC §B/§C) ---
 
-  // A plugin is in the "masters" group if it is a master (.esm) or ESL-flagged (.esl).
-  const isMaster = (p: PluginInfo) => p.kind === "esm" || p.kind === "esl";
-
-  // The badge text for a plugin's kind.
-  const kindBadge = (k: PluginInfo["kind"]) => k.toUpperCase();
-
-  // True if swapping `plugins[i]` with its neighbor in `dir` would put a regular plugin
-  // before a master (or vice-versa) — a masters-first violation we must PREVENT (§B.2).
-  function violatesMastersFirst(i: number, dir: -1 | 1): boolean {
-    const other = i + dir;
-    if (other < 0 || other >= plugins.length) return true; // out of range: disabled anyway
-    // A move is only allowed within the same group (both masters or both regular).
-    return isMaster(plugins[i]) !== isMaster(plugins[other]);
-  }
+  // Masters-first / protected-master rules live in $lib/plugins (pure + unit-tested).
+  const isMaster = order.isMaster;
+  const kindBadge = order.kindBadge;
+  const violatesMastersFirst = (i: number, dir: -1 | 1) =>
+    order.violatesMastersFirst(plugins, i, dir);
 
   async function loadPlugins() {
     if (selectedAppid === null) return;
@@ -783,19 +696,19 @@
   // violate masters-first is refused with the §B.2 inline warning (controls are also
   // disabled for these, this is the defense-in-depth path).
   async function onPluginReorder(i: number, dir: -1 | 1) {
+    // Protected masters are engine-locked (SFLO-03); the UI is the courtesy layer, the engine
+    // rejects a protected reorder authoritatively.
     const other = i + dir;
     if (other < 0 || other >= plugins.length) return;
-    // Protected masters are engine-locked (SFLO-03); the UI is the courtesy layer, the engine
-    // rejects a protected reorder authoritatively. Refuse to move a protected row or its target.
-    if (plugins[i].protected || plugins[other].protected) return;
-    if (violatesMastersFirst(i, dir)) {
-      mastersFirstError = "Masters must load before regular plugins.";
+    const next = order.reorder(plugins, i, dir);
+    if (!next) {
+      if (!order.touchesProtected(plugins, i, dir)) {
+        mastersFirstError = "Masters must load before regular plugins.";
+      }
       return;
     }
     mastersFirstError = null;
-    const next = [...plugins];
-    [next[i], next[other]] = [next[other], next[i]];
-    plugins = next.map((p, idx) => ({ ...p, order: idx }));
+    plugins = next;
   }
 
   async function onPluginToggle(name: string, enabled: boolean) {
@@ -2120,7 +2033,7 @@
                 <legend>{group.name}</legend>
                 {#if group.group_type === "SelectAtLeastOne"}
                   {@const n = group.options.filter((o) =>
-                    fomodChosen.has(fomodKey(fomodStep.name, group.name, o.name)),
+                    fomodChosen.has(fomodLogic.fomodKey(fomodStep.name, group.name, o.name)),
                   ).length}
                   {#if n < 1}
                     <p class="warn fomod-min">Select at least 1 option(s) to continue.</p>
@@ -2128,7 +2041,7 @@
                 {/if}
                 <ul class="fomod-options">
                   {#each group.options as opt (opt.name)}
-                    {@const key = fomodKey(fomodStep.name, group.name, opt.name)}
+                    {@const key = fomodLogic.fomodKey(fomodStep.name, group.name, opt.name)}
                     {@const checked = fomodChosen.has(key)}
                     {@const isRadio =
                       group.group_type === "SelectExactlyOne" ||

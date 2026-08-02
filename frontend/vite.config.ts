@@ -1,5 +1,5 @@
 import { sveltekit } from "@sveltejs/kit/vite";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 // Tauri serves the dev server on a fixed port and embeds the static build in release.
 export default defineConfig({
@@ -9,5 +9,9 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+  },
+  // Unit tests for the pure $lib modules (no browser/webview needed).
+  test: {
+    include: ["src/**/*.test.ts"],
   },
 });
