@@ -142,9 +142,11 @@ Reach for the skill that matches the shape of the work:
 | Not sure which applies | `/ask-matt` |
 
 Edit code directly; there is no gate to route through. What is NOT optional is the
-[definition of done](#definition-of-done) above — a change is finished when the gates pass
-and anything touching `deploy`/`store` carries a test proving the reversibility or
-crash-recovery property still holds.
+definition of done in `AGENTS.md` — a change is finished when `cargo fmt --check`,
+`cargo test --workspace --locked`, `cargo clippy --workspace --all-targets -- -D warnings`,
+and (for frontend changes) `npm --prefix frontend run check` + `npm --prefix frontend test`
+all pass, and anything touching `deploy`/`store` carries a test proving the reversibility
+or crash-recovery property still holds.
 
 ## Agent skills
 
