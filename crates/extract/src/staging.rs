@@ -26,6 +26,35 @@ pub struct StagedMod {
     pub files: Vec<PathBuf>,
 }
 
+/// Turn an untrusted display name into ONE safe staging-subdir component.
+///
+/// Every non-alphanumeric character other than `-`, `_` and space becomes `_`, so the result
+/// can contain no path separator, no `..`, and no NUL — a name like `../../etc/passwd`
+/// collapses to `______etc_passwd`. An empty or whitespace-only name falls back to
+/// `fallback` so callers never join an empty component onto the staging dir.
+///
+/// This is only the *well-formedness* layer: the authoritative path-traversal defense is
+/// [`crate::validate_entry`] on archive entries. It lives here (rather than being copied into
+/// each Tauri adapter) so the download and FOMOD install paths cannot drift apart.
+pub fn staging_dir_name(name: &str, fallback: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim();
+    if trimmed.is_empty() {
+        fallback.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 /// Install `archive` into `staging_root`, returning the validated [`StagedMod`].
 ///
 /// `staging_root` is the directory the staged tree should occupy. It must not
@@ -456,5 +485,53 @@ mod root_detection_tests {
         let plan = detect_archive_root(tmp.path()).unwrap();
         let children = assert_wrapper(&plan, &tmp.path().join("WrapDir"), &["SKSE"]);
         assert!(children[0].join("plugins/foo.dll").is_file());
+    }
+}
+
+#[cfg(test)]
+mod name_tests {
+    use super::staging_dir_name;
+    use std::path::{Component, Path};
+
+    #[test]
+    fn traversal_and_separators_collapse_to_underscores() {
+        assert_eq!(staging_dir_name("../etc/passwd", "x"), "___etc_passwd");
+        assert_eq!(staging_dir_name("a\\b", "x"), "a_b");
+    }
+
+    #[test]
+    fn ordinary_names_survive_intact() {
+        assert_eq!(
+            staging_dir_name("My Mod v1-2_final", "x"),
+            "My Mod v1-2_final"
+        );
+    }
+
+    #[test]
+    fn blank_names_fall_back() {
+        assert_eq!(staging_dir_name("   ", "fomod-mod"), "fomod-mod");
+        assert_eq!(staging_dir_name("", "nexus-mod"), "nexus-mod");
+    }
+
+    #[test]
+    fn the_result_is_always_exactly_one_normal_path_component() {
+        for raw in [
+            "../../root",
+            "/abs/path",
+            "C:\\Windows",
+            "..",
+            ".",
+            "with\0nul",
+            "mod\nname",
+            "🎮 emoji mod",
+        ] {
+            let safe = staging_dir_name(raw, "fallback");
+            let comps: Vec<_> = Path::new(&safe).components().collect();
+            assert_eq!(comps.len(), 1, "{raw:?} -> {safe:?} must be one component");
+            assert!(
+                matches!(comps[0], Component::Normal(_)),
+                "{raw:?} -> {safe:?} must be a normal component"
+            );
+        }
     }
 }

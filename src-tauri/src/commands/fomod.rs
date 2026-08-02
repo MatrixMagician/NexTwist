@@ -321,7 +321,9 @@ pub async fn apply_fomod(
 
     // 2. Stage the validated archive into a per-mod staging subdir (the SAME defended
     //    extractor the local-archive + download paths use). No new write primitive.
-    let staging_root = game.staging_dir.join(sanitize(&name));
+    let staging_root = game
+        .staging_dir
+        .join(extract::staging_dir_name(&name, "fomod-mod"));
     let staged = extract::install_archive(&archive, &staging_root).map_err(boundary_err)?;
 
     // 3. Persist as an ordinary ManagedMod so it appears in the existing mod list.
@@ -510,28 +512,6 @@ fn classify_plan(plan: &[fomod::FileInstall]) -> ResolvePreview {
     }
 }
 
-/// Sanitize a display name into a single safe staging-subdir component (no separators, no
-/// traversal). The full path-traversal defense still lives in `extract`; this only keeps
-/// the staging subdir name well-formed (mirrors `commands::downloads::sanitize`).
-fn sanitize(name: &str) -> String {
-    let cleaned: String = name
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    let trimmed = cleaned.trim();
-    if trimmed.is_empty() {
-        "fomod-mod".to_string()
-    } else {
-        trimmed.to_string()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     //! Headless adapter tests (no webview). They exercise the adapter's REAL logic — the
@@ -683,9 +663,9 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_strips_separators_and_falls_back() {
-        assert_eq!(super::sanitize("My Mod"), "My Mod");
-        assert_eq!(super::sanitize("../etc/passwd"), "___etc_passwd");
-        assert_eq!(super::sanitize("   "), "fomod-mod");
+    fn staging_subdir_name_comes_from_the_engine_with_the_fomod_fallback() {
+        // The rules themselves are tested in `extract`; this pins the fallback this
+        // adapter passes so a blank module name still yields a usable subdir.
+        assert_eq!(extract::staging_dir_name("   ", "fomod-mod"), "fomod-mod");
     }
 }

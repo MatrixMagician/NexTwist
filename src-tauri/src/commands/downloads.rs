@@ -330,7 +330,7 @@ async fn run_download(
     //    is indistinguishable from a local one here; extract enforces zip-slip/symlink/`..`
     //    defenses identically. Stage under a per-mod subdir of the game's staging dir.
     emit_progress(window, id, written, total_hint, "extracting", None);
-    let staging_root = staging_dir.join(sanitize(&meta.display_name));
+    let staging_root = staging_dir.join(extract::staging_dir_name(&meta.display_name, "nexus-mod"));
     let staged = extract::install_archive(&archive_path, &staging_root).map_err(fail)?;
     // The validated tree is staged; remove the downloaded archive (no longer needed).
     let _ = tokio::fs::remove_file(&archive_path).await;
@@ -445,26 +445,4 @@ fn emit_progress(
             reason,
         },
     );
-}
-
-/// Sanitize a display name into a single safe staging-subdir component (no separators,
-/// no traversal). The full path-traversal defense still lives in `extract`; this only
-/// keeps the staging subdir name well-formed.
-fn sanitize(name: &str) -> String {
-    let cleaned: String = name
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    let trimmed = cleaned.trim();
-    if trimmed.is_empty() {
-        "nexus-mod".to_string()
-    } else {
-        trimmed.to_string()
-    }
 }
