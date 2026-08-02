@@ -296,6 +296,9 @@ pub async fn deploy_collection(
             .get_collection(collection_id)
             .map_err(boundary_err)?
             .ok_or_else(|| format!("collection {collection_id} is not installed"))?;
+        // Deploying another game's Collection into this game's profile would stage the wrong
+        // mods against the wrong install; refuse rather than mix them.
+        same_game_gate(&collection, appid)?;
         let mods = guard
             .store
             .list_collection_mods(collection_id)
@@ -361,6 +364,11 @@ pub async fn uninstall_collection(
             .get_collection(collection_id)
             .map_err(boundary_err)?
             .ok_or_else(|| format!("collection {collection_id} is not installed"))?;
+        // The collection must belong to the game we are about to purge. Without this the
+        // command would purge game `appid` while deleting another game's staged trees and
+        // rows — a cross-game destructive mismatch, and the reason the mod lookups below can
+        // safely be by id.
+        same_game_gate(&collection, appid)?;
         let mods = guard
             .store
             .list_collection_mods(collection_id)
@@ -420,6 +428,24 @@ pub async fn uninstall_collection(
 }
 
 // ── Pure / small helpers (no business logic — Anti-Pattern-4) ────────────────────────
+
+/// Refuse to operate on a Collection that belongs to a different game than the one the
+/// command was invoked for.
+///
+/// `uninstall_collection` purges game `appid` and then deletes the Collection's staged trees
+/// and rows. If the Collection belonged to another game those two halves would disagree — it
+/// would purge one game while destroying another's staged mods. Pure so the gate is
+/// unit-tested; it is also what lets the row cleanup look mods up by id.
+fn same_game_gate(collection: &nextwist_core::Collection, appid: u32) -> Result<(), String> {
+    if collection.appid == appid {
+        Ok(())
+    } else {
+        Err(format!(
+            "collection {} belongs to game {}, not {appid}",
+            collection.id, collection.appid
+        ))
+    }
+}
 
 /// The Premium gate (T-04-16): a non-Premium session may NOT download a Collection. Returns
 /// `Ok(())` for a Premium session, or the exact Premium-required notice string (UI-SPEC §B.1
@@ -530,6 +556,31 @@ mod tests {
         assert!(
             err.contains("Premium account"),
             "the free-session notice names the Premium requirement: {err}"
+        );
+    }
+
+    fn collection(appid: u32) -> nextwist_core::Collection {
+        nextwist_core::Collection {
+            id: 7,
+            appid,
+            slug: "some-collection".to_string(),
+            revision: 1,
+            name: "Some Collection".to_string(),
+            profile_id: None,
+        }
+    }
+
+    /// `uninstall_collection` purges one game and deletes the Collection's staged trees; if
+    /// the Collection belonged to a DIFFERENT game those halves would target different
+    /// installs. The gate refuses the mismatch rather than performing half a destructive op.
+    #[test]
+    fn a_collection_from_another_game_is_refused() {
+        assert!(same_game_gate(&collection(489830), 489830).is_ok());
+        let err = same_game_gate(&collection(377160), 489830)
+            .expect_err("a cross-game collection must be refused");
+        assert!(
+            err.contains("377160") && err.contains("489830"),
+            "the error names both games so the mismatch is obvious: {err}"
         );
     }
 
