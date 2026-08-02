@@ -27,6 +27,10 @@ use crate::method::apply_idempotent;
 /// Operation kind tokens recorded in the journal `kind` column.
 pub const KIND_DEPLOY: &str = "deploy";
 pub const KIND_PURGE: &str = "purge";
+/// The StarfieldCustom.ini activation op. Rides a bare `StarfieldCustom.ini` sentinel
+/// OUTSIDE the `Data/` deploy root; its replay resolves via `steam::my_games_path`, never
+/// `resolve_target`/`guard_within_root` — the `Data/`-root guard stays untouched (SFINI-04).
+pub const KIND_INI: &str = "ini";
 
 /// Record a `pending` deploy intent for `target_rel` and return its id. The store
 /// commits this row under `synchronous=FULL` so it is on stable storage before the
@@ -44,6 +48,25 @@ pub fn begin_deploy(
         method: Some(method),
         source_hash: Some(source_hash.to_string()),
         kind: KIND_DEPLOY.to_string(),
+    };
+    Ok(store.begin_op(&intent)?)
+}
+
+/// Record a `pending` StarfieldCustom.ini-activation intent and return its id. The
+/// `sentinel_rel` is the bare `StarfieldCustom.ini` (NO `Data/` prefix, Pitfall 2) so it
+/// can never collide with a `Data/`-rooted manifest relpath. Mirrors [`begin_purge`]
+/// (`method: None`, `source_hash: None`).
+pub fn begin_ini(
+    store: &Store,
+    appid: u32,
+    sentinel_rel: &Path,
+) -> Result<JournalId, DeployError> {
+    let intent = OpIntent {
+        appid,
+        target_rel: sentinel_rel.to_path_buf(),
+        method: None,
+        source_hash: None,
+        kind: KIND_INI.to_string(),
     };
     Ok(store.begin_op(&intent)?)
 }
@@ -126,6 +149,7 @@ pub fn replay(store: &Store, game: &Game) -> Result<ReplayOutcome, DeployError> 
                 // the original deploy created (the same set purge() would clean up).
                 outcome.purged_rels.push(row.target_rel.clone());
             }
+            KIND_INI => replay_ini(store, game, row)?,
             other => {
                 tracing::warn!(kind = other, "unknown journal kind; marking done to avoid a stuck row");
                 store.mark_done(row.id)?;
@@ -178,4 +202,68 @@ fn replay_purge(store: &Store, game: &Game, row: &JournalRow) -> Result<(), Depl
     store.remove_deployed_file(game.appid, &row.target_rel)?;
     finish_purge(store, row.id)?;
     Ok(())
+}
+
+/// Roll a pending `KIND_INI` row back to its recorded provenance idempotently.
+///
+/// This is the copy of [`replay_purge`]'s body that swaps ONLY the target resolution: the
+/// INI target resolves via `steam::my_games_path(&game.prefix)`, NEVER `resolve_target` /
+/// `guard_within_root` (Pitfall 1 — the copy-paste trap; the `Data/`-root guard stays
+/// byte-for-byte untouched, SFINI-04). Rolling a crashed *ensure* back to provenance is a
+/// valid recovery: the activation simply didn't take, and re-runs on the next deploy.
+fn replay_ini(store: &Store, game: &Game, row: &JournalRow) -> Result<(), DeployError> {
+    let target =
+        steam::my_games_path(&game.prefix).join(crate::gameconfig::INI_FILENAME);
+    crate::gameconfig::restore_ini_at(store, game, &target)?;
+    // The sentinel is never in the deploy manifest, so this is a harmless no-op mirror of
+    // replay_purge; kept for symmetry.
+    store.remove_deployed_file(game.appid, &row.target_rel)?;
+    store.mark_done(row.id)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod ini_replay_tests {
+    use super::*;
+    use crate::gameconfig::{self, IniConflictResolution, ensure_ini_active};
+    use std::path::Path;
+    use store::Store;
+    use tempfile::TempDir;
+
+    const STARFIELD: u32 = 1716740;
+
+    /// A crashed INI op (a lingering `pending` KIND_INI row) is replayed to provenance via
+    /// `my_games_path` — NEVER `resolve_target` — so recovery touches the prefix INI and
+    /// never leaves a stray `Data/StarfieldCustom.ini` (Pitfall 1).
+    #[test]
+    fn replay_ini_resolves_under_prefix_not_data_and_rolls_back() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let store = Store::open(&root.join("d.db")).unwrap();
+        let game = Game {
+            appid: STARFIELD,
+            name: "Starfield".into(),
+            install_dir: root.join("install"),
+            prefix: root.join("prefix"),
+            staging_dir: root.join("staging"),
+        };
+        // Activate: creates the INI under the PREFIX (CreatedByNexTwist).
+        ensure_ini_active(&store, &game, IniConflictResolution::Block).unwrap();
+        let prefix_ini =
+            steam::my_games_path(&game.prefix).join(gameconfig::INI_FILENAME);
+        assert!(prefix_ini.exists());
+
+        // Simulate a crash mid-op: a lingering pending KIND_INI row.
+        begin_ini(&store, game.appid, Path::new(gameconfig::INI_FILENAME)).unwrap();
+        assert!(!store.pending_ops().unwrap().is_empty());
+
+        // Recovery replays it to provenance (absence) idempotently.
+        let outcome = replay(&store, &game).unwrap();
+        assert_eq!(outcome.replayed, 1);
+        assert!(!prefix_ini.exists(), "rolled back to CreatedByNexTwist absence");
+        // The replay resolved via my_games_path, never Data/ — no stray Data/ INI exists.
+        let data_ini = crate::deploy_root(&game.install_dir).join(gameconfig::INI_FILENAME);
+        assert!(!data_ini.exists(), "replay_ini must NEVER touch the Data/ root");
+        assert!(store.pending_ops().unwrap().is_empty());
+    }
 }

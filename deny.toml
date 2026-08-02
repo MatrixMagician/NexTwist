@@ -25,6 +25,17 @@ name = "unrar"
 [[bans.deny]]
 name = "unrar_sys"
 
+# Guard rail backing the RUSTSEC-2026-0194/0195 ignores in [advisories].
+# The vulnerable quick-xml 0.39.x is tolerated ONLY as a transitive dep of `plist`
+# (Tauri build-time config parsing, trusted input). `wrappers` makes that explicit:
+# if any OTHER crate — especially our own nextwist-fomod, which parses UNTRUSTED
+# mod XML — ever resolves to 0.39.x, cargo-deny FAILS instead of the advisory
+# ignore silently covering it.
+[[bans.deny]]
+name = "quick-xml"
+version = "<0.41"
+wrappers = ["plist"]
+
 [licenses]
 # Permissive set the stack uses. blake3/ring may pull Apache-2.0 WITH LLVM-exception;
 # unicode-ident pulls Unicode-3.0. MPL-2.0 is file-level copyleft and compatible.
@@ -82,6 +93,26 @@ yanked = "deny"
 # Scope unmaintained checks to OUR workspace crates only (not the transitive Tauri tree).
 # cargo-deny 0.19's `unmaintained` takes a scope, not a severity.
 unmaintained = "workspace"
+
+# Vulnerability ignores. cargo-deny only accepts `id` + `reason` here (no version
+# pinning), so each ignore is BACKED BY a `[[bans.deny]]` rule below that pins the
+# vulnerable version to its single permitted wrapper. That way the ignore cannot
+# silently start covering a dependency we actually control.
+# Re-check these whenever Tauri is upgraded.
+ignore = [
+    # RUSTSEC-2026-0194 (quadratic duplicate-attribute check) and RUSTSEC-2026-0195
+    # (unbounded namespace-declaration allocation) in quick-xml.
+    #
+    # Our OWN untrusted-XML surface (crates/fomod, which parses mod-supplied
+    # ModuleConfig.xml) is NOT affected: the workspace pins quick-xml >= 0.41, which
+    # carries both fixes. The only remaining 0.39.x copy comes via
+    # `plist <- tauri-utils <- tauri-build`, i.e. Tauri parsing OUR OWN build-time
+    # config (Info.plist / tauri.conf.json) at compile time. That input is trusted and
+    # never attacker-controlled, so neither the DoS nor the memory-exhaustion vector is
+    # reachable at runtime. No upgrade exists until upstream Tauri bumps plist.
+    { id = "RUSTSEC-2026-0194", reason = "only reachable via plist (Tauri build-time config parsing); crates/fomod pins quick-xml >=0.41" },
+    { id = "RUSTSEC-2026-0195", reason = "only reachable via plist (Tauri build-time config parsing); crates/fomod pins quick-xml >=0.41" },
+]
 
 [sources]
 unknown-registry = "warn"

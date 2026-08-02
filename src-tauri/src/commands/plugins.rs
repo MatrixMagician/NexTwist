@@ -28,7 +28,7 @@ use crate::state::AppState;
 fn merged_plugins_locked(
     guard: &MutexGuard<'_, AppState>,
     appid: u32,
-) -> Result<Vec<Plugin>, String> {
+) -> Result<Vec<loadorder::PluginView>, String> {
     let game = guard
         .store
         .get_game(appid)
@@ -45,8 +45,9 @@ fn merged_plugins_locked(
         .map(|m| m.staging_root)
         .collect();
     let data_dir = game.install_dir.join("Data");
-    let scanned =
-        loadorder::scan_plugins_for(game_id, &roots, &data_dir).map_err(boundary_err)?;
+    // SFLO-03: scan into the richer PluginView so each row carries `medium` from the header.
+    let mut merged =
+        loadorder::scan_plugin_views_for(game_id, &roots, &data_dir).map_err(boundary_err)?;
 
     let profile_id = guard
         .store
@@ -56,18 +57,59 @@ fn merged_plugins_locked(
         .ok_or_else(|| format!("game {appid} has no active profile"))?;
     let stored = guard.store.list_plugin_state(profile_id).map_err(boundary_err)?;
 
-    let mut merged: Vec<Plugin> = scanned
-        .into_iter()
-        .map(|mut p| {
-            if let Some(s) = stored.iter().find(|s| s.name == p.name) {
-                p.enabled = s.enabled;
-                p.order = s.order;
-            }
-            p
-        })
+    // Merge the per-profile enable/order onto the scanned view (match by name).
+    for view in &mut merged {
+        if let Some(s) = stored.iter().find(|s| s.name == view.name) {
+            view.enabled = s.enabled;
+            view.order = s.order;
+        }
+    }
+
+    // SFLO-03 protected: fill each view's `protected` from the LIVE libloot probe. This is the
+    // engine's authority — the adapter only supplies the paths + enabled-name set (no name
+    // literals). Computed for every supported game (SSE/FO4 base masters are implicitly active
+    // too). Degrade gracefully: a probe Err (unresolvable prefix / libloot open failure) is
+    // LOGGED and the protected set treated as EMPTY — v1.0 `list_plugins` succeeded from
+    // scan+store alone, so a probe failure must never break the list view (no SSE/FO4 regression).
+    let enabled_names: std::collections::HashSet<String> = merged
+        .iter()
+        .filter(|v| v.enabled)
+        .map(|v| v.name.clone())
         .collect();
+    let protected = protected_set(&game, appid, &enabled_names);
+    for view in &mut merged {
+        view.protected = protected.contains(&view.name);
+    }
+
     merged.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.name.cmp(&b.name)));
     Ok(merged)
+}
+
+/// Compute the implicitly-active protected-master set from the live libloot probe, degrading
+/// to an EMPTY set (logged) on any probe failure so the caller never fails the list view.
+///
+/// The protected determination is entirely the engine's `loadorder::protected_plugins`; this
+/// helper only resolves the prefix AppData path and swallows the probe error into an empty set.
+fn protected_set(
+    game: &Game,
+    appid: u32,
+    enabled_names: &std::collections::HashSet<String>,
+) -> std::collections::HashSet<String> {
+    let Some(folder) = loadorder::appdata_folder_name(appid) else {
+        return std::collections::HashSet::new();
+    };
+    let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
+    match loadorder::protected_plugins(appid, &game.install_dir, &appdata_local, enabled_names) {
+        Ok(set) => set,
+        Err(e) => {
+            tracing::warn!(
+                appid,
+                error = %e,
+                "protected_plugins probe failed; treating protected set as empty (list view still returns)"
+            );
+            std::collections::HashSet::new()
+        }
+    }
 }
 
 /// Resolve the active profile id for a game, or a clear boundary error if none is set.
@@ -93,7 +135,7 @@ async fn active_profile_id(
 async fn merged_plugins(
     state: &State<'_, Mutex<AppState>>,
     appid: u32,
-) -> Result<Vec<Plugin>, String> {
+) -> Result<Vec<loadorder::PluginView>, String> {
     // WR-03: acquire the state lock once and build the entire merged view (all store reads
     // + the scan) under it, so the scan and the stored-state read it is merged with are a
     // consistent snapshot rather than two separately-locked reads with a scan between.
@@ -107,7 +149,7 @@ async fn merged_plugins(
 pub async fn list_plugins(
     state: State<'_, Mutex<AppState>>,
     appid: u32,
-) -> Result<Vec<Plugin>, String> {
+) -> Result<Vec<loadorder::PluginView>, String> {
     merged_plugins(&state, appid).await
 }
 
@@ -134,11 +176,18 @@ pub async fn set_plugin_enabled(
         .map(|p| p.id)
         .ok_or_else(|| format!("game {appid} has no active profile"))?;
     let merged = merged_plugins_locked(&guard, appid)?;
-    let mut plugin = merged
+    let view = merged
         .into_iter()
         .find(|p| p.name == name)
         .ok_or_else(|| format!("plugin '{name}' not found for game {appid}"))?;
-    plugin.enabled = enabled;
+    // Persist via the frozen `core::Plugin` (set_plugin_state's contract) — the view's
+    // `medium`/`protected` are derived, never stored.
+    let plugin = Plugin {
+        name: view.name,
+        kind: view.kind,
+        enabled,
+        order: view.order,
+    };
     guard.store.set_plugin_state(profile_id, &plugin).map_err(boundary_err)
 }
 
@@ -221,7 +270,17 @@ pub async fn sort_with_loot(
 ) -> Result<loadorder::SortProposal, String> {
     let game = require_game(&state, appid).await?;
     let app_data = state.lock().await.data_dir.clone();
-    let plugins = merged_plugins(&state, appid).await?;
+    // `propose_sort` speaks `core::Plugin`; drop the view-only medium/protected booleans.
+    let plugins: Vec<Plugin> = merged_plugins(&state, appid)
+        .await?
+        .into_iter()
+        .map(|v| Plugin {
+            name: v.name,
+            kind: v.kind,
+            enabled: v.enabled,
+            order: v.order,
+        })
+        .collect();
     let folder = loadorder::appdata_folder_name(appid)
         .ok_or_else(|| format!("game {appid} is not supported"))?;
     let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
@@ -238,6 +297,66 @@ pub async fn sort_with_loot(
     .await
     .map_err(|e| format!("LOOT sort task failed to complete: {e}"))?
     .map_err(boundary_err)
+}
+
+/// Reconcile the on-disk `plugins.txt` against the recorded plugin state (SFLO-04).
+///
+/// Thin adapter: under one held lock it resolves the managed game + active profile, reads the
+/// recorded per-profile plugin state, reads the on-disk asterisk `plugins.txt` from the prefix
+/// AppData (an absent file → empty string, NOT an error — a never-launched/unwritten game
+/// reconciles cleanly), computes the libloot-derived protected set, and forwards EXACTLY ONE
+/// call to `loadorder::reconcile_plugins_txt`. All classification lives in the engine.
+///
+/// `deploy::verify` / `VerifyReport` is a SEPARATE surface and is deliberately untouched:
+/// `plugins.txt` lives in the prefix AppData, never seen by the `Data/`-hash verify walk
+/// (07-RESEARCH Pitfall 4).
+///
+/// `protected_plugins` opens a libloot game but does no blocking HTTP (unlike `sort_with_loot`'s
+/// masterlist fetch), so — like `save_plugin_order` — it is called directly under the lock.
+#[tauri::command]
+pub async fn reconcile_plugins(
+    state: State<'_, Mutex<AppState>>,
+    appid: u32,
+) -> Result<loadorder::ReconcileState, String> {
+    let guard = state.lock().await;
+    let game = guard
+        .store
+        .get_game(appid)
+        .map_err(boundary_err)?
+        .ok_or_else(|| format!("game {appid} is not managed"))?;
+    let profile_id = guard
+        .store
+        .active_profile(appid)
+        .map_err(boundary_err)?
+        .map(|p| p.id)
+        .ok_or_else(|| format!("game {appid} has no active profile"))?;
+    let recorded = guard.store.list_plugin_state(profile_id).map_err(boundary_err)?;
+
+    let folder = loadorder::appdata_folder_name(appid)
+        .ok_or_else(|| format!("game {appid} is not supported"))?;
+    let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
+
+    // An absent Plugins.txt is treated as empty (never-launched game reconciles cleanly), NOT
+    // an error; any other read error is a real boundary error.
+    let on_disk_txt = match std::fs::read_to_string(appdata_local.join("Plugins.txt")) {
+        Ok(txt) => txt,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(boundary_err(e)),
+    };
+
+    // Protected set from the live libloot probe (data-driven EXPECTED set); enabled_names =
+    // the recorded state's enabled plugins (what NexTwist itself writes as `*` lines). IN-02:
+    // degrade gracefully via the same `protected_set` helper `list_plugins` uses — a probe
+    // failure (unresolvable prefix / libloot hiccup) logs and treats protected as EMPTY rather
+    // than hard-failing this advisory reconciliation surface with a scary error toast.
+    let enabled_names: std::collections::HashSet<String> = recorded
+        .iter()
+        .filter(|p| p.enabled)
+        .map(|p| p.name.clone())
+        .collect();
+    let protected = protected_set(&game, appid, &enabled_names);
+
+    Ok(loadorder::reconcile_plugins_txt(&recorded, &on_disk_txt, &protected))
 }
 
 #[cfg(test)]

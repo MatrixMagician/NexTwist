@@ -44,6 +44,7 @@
 //! `header_only`), so every plugin in a load order must physically exist in the game `Data/`
 //! dir with at least a valid 24-byte TES4 header.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use libloot::{Game, GameType};
@@ -55,6 +56,8 @@ use crate::error::LoadOrderError;
 const SKYRIM_SE: u32 = 489830;
 /// Fallout 4 AppID (mirrors `nextwist_steam::resolve::FALLOUT4`).
 const FALLOUT4: u32 = 377160;
+/// Starfield AppID (mirrors `nextwist_steam::resolve::STARFIELD`).
+const STARFIELD: u32 = 1716740;
 
 /// Build the Proton-prefix AppData/Local path libloot's `with_local_path` targets on
 /// Linux: `<prefix>/drive_c/users/steamuser/AppData/Local/<game_name>` (Pitfall 1/2).
@@ -82,6 +85,7 @@ pub fn game_type_for(appid: u32) -> Option<GameType> {
     match appid {
         SKYRIM_SE => Some(GameType::SkyrimSE),
         FALLOUT4 => Some(GameType::Fallout4),
+        STARFIELD => Some(GameType::Starfield),
         _ => None,
     }
 }
@@ -94,6 +98,7 @@ pub fn appdata_folder_name(appid: u32) -> Option<&'static str> {
     match appid {
         SKYRIM_SE => Some("Skyrim Special Edition"),
         FALLOUT4 => Some("Fallout4"),
+        STARFIELD => Some("Starfield"),
         _ => None,
     }
 }
@@ -149,6 +154,48 @@ pub fn load_canonical_order(game: &mut Game) -> Result<Vec<String>, LoadOrderErr
     game.load_current_load_order_state()
         .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
     Ok(game.load_order().iter().map(|s| (*s).to_string()).collect())
+}
+
+/// Compute the protected / implicitly-active master set from an ALREADY-loaded game.
+///
+/// A plugin is protected iff libloot reports it active (`is_plugin_active`) AND NexTwist did
+/// NOT itself enable it (`enabled_names` = the plugins NexTwist writes as `*Name` lines). That
+/// captures exactly the game's hardcoded early-loaders — the game master, its hardcoded DLC,
+/// and Creation-Club `*.ccc` plugins — which libloot keeps active WITHOUT a `*` line (loot.rs
+/// header doc). It is 100% libloot-derived: there is NO base-master name literal here, so a
+/// user-enabled `*`-line ESM master (which SSE/FO4 users legitimately reorder) is never
+/// protected. The caller must have already run `load_current_load_order_state`.
+fn implicit_protected_set(game: &Game, enabled_names: &HashSet<String>) -> HashSet<String> {
+    game.load_order()
+        .iter()
+        .filter(|name| game.is_plugin_active(name) && !enabled_names.contains(**name))
+        .map(|name| (*name).to_string())
+        .collect()
+}
+
+/// The protected / implicitly-active master set for a game (SFLO-03), derived purely from
+/// libloot — never a hard-coded name list.
+///
+/// Opens the game via the existing [`open_game`] seam, loads the current load-order state,
+/// and returns every installed plugin libloot reports active that NexTwist did not itself
+/// enable (`enabled_names`). Those are the game's hardcoded early-loaders (game master,
+/// hardcoded DLC, Creation-Club `*.ccc` plugins), which the UI renders as locked rows and the
+/// engine refuses to reorder/disable. `early_loading_plugins()` is private in libloot 0.29.5,
+/// so `is_plugin_active` after a load is the only public proxy (07-RESEARCH Pattern 2).
+///
+/// # Errors
+/// * [`LoadOrderError::NoLocalAppData`] / unsupported appid via [`open_game`].
+/// * [`LoadOrderError::Loot`] if libloot fails to read the load-order state.
+pub fn protected_plugins(
+    appid: u32,
+    install_dir: &Path,
+    appdata_local: &Path,
+    enabled_names: &HashSet<String>,
+) -> Result<HashSet<String>, LoadOrderError> {
+    let mut game = open_game(appid, install_dir, appdata_local)?;
+    game.load_current_load_order_state()
+        .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
+    Ok(implicit_protected_set(&game, enabled_names))
 }
 
 /// Set the given order and persist it (libloot saves internally — no separate `save`).
@@ -330,6 +377,18 @@ pub fn apply_load_order(
     // which include the game master + hardcoded DLC + CCC early-loaders) defer to libloot.
     // NEVER hand-roll the early-loader order (RC1).
     let canonical = load_canonical_order(&mut game)?;
+
+    // NO NexTwist-side protected-master guard here (SFLO-03). A protected / implicitly-active
+    // master's RESTING state in NexTwist's model is `enabled == false` (it is active WITHOUT a
+    // `*` line — masters are never asterisk-written, libloot owns their activation), so any
+    // `!enabled`-based "disable" check fires on the normal state, not tampering. And the master
+    // request order carries no user intent (the UI locks masters and the merge name-sorts them),
+    // so comparing it to libloot's canonical order is a false positive, not a genuine divergence.
+    // Protection is delivered by libloot itself: `reconcile_order` below forces every master into
+    // libloot's `canonical` position unconditionally (a swapped/disabled master in the request
+    // cannot survive), libloot pins its early-loader prefix and rejects a genuine reorder, and it
+    // never asterisk-writes masters. The UI lock is the user-facing half. (CR-01)
+
     let user_movable: Vec<String> = on_disk
         .iter()
         .filter(|p| !is_master_group(p.kind))
@@ -355,6 +414,11 @@ pub struct SortProposal {
     pub proposed: Vec<String>,
     /// Critical (Warn/Error) masterlist messages to surface above the proposal.
     pub warnings: Vec<String>,
+    /// The bundled masterlist's recorded snapshot date (SFLO-02 "masterlist from {date} —
+    /// may be stale" note). Empty when no snapshot date is recorded for the game (the
+    /// `include_str!`'d snapshot has no runtime file to stat — see
+    /// [`crate::masterlist::masterlist_snapshot_date`]).
+    pub masterlist_date: String,
 }
 
 /// Propose a LOOT-sorted order WITHOUT writing anything (D-12: propose-then-apply).
@@ -410,7 +474,14 @@ pub fn propose_sort(
         .map_err(|e| LoadOrderError::Loot(e.to_string()))?;
 
     let warnings = critical_warnings(&game);
-    Ok(SortProposal { proposed, warnings })
+    let masterlist_date = crate::masterlist::masterlist_snapshot_date(appid)
+        .unwrap_or_default()
+        .to_string();
+    Ok(SortProposal {
+        proposed,
+        warnings,
+        masterlist_date,
+    })
 }
 
 /// Extract the masterlist's critical (Warn/Error) general messages for the review (A2).
@@ -460,11 +531,22 @@ mod tests {
     }
 
     #[test]
-    fn game_type_for_allow_lists_only_the_two_supported_games() {
+    fn game_type_for_allow_lists_only_the_supported_games() {
         assert!(matches!(game_type_for(SKYRIM_SE), Some(GameType::SkyrimSE)));
         assert!(matches!(game_type_for(FALLOUT4), Some(GameType::Fallout4)));
+        assert!(matches!(game_type_for(STARFIELD), Some(GameType::Starfield)));
         assert!(game_type_for(0).is_none());
         assert!(game_type_for(220).is_none());
+    }
+
+    #[test]
+    fn appdata_folder_name_allow_lists_only_the_supported_games() {
+        assert_eq!(appdata_folder_name(SKYRIM_SE), Some("Skyrim Special Edition"));
+        assert_eq!(appdata_folder_name(FALLOUT4), Some("Fallout4"));
+        // Starfield's Plugins.txt lives in AppData/Local/Starfield (Phase 7 consumes this).
+        assert_eq!(appdata_folder_name(STARFIELD), Some("Starfield"));
+        assert!(appdata_folder_name(0).is_none());
+        assert!(appdata_folder_name(220).is_none());
     }
 
     #[test]

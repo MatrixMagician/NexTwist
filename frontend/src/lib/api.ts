@@ -21,6 +21,50 @@ export interface Game {
   staging_dir: string;
 }
 
+/** CE2 first-launch config state (mirrors steam::Ce2ConfigState, externally-tagged serde).
+ *  Exactly one key is present; its value is the resolved (Ready) or expected (pending) path. */
+export type Ce2ConfigState = { Ready: string } | { FirstLaunchPending: string };
+
+/** Advisory version-drift signal (mirrors steam::DriftNotice). Present only when the
+ *  installed build is newer than the validated baseline — never blocks management. */
+export interface DriftNotice {
+  installed: number;
+  validated: number;
+  is_newer: boolean;
+}
+
+/** Aggregate Starfield detection status (mirrors steam::StarfieldStatus), forwarded
+ *  verbatim by the `starfield_status` command. */
+export interface StarfieldStatus {
+  ce2_state: Ce2ConfigState;
+  installed_build: number | null;
+  validated_build: number;
+  drift: DriftNotice | null;
+}
+
+/** How to resolve a pre-existing non-empty user `sResourceDataDirsFinal` on activation
+ *  (mirrors deploy::IniConflictResolution, externally-tagged serde — a bare string). */
+export type IniConflictResolution = "Block" | "UseNexTwist";
+
+/** Read-only preview of what loose-file activation would do (mirrors
+ *  deploy::IniActivationPreview). `conflict` is the user's non-empty current value that
+ *  would block auto-activation, or null. Never writes. */
+export interface IniActivationPreview {
+  will_create: boolean;
+  will_edit: boolean;
+  lines: string[];
+  conflict: string | null;
+}
+
+/** Outcome of an INI activation/restore op (mirrors deploy::IniOutcome, externally-tagged
+ *  serde). Unit variants are bare strings; `Blocked` carries the user's current value. */
+export type IniOutcome =
+  | "Activated"
+  | "AlreadyActive"
+  | { Blocked: { current_value: string } }
+  | "Restored"
+  | "NotActive";
+
 /** A validated staged mod (mirrors extract::StagedMod); handed back to deploy(). */
 export interface StagedMod {
   staging_root: string;
@@ -75,19 +119,31 @@ export interface FileConflict {
 /** A plugin's master/light/regular classification (mirrors core::PluginKind). */
 export type PluginKind = "esm" | "esl" | "esp";
 
-/** A plugin entry (mirrors core::Plugin). `order` is the zero-based load position. */
+/** A plugin entry (mirrors loadorder::PluginView). `order` is the zero-based load position.
+ *  `medium` (CE2 medium-master tier) and `protected` (libloot implicitly-active base master)
+ *  are engine-supplied booleans — the UI renders them, never decides them. `savePluginOrder`
+ *  sends these back harmlessly (core::Plugin ignores the extra fields). */
 export interface PluginInfo {
   name: string;
   kind: PluginKind;
   enabled: boolean;
   order: number;
+  medium: boolean;
+  protected: boolean;
 }
 
-/** A LOOT sort proposal (mirrors loadorder::SortProposal). `proposed` writes nothing. */
+/** A LOOT sort proposal (mirrors loadorder::SortProposal). `proposed` writes nothing.
+ *  `masterlist_date` is the bundled masterlist snapshot date (Starfield only). */
 export interface SortProposal {
   proposed: string[];
   warnings: string[];
+  masterlist_date: string;
 }
+
+/** SFLO-04 on-launch reconciliation verdict (mirrors loadorder::ReconcileState, externally-
+ *  tagged serde). `"InSync"` is the bare string (NOT `{InSync:null}`) — the calm in-sync branch;
+ *  `{ Drift: [...] }` lists beyond-expected plugin names (the amber discrepancy branch). */
+export type ReconcileState = "InSync" | { Drift: string[] };
 
 /** A profile (mirrors core::Profile). Exactly one profile is active per game. */
 export interface Profile {
@@ -394,6 +450,21 @@ export const addGameByFolder = (path: string, appid: number): Promise<Game> =>
 
 export const listGames = (): Promise<Game[]> => invoke("list_games");
 
+/** Starfield CE2 first-launch state + advisory version-drift (SFDET-02/03). Re-invoked on
+ *  the UI's explicit "Re-check"; reads only, writes nothing. */
+export const starfieldStatus = (appid: number): Promise<StarfieldStatus> =>
+  invoke("starfield_status", { appid });
+
+/** Preview loose-file (StarfieldCustom.ini) activation — read-only, writes nothing (SFINI-01). */
+export const previewIniActivation = (appid: number): Promise<IniActivationPreview> =>
+  invoke("preview_ini_activation", { appid });
+
+/** Apply loose-file activation, resolving a pre-existing user value per `resolution` (SFINI-03). */
+export const applyIniActivation = (
+  appid: number,
+  resolution: IniConflictResolution,
+): Promise<IniOutcome> => invoke("apply_ini_activation", { appid, resolution });
+
 export const installArchive = (appid: number, archive: string): Promise<StagedMod> =>
   invoke("install_archive", { appid, archive });
 
@@ -430,6 +501,10 @@ export const savePluginOrder = (appid: number, order: PluginInfo[]): Promise<str
 
 export const sortWithLoot = (appid: number): Promise<SortProposal> =>
   invoke("sort_with_loot", { appid });
+
+/** SFLO-04: classify the on-disk plugins.txt vs recorded intent (Starfield only). */
+export const reconcilePlugins = (appid: number): Promise<ReconcileState> =>
+  invoke("reconcile_plugins", { appid });
 
 export const listProfiles = (appid: number): Promise<Profile[]> =>
   invoke("list_profiles", { appid });

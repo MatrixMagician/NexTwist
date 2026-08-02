@@ -18,15 +18,19 @@ use crate::error::SteamError;
 pub const SKYRIM_SE: u32 = 489830;
 /// Fallout 4 AppID.
 pub const FALLOUT4: u32 = 377160;
+/// Starfield AppID (Creation Engine 2). Behaves as "just another allow-listed
+/// Bethesda AppID" across every `match appid` site (SFDET-01).
+pub const STARFIELD: u32 = 1716740;
 
-/// The complete allow-list of supported games (ENV-03).
-pub const SUPPORTED_APPIDS: &[u32] = &[SKYRIM_SE, FALLOUT4];
+/// The complete allow-list of supported games (ENV-03, SFDET-01).
+pub const SUPPORTED_APPIDS: &[u32] = &[SKYRIM_SE, FALLOUT4, STARFIELD];
 
 /// Display name for a supported AppID (used when the manifest omits one).
 fn default_name(appid: u32) -> &'static str {
     match appid {
         SKYRIM_SE => "Skyrim Special Edition",
         FALLOUT4 => "Fallout 4",
+        STARFIELD => "Starfield",
         _ => "Unknown Game",
     }
 }
@@ -166,6 +170,44 @@ pub fn resolve_from_root(library_root: &Path, appid: u32) -> Result<ResolvedGame
 struct AppManifest {
     installdir: String,
     name: Option<String>,
+    /// Steam's installed build number, stored as a quoted integer. Present for a
+    /// fully-installed app; read for the SFDET-03 version-drift compare.
+    buildid: Option<String>,
+}
+
+/// Read the installed Steam `buildid` from `appmanifest_<appid>.acf` (SFDET-03).
+///
+/// FAIL-SAFE and NON-BLOCKING: any missing file, unreadable manifest, parse error, or
+/// absent/unparseable `buildid` returns `None` — never an error, never a panic. The
+/// drift signal built on top of this is advisory only and must never gate management.
+pub fn installed_build(library_root: &Path, appid: u32) -> Option<u64> {
+    let manifest = library_root
+        .join("steamapps")
+        .join(format!("appmanifest_{appid}.acf"));
+    let raw = std::fs::read_to_string(&manifest).ok()?;
+    let app: AppManifest = keyvalues_serde::from_str(&raw).ok()?;
+    app.buildid?.trim().parse::<u64>().ok()
+}
+
+/// The Steam library root that owns an install dir: `<root>/steamapps/common/<game>` →
+/// `<root>`. Returned by reference (an ancestor of `install_dir`); `None` if the path is
+/// too shallow to be a real Steam layout.
+fn library_root_of(install_dir: &Path) -> Option<&Path> {
+    install_dir.ancestors().nth(3)
+}
+
+/// Resolve the full Starfield detection status for a supported appid (SFDET-01/02/03).
+///
+/// The Tauri adapter (Plan 03) forwards this VERBATIM. Re-resolves the Steam library +
+/// Proton prefix on every call (never cached — paths move) and keeps ALL path construction
+/// in the engine (T-06-04: the adapter builds no paths). The library root is the ancestor
+/// of the resolved install dir, which [`crate::ce2::starfield_status`] uses to read the
+/// installed build for the advisory drift compare.
+pub fn starfield_status_for(appid: u32) -> Result<crate::ce2::StarfieldStatus, SteamError> {
+    let resolved = resolve_game(appid)?;
+    let library_root =
+        library_root_of(&resolved.install_dir).ok_or(SteamError::NotInstalled(appid))?;
+    Ok(crate::ce2::starfield_status(&resolved.prefix, library_root, appid))
 }
 
 /// Build a [`ResolvedGame`] from a library root + the app's `installdir`.
@@ -268,6 +310,7 @@ fn expected_exe(appid: u32) -> &'static str {
     match appid {
         SKYRIM_SE => "SkyrimSE.exe",
         FALLOUT4 => "Fallout4.exe",
+        STARFIELD => "Starfield.exe",
         _ => "",
     }
 }
@@ -320,7 +363,10 @@ fn has_file_ci(dir: &Path, name: &str) -> bool {
 /// first-match-wins choice would be nondeterministic across runs if a case-sensitive FS
 /// (NexTwist's Proton target) holds multiple case-variants of `name` (e.g. `Data`/`data`,
 /// or two executables) — a hazard for the reversibility guarantee built on top of it.
-fn entry_ci(dir: &Path, name: &str) -> Option<PathBuf> {
+///
+/// `pub(crate)` so `ce2::my_games_path` reuses the exact same deterministic per-component
+/// case-fold for the `Documents/My Games/Starfield` walk (WR-07) — never re-implemented.
+pub(crate) fn entry_ci(dir: &Path, name: &str) -> Option<PathBuf> {
     let rd = std::fs::read_dir(dir).ok()?;
     let mut matches: Vec<String> = rd
         .flatten()
@@ -463,6 +509,64 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let err = add_game_by_folder(dir.path(), 220).unwrap_err();
         assert!(matches!(err, SteamError::Unsupported(220)));
+    }
+
+    #[test]
+    fn is_supported_allow_lists_the_three_supported_games() {
+        assert!(is_supported(SKYRIM_SE));
+        assert!(is_supported(FALLOUT4));
+        assert!(is_supported(STARFIELD));
+        assert_eq!(default_name(STARFIELD), "Starfield");
+        assert_eq!(expected_exe(STARFIELD), "Starfield.exe");
+        // Junk / unsupported AppIDs are rejected (0 and 220 = Half-Life 2).
+        assert!(!is_supported(0));
+        assert!(!is_supported(220));
+    }
+
+    #[test]
+    fn resolve_from_root_resolves_starfield_positively() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = synthetic_library(STARFIELD, "Starfield", true);
+        let root = dir.path();
+        unsafe { std::env::remove_var("STEAM_COMPAT_DATA_PATH") };
+
+        // SFDET-01: 1716740 resolves an install dir + Proton prefix, not NotInstalled.
+        let resolved = resolve_from_root(root, STARFIELD).unwrap();
+        assert_eq!(resolved.appid, STARFIELD);
+        assert_eq!(resolved.install_dir, root.join("steamapps/common/Starfield"));
+        assert_eq!(resolved.prefix, root.join("steamapps/compatdata/1716740/pfx"));
+        assert!(resolved.prefix_exists);
+    }
+
+    #[test]
+    fn installed_build_reads_buildid_and_is_fail_safe() {
+        let dir = synthetic_library(STARFIELD, "Starfield", false);
+        let steamapps = dir.path().join("steamapps");
+        // Seed an ACF that carries a numeric buildid.
+        std::fs::write(
+            steamapps.join("appmanifest_1716740.acf"),
+            "\"AppState\"\n{\n\t\"appid\"\t\"1716740\"\n\t\"installdir\"\t\"Starfield\"\n\t\"buildid\"\t\"18901529\"\n}\n",
+        )
+        .unwrap();
+        assert_eq!(installed_build(dir.path(), STARFIELD), Some(18_901_529));
+
+        // Missing buildid field → None (the synthetic_library ACF for SKYRIM_SE has none).
+        let no_build = synthetic_library(SKYRIM_SE, "Skyrim Special Edition", false);
+        assert_eq!(installed_build(no_build.path(), SKYRIM_SE), None);
+
+        // Absent manifest → None (never panics, never errors).
+        let empty = TempDir::new().unwrap();
+        assert_eq!(installed_build(empty.path(), STARFIELD), None);
+    }
+
+    #[test]
+    fn library_root_is_install_dir_grandparent() {
+        // <root>/steamapps/common/<game> → <root> (the dir `starfield_status_for` hands
+        // `installed_build`, which then joins `steamapps/appmanifest_<appid>.acf`).
+        let install = Path::new("/games/steamapps/common/Starfield");
+        assert_eq!(library_root_of(install), Some(Path::new("/games")));
+        // Too shallow to be a Steam layout → None (surfaced as NotInstalled upstream).
+        assert_eq!(library_root_of(Path::new("/a")), None);
     }
 
     #[test]

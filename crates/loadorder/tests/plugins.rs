@@ -11,10 +11,11 @@
 //! libloot/libloadorder header-parse every named plugin, so the fixture writes minimal but
 //! VALID 24-byte TES4 records in the game `Data/` dir (matching the Plan-02 spike).
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-use loadorder::loot::{appdata_local_path, apply_load_order, propose_sort};
+use loadorder::loot::{appdata_local_path, apply_load_order, propose_sort, protected_plugins};
 use loadorder::masterlist::{cache_path, ensure_masterlist};
 use nextwist_core::{Plugin, PluginKind};
 use tempfile::TempDir;
@@ -23,6 +24,8 @@ const SKYRIM_SE: u32 = 489830;
 const GAME_FOLDER: &str = "Skyrim Special Edition";
 const FALLOUT4: u32 = 377160;
 const FO4_FOLDER: &str = "Fallout4";
+const STARFIELD: u32 = 1716740;
+const SF_FOLDER: &str = "Starfield";
 
 /// Minimal esplugin-parseable plugin file (a bare 24-byte TES4 header record).
 fn write_min_plugin(data_dir: &Path, name: &str, master: bool) {
@@ -321,5 +324,192 @@ fn fo4_multi_master_game_master_first_active_survives() {
     assert!(
         !body.contains("Fallout4.esm") && !body.contains("DLCRobot.esm"),
         "early-loading masters are implicitly active and NOT written to Plugins.txt:\n{body}"
+    );
+}
+
+/// SFLO-03: `protected_plugins` flags a libloot-implicitly-active base master (Starfield.esm)
+/// and does NOT flag a user-enabled regular `.esp`. The protected set is derived purely from
+/// `is_plugin_active` — no hard-coded name list in the engine.
+#[test]
+fn protected_plugins_flags_implicit_master_not_user_esp() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
+    write_min_plugin(&data, "Starfield.esm", true); // game master (implicitly active)
+    write_min_plugin(&data, "Mod.esp", false); // a user regular plugin
+
+    let prefix_root = tmp.path().join("pfx");
+    // Seed a user *-line for Mod.esp so it counts as NexTwist-enabled (never protected).
+    testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, Some("*Mod.esp\n")).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
+
+    let enabled: HashSet<String> = ["Mod.esp".to_string()].into_iter().collect();
+    let protected = protected_plugins(STARFIELD, &install, &appdata_local, &enabled).unwrap();
+
+    assert!(
+        protected.contains("Starfield.esm"),
+        "the implicit game master is protected: {protected:?}"
+    );
+    assert!(
+        !protected.contains("Mod.esp"),
+        "a user-enabled *-line plugin is never protected: {protected:?}"
+    );
+}
+
+/// CR-01 (the REAL save flow, previously untested): a locked Starfield base master arrives at
+/// its RESTING representation — `enabled == false` (it is active WITHOUT a `*` line; NexTwist
+/// never asterisk-writes masters, libloot owns their activation) — included UNCHANGED in a
+/// normal desired list. This is exactly what `list_plugins` produces for a protected master and
+/// what the UI sends back unchanged, so it MUST save successfully with NO false `ProtectedMaster`
+/// rejection, and the asterisk `plugins.txt` is still written for the enabled regular plugins.
+#[test]
+fn starfield_locked_master_saves_at_resting_state() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
+    write_min_plugin(&data, "Starfield.esm", true);
+    write_min_plugin(&data, "Mod.esp", false);
+
+    let prefix_root = tmp.path().join("pfx");
+    testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, None).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
+
+    // The base master at its RESTING state (`enabled == false`, as `list_plugins` produces for a
+    // protected master), included UNCHANGED alongside an enabled regular plugin.
+    let desired = vec![
+        plugin("Starfield.esm", PluginKind::Esm, false, 0),
+        plugin("Mod.esp", PluginKind::Esp, true, 1),
+    ];
+
+    let written = apply_load_order(STARFIELD, &install, &appdata_local, &desired)
+        .expect("a locked master at its resting enabled==false state must save (CR-01)");
+
+    let body = fs::read_to_string(&written).unwrap();
+    assert!(body.contains("*Mod.esp"), "enabled regular plugin is asterisk-listed:\n{body}");
+    assert!(
+        !body.contains("Starfield.esm"),
+        "the implicit master is NOT written to the asterisk file:\n{body}"
+    );
+}
+
+/// CR-01 (a GENUINE reorder of a pinned master is still prevented — now by libloot itself, not a
+/// NexTwist name/enabled guard): a request that SWAPS two masters (Constellation before the
+/// Starfield.esm game master), both at their resting `enabled == false` state. `reconcile_order`
+/// forces every master into libloot's canonical position UNCONDITIONALLY, so the save SUCCEEDS
+/// but the persisted order keeps the game master pinned FIRST — the swap is neutralized, never
+/// honored. (There is no way to move a pinned master through `apply_load_order`.)
+#[test]
+fn starfield_pinned_master_reorder_is_neutralized() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
+    write_min_plugin(&data, "Starfield.esm", true);
+    write_min_plugin(&data, "Constellation.esm", true);
+    write_min_plugin(&data, "Mod.esp", false);
+
+    let prefix_root = tmp.path().join("pfx");
+    testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, None).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
+
+    // Request SWAPS the masters (Constellation before Starfield), both at resting state.
+    let desired = vec![
+        plugin("Constellation.esm", PluginKind::Esm, false, 0),
+        plugin("Starfield.esm", PluginKind::Esm, false, 1),
+        plugin("Mod.esp", PluginKind::Esp, true, 2),
+    ];
+
+    // Succeeds (no false rejection) — the swap is neutralized by reconcile_order, not rejected.
+    apply_load_order(STARFIELD, &install, &appdata_local, &desired)
+        .expect("save succeeds; the master swap is neutralized, not rejected (CR-01)");
+
+    // The persisted order keeps the game master pinned FIRST despite the swapped request.
+    let mut game = loadorder::loot::open_game(STARFIELD, &install, &appdata_local).unwrap();
+    game.load_current_load_order_state().unwrap();
+    let order: Vec<&str> = game.load_order();
+    let pos = |n: &str| order.iter().position(|x| *x == n);
+    let sf = pos("Starfield.esm").expect("Starfield.esm present");
+    let con = pos("Constellation.esm").expect("Constellation.esm present");
+    assert!(
+        sf < con,
+        "the game master stays pinned before Constellation.esm despite the swap: {order:?}"
+    );
+}
+
+/// SFLO-01: `apply_load_order` writes an asterisk-format Plugins.txt bounded under the
+/// Starfield prefix AppData — enabled regular plugins as `*Name`, implicit masters omitted.
+#[test]
+fn starfield_asterisk() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
+    write_min_plugin(&data, "Starfield.esm", true);
+    write_min_plugin(&data, "Mod.esp", false);
+    write_min_plugin(&data, "Off.esp", false);
+
+    let prefix_root = tmp.path().join("pfx");
+    testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, None).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
+
+    // The game master is user-enabled (normal case) → never protected → guard dormant.
+    let desired = vec![
+        plugin("Starfield.esm", PluginKind::Esm, true, 0),
+        plugin("Mod.esp", PluginKind::Esp, true, 1),
+        plugin("Off.esp", PluginKind::Esp, false, 2),
+    ];
+    let written = apply_load_order(STARFIELD, &install, &appdata_local, &desired).unwrap();
+
+    // Bounded inside the prefix AppData (T-07-03 / T-02-11).
+    assert!(
+        written.starts_with(&appdata_local),
+        "plugins.txt {written:?} must be under the Starfield prefix AppData {appdata_local:?}"
+    );
+    let body = fs::read_to_string(&written).unwrap();
+    assert!(body.contains("*Mod.esp"), "active regular plugin is asterisk-listed:\n{body}");
+    assert!(
+        !body.contains("*Off.esp"),
+        "disabled regular plugin has no asterisk:\n{body}"
+    );
+    assert!(
+        !body.contains("Starfield.esm"),
+        "the implicit master is NOT written to the asterisk file:\n{body}"
+    );
+}
+
+/// SFLO-02: `propose_sort` over the bundled Starfield masterlist is DETERMINISTIC (same
+/// inputs → same order across runs) and carries the recorded masterlist snapshot date.
+#[test]
+fn starfield_sort_determinism() {
+    let tmp = TempDir::new().unwrap();
+    let install = tmp.path().join("install");
+    let data = install.join("Data");
+    fs::create_dir_all(&data).unwrap();
+    write_min_plugin(&data, "Starfield.esm", true);
+    write_min_plugin(&data, "Mod.esp", false);
+
+    let prefix_root = tmp.path().join("pfx");
+    testkit::fake_proton_prefix(&prefix_root, SF_FOLDER, None).unwrap();
+    let appdata_local = appdata_local_path(&prefix_root, SF_FOLDER);
+    let app_data = tmp.path().join("appdata");
+    fs::create_dir_all(&app_data).unwrap();
+
+    let desired = vec![
+        plugin("Starfield.esm", PluginKind::Esm, true, 0),
+        plugin("Mod.esp", PluginKind::Esp, true, 1),
+    ];
+
+    let first = propose_sort(STARFIELD, &install, &appdata_local, &app_data, &desired).unwrap();
+    let second = propose_sort(STARFIELD, &install, &appdata_local, &app_data, &desired).unwrap();
+
+    assert_eq!(
+        first.proposed, second.proposed,
+        "propose_sort must be deterministic over the bundled masterlist"
+    );
+    assert_eq!(
+        first.masterlist_date, "2026-07-07",
+        "the recorded Starfield masterlist snapshot date is surfaced (SFLO-02)"
     );
 }

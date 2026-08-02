@@ -35,6 +35,8 @@ use crate::error::LoadOrderError;
 const SKYRIM_SE: u32 = 489830;
 /// Fallout 4 AppID (mirrors `loot::FALLOUT4`).
 const FALLOUT4: u32 = 377160;
+/// Starfield AppID (mirrors `loot::STARFIELD`).
+const STARFIELD: u32 = 1716740;
 
 /// The three Bethesda plugin file extensions NexTwist scans for (lowercased).
 const PLUGIN_EXTS: [&str; 3] = ["esp", "esm", "esl"];
@@ -45,6 +47,7 @@ fn game_id_for(appid: u32) -> Option<GameId> {
     match appid {
         SKYRIM_SE => Some(GameId::SkyrimSE),
         FALLOUT4 => Some(GameId::Fallout4),
+        STARFIELD => Some(GameId::Starfield),
         _ => None,
     }
 }
@@ -61,25 +64,37 @@ fn is_plugin_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Classify a plugin file by its HEADER FLAGS via esplugin (header-only parse).
+/// Classify a plugin file by its HEADER FLAGS via esplugin (header-only parse), returning
+/// both its [`PluginKind`] and whether it is a CE2 *medium* master.
 ///
-/// Precedence: ESL (light-flagged) wins over ESM (master-flagged) wins over ESP. An
-/// `.esp` carrying the light flag classifies as [`PluginKind::Esl`]; a master-flagged file
-/// classifies as [`PluginKind::Esm`]; everything else is [`PluginKind::Esp`]. If the file
-/// cannot be header-parsed (corrupt / not actually a plugin), we DO NOT abort the scan —
-/// we fall back to [`PluginKind::Esp`] and log, because a single bad file must never take
-/// down plugin discovery (the non-negotiable is collection + de-dup, per the plan).
-fn classify_kind(game_id: GameId, path: &Path) -> PluginKind {
+/// Precedence for `kind`: ESL (light-flagged) wins over ESM (master-flagged) wins over ESP.
+/// An `.esp` carrying the light flag classifies as [`PluginKind::Esl`]; a master-flagged
+/// file classifies as [`PluginKind::Esm`]; everything else is [`PluginKind::Esp`].
+///
+/// The `medium` flag is ORTHOGONAL to `kind`: a Starfield medium master is still a master
+/// (`is_master_file()` → `PluginKind::Esm`) that ALSO carries the medium header flag. It is
+/// read straight from `esplugin::Plugin::is_medium_plugin()` (the medium bit set AND not
+/// light), which esplugin gates to Starfield via `supports_medium_plugins` — so SkyrimSE /
+/// Fallout4 always yield `medium == false`. There is deliberately NO `PluginKind::Medium`:
+/// `core::Plugin` and the DB token set are frozen, so medium rides a separate boolean on the
+/// wire model only (07-RESEARCH Pattern 1 / Pitfall 2).
+///
+/// If the file cannot be header-parsed (corrupt / not actually a plugin), we DO NOT abort the
+/// scan — we fall back to `(PluginKind::Esp, false)` and log, because a single bad file must
+/// never take down plugin discovery (the non-negotiable is collection + de-dup, per the plan).
+fn classify(game_id: GameId, path: &Path) -> (PluginKind, bool) {
     let mut plugin = EsPlugin::new(game_id, path);
     match plugin.parse_file(ParseOptions::header_only()) {
         Ok(()) => {
-            if plugin.is_light_plugin() {
+            let medium = plugin.is_medium_plugin();
+            let kind = if plugin.is_light_plugin() {
                 PluginKind::Esl
             } else if plugin.is_master_file() {
                 PluginKind::Esm
             } else {
                 PluginKind::Esp
-            }
+            };
+            (kind, medium)
         }
         Err(e) => {
             tracing::warn!(
@@ -87,8 +102,45 @@ fn classify_kind(game_id: GameId, path: &Path) -> PluginKind {
                 error = %e,
                 "could not header-parse plugin; defaulting badge to ESP"
             );
-            PluginKind::Esp
+            (PluginKind::Esp, false)
         }
+    }
+}
+
+/// A plugin scan result enriched with the two Phase-7 derived booleans that do NOT belong on
+/// the frozen persisted [`core::Plugin`](Plugin): `medium` (a CE2 medium master, read from
+/// the esplugin header at scan time) and `protected` (an implicitly-active base master,
+/// filled by the caller AFTER a live libloot `Game::is_plugin_active` probe — see
+/// [`crate::loot::protected_plugins`]). This is the wire/view model the Tauri command layer
+/// serializes to the frontend; the engine's apply/sort paths keep speaking `core::Plugin`.
+///
+/// `protected` defaults `false` from a scan: discovery alone cannot know the implicit set
+/// (that needs an open game + prefix), so `scan_plugin_views_for` never sets it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PluginView {
+    /// Plugin filename (e.g. `Starfield.esm`).
+    pub name: String,
+    /// Master/light/regular classification (a medium master is still [`PluginKind::Esm`]).
+    pub kind: PluginKind,
+    /// Whether the plugin is enabled in this profile's load order (store-owned; `false` here).
+    pub enabled: bool,
+    /// Zero-based position in the load order (store-owned; `0` here).
+    pub order: u32,
+    /// CE2 medium-master tier — `esplugin::Plugin::is_medium_plugin()` (Starfield-only).
+    pub medium: bool,
+    /// Implicitly-active protected base master — filled by the caller's live-game probe.
+    #[serde(default)]
+    pub protected: bool,
+}
+
+/// Drop the Phase-7 view-only booleans (`medium`/`protected`) to the persisted
+/// [`core::Plugin`](Plugin) the apply/sort callers consume unchanged.
+fn view_to_plugin(v: PluginView) -> Plugin {
+    Plugin {
+        name: v.name,
+        kind: v.kind,
+        enabled: v.enabled,
+        order: v.order,
     }
 }
 
@@ -102,7 +154,7 @@ fn collect_from_root(
     game_id: GameId,
     root: &Path,
     staged_wins: bool,
-    out: &mut BTreeMap<String, Plugin>,
+    out: &mut BTreeMap<String, PluginView>,
 ) -> Result<(), LoadOrderError> {
     if !root.exists() {
         // A staged root or Data/ dir that does not exist is simply empty, not an error
@@ -132,14 +184,16 @@ fn collect_from_root(
             // Two staged roots provide the same plugin name: keep the first (deterministic).
             continue;
         }
-        let kind = classify_kind(game_id, path);
+        let (kind, medium) = classify(game_id, path);
         out.insert(
             key,
-            Plugin {
+            PluginView {
                 name: file_name.to_string(),
                 kind,
                 enabled: false,
                 order: 0,
+                medium,
+                protected: false,
             },
         );
     }
@@ -167,17 +221,10 @@ pub fn scan_plugins(
     let Some(game_id) = game_id_for_data(enabled_staging_roots, game_data) else {
         return Ok(Vec::new());
     };
-
-    let mut collected: BTreeMap<String, Plugin> = BTreeMap::new();
-
-    // Staged roots first so the enabled-mod copy wins de-dup against Data/.
-    for root in enabled_staging_roots {
-        collect_from_root(game_id, root, true, &mut collected)?;
-    }
-    // Then the game Data/ dir — only fills in plugins not already provided by a mod.
-    collect_from_root(game_id, game_data, false, &mut collected)?;
-
-    Ok(collected.into_values().collect())
+    Ok(scan_plugin_views_for(game_id, enabled_staging_roots, game_data)?
+        .into_iter()
+        .map(view_to_plugin)
+        .collect())
 }
 
 /// Discover the plugins for an EXPLICIT game (PLUGIN-01 discovery): same as
@@ -191,10 +238,31 @@ pub fn scan_plugins_for(
     enabled_staging_roots: &[PathBuf],
     game_data: &Path,
 ) -> Result<Vec<Plugin>, LoadOrderError> {
-    let mut collected: BTreeMap<String, Plugin> = BTreeMap::new();
+    Ok(scan_plugin_views_for(game_id, enabled_staging_roots, game_data)?
+        .into_iter()
+        .map(view_to_plugin)
+        .collect())
+}
+
+/// The medium-aware scan (SFLO-03): identical walk/de-dup to [`scan_plugins_for`] but returns
+/// the richer [`PluginView`] carrying the `medium` boolean (and a `protected: false` default
+/// the caller fills after a live libloot probe). [`scan_plugins_for`] is a thin wrapper that
+/// maps each view down to `core::Plugin`, so the apply/sort callers stay unchanged and the
+/// walk logic lives in exactly one place.
+///
+/// # Errors
+/// [`LoadOrderError::Io`] if a root directory cannot be walked.
+pub fn scan_plugin_views_for(
+    game_id: GameId,
+    enabled_staging_roots: &[PathBuf],
+    game_data: &Path,
+) -> Result<Vec<PluginView>, LoadOrderError> {
+    let mut collected: BTreeMap<String, PluginView> = BTreeMap::new();
+    // Staged roots first so the enabled-mod copy wins de-dup against Data/.
     for root in enabled_staging_roots {
         collect_from_root(game_id, root, true, &mut collected)?;
     }
+    // Then the game Data/ dir — only fills in plugins not already provided by a mod.
     collect_from_root(game_id, game_data, false, &mut collected)?;
     Ok(collected.into_values().collect())
 }
@@ -358,9 +426,79 @@ mod tests {
     }
 
     #[test]
+    fn medium_master_classifies_true_only_for_starfield() {
+        let staged = TempDir::new().unwrap();
+        let data = TempDir::new().unwrap();
+        // A Starfield medium-flagged master (master flag 0x1 + medium flag 0x400).
+        testkit::write_medium_plugin(staged.path(), "MediumMaster.esm").unwrap();
+
+        // Under Starfield: medium == true, and it is still a master (Esm).
+        let sf = scan_plugin_views_for(
+            GameId::Starfield,
+            &[staged.path().to_path_buf()],
+            data.path(),
+        )
+        .unwrap();
+        assert_eq!(sf.len(), 1);
+        assert!(sf[0].medium, "Starfield medium flag → medium == true");
+        assert_eq!(sf[0].kind, PluginKind::Esm, "a medium master is still a master");
+        assert!(!sf[0].protected, "scan defaults protected == false (no live probe)");
+
+        // The SAME header under SkyrimSE / Fallout4: medium == false (flag is Starfield-only).
+        for gid in [GameId::SkyrimSE, GameId::Fallout4] {
+            let v =
+                scan_plugin_views_for(gid, &[staged.path().to_path_buf()], data.path()).unwrap();
+            assert!(!v[0].medium, "medium flag is gated to Starfield ({gid:?})");
+            assert_eq!(v[0].kind, PluginKind::Esm);
+        }
+    }
+
+    #[test]
+    fn non_medium_plugins_classify_medium_false() {
+        let staged = TempDir::new().unwrap();
+        let data = TempDir::new().unwrap();
+        testkit::write_min_plugin(staged.path(), "PlainMaster.esm", true).unwrap();
+        testkit::write_min_plugin(staged.path(), "Regular.esp", false).unwrap();
+
+        let v = scan_plugin_views_for(
+            GameId::Starfield,
+            &[staged.path().to_path_buf()],
+            data.path(),
+        )
+        .unwrap();
+        let by = |n: &str| v.iter().find(|p| p.name == n).unwrap();
+        assert_eq!(by("PlainMaster.esm").kind, PluginKind::Esm);
+        assert!(!by("PlainMaster.esm").medium, "a plain master is not medium");
+        assert_eq!(by("Regular.esp").kind, PluginKind::Esp);
+        assert!(!by("Regular.esp").medium, "a regular plugin is not medium");
+    }
+
+    #[test]
+    fn scan_plugin_views_dedups_staged_wins_and_defaults_protected_false() {
+        let staged = TempDir::new().unwrap();
+        let data = TempDir::new().unwrap();
+        // Same filename in both roots; the staged (medium master) copy must win.
+        testkit::write_medium_plugin(staged.path(), "Shared.esm").unwrap();
+        testkit::write_min_plugin(data.path(), "Shared.esm", false).unwrap();
+
+        let v = scan_plugin_views_for(
+            GameId::Starfield,
+            &[staged.path().to_path_buf()],
+            data.path(),
+        )
+        .unwrap();
+        assert_eq!(v.len(), 1, "duplicate filename collapses to one");
+        assert_eq!(v[0].name, "Shared.esm");
+        assert!(v[0].medium, "the staged medium-master copy wins de-dup");
+        assert!(!v[0].protected, "every scanned view starts protected == false");
+    }
+
+    #[test]
     fn esplugin_game_id_allow_lists_supported_games() {
         assert!(matches!(esplugin_game_id(SKYRIM_SE), Some(GameId::SkyrimSE)));
         assert!(matches!(esplugin_game_id(FALLOUT4), Some(GameId::Fallout4)));
+        assert!(matches!(esplugin_game_id(STARFIELD), Some(GameId::Starfield)));
+        assert!(esplugin_game_id(0).is_none());
         assert!(esplugin_game_id(220).is_none());
     }
 }

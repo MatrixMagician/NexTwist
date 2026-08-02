@@ -27,6 +27,7 @@ use crate::backup;
 use crate::casefold::normalize_to_canonical;
 use crate::conflict::WinnerFile;
 use crate::error::DeployError;
+use crate::gameconfig::{self, IniConflictResolution};
 use crate::journal;
 use crate::method::{apply_idempotent, choose_method};
 use crate::path_guard::{guard_within_root, lexical_normalize};
@@ -115,7 +116,16 @@ pub struct RecoveryReport {
 /// record a `pending` journal intent, back up any pre-existing vanilla file, apply the
 /// idempotent file op, then write the manifest row + flip the intent to `done`.
 pub fn deploy(store: &Store, game: &Game, staged: &StagedFiles) -> Result<DeployReport, DeployError> {
-    deploy_inner(store, game, staged, None)
+    let report = deploy_inner(store, game, staged, None)?;
+    // SFINI-04 choke point: after the Data/ file loop, auto-activate the loose-file INI for
+    // Starfield only. The hook lives on the PUBLIC `deploy` (never `deploy_inner`, which
+    // `deploy_with_abort` shares) so the crash-sim path never triggers INI activation. A
+    // `Block` conflict returns Ok (nothing written); a real I/O / containment / symlink
+    // error propagates via `?`. All logic lives in `gameconfig` (Plan 01).
+    if game.appid == steam::STARFIELD {
+        gameconfig::ensure_ini_active(store, game, IniConflictResolution::Block)?;
+    }
+    Ok(report)
 }
 
 /// Test-only seam: deploy but abort after `abort_after` file operations, having
@@ -279,6 +289,14 @@ pub fn deploy_winners(
     }
 
     report.fs_warnings = seen_warnings;
+
+    // SFINI-04 choke point (profile-switch rides `redeploy_winners` = purge + this): after
+    // the winner loop, auto-activate the loose-file INI for Starfield only. Same gate +
+    // Block semantics as the single-root `deploy` tail; all logic lives in `gameconfig`.
+    if game.appid == steam::STARFIELD {
+        gameconfig::ensure_ini_active(store, game, IniConflictResolution::Block)?;
+    }
+
     Ok(report)
 }
 
@@ -399,11 +417,53 @@ fn deploy_one_file(
 /// idempotent. Orphans (paths under the deploy root that provenance does not explain)
 /// are REPORTED, not deleted.
 pub fn purge(store: &Store, game: &Game) -> Result<PurgeReport, DeployError> {
+    purge_inner(store, game, false)
+}
+
+/// Test-only crash seam: run the full `Data/` purge and durably journal the INI-restore
+/// intent, but abort in the WR-01 window — AFTER the manifest loop (every row flipped to
+/// `done`, manifest emptied) and AFTER the `KIND_INI` intent is committed, but BEFORE the
+/// INI is actually restored. Simulates a kill between the last file-purge `finish_purge`
+/// and the INI restore; recovery must still restore the INI from the pending intent.
+#[doc(hidden)]
+pub fn purge_with_abort_before_ini(
+    store: &Store,
+    game: &Game,
+) -> Result<PurgeReport, DeployError> {
+    purge_inner(store, game, true)
+}
+
+fn purge_inner(
+    store: &Store,
+    game: &Game,
+    abort_before_ini: bool,
+) -> Result<PurgeReport, DeployError> {
     let files = store.list_deployed_files(game.appid)?;
     let mut report = PurgeReport {
         removed: 0,
         restored: 0,
         orphans: Vec::new(),
+    };
+
+    // SFINI-02/04 + WR-01: journal the INI-restore intent BEFORE the Data/ loop, so a crash
+    // ANYWHERE in purge — including the window between the last file-purge `finish_purge`
+    // and the INI restore — leaves a durable `pending` KIND_INI row that
+    // `recover_on_launch` replays to provenance (closing the stranded-INI reversibility
+    // gap). Only when the INI is actually active (a `vanilla_backup` row exists); a
+    // never-activated INI needs no restore and no journal row. Resolution stays inside
+    // `gameconfig` via `my_games_path`; the Data/-root guard is untouched.
+    let ini_jid = if game.appid == steam::STARFIELD
+        && store
+            .vanilla_for(game.appid, Path::new(gameconfig::INI_FILENAME))?
+            .is_some()
+    {
+        Some(journal::begin_ini(
+            store,
+            game.appid,
+            Path::new(gameconfig::INI_FILENAME),
+        )?)
+    } else {
+        None
     };
 
     for entry in &files {
@@ -434,6 +494,23 @@ pub fn purge(store: &Store, game: &Game) -> Result<PurgeReport, DeployError> {
     // pre-existing shape is never disturbed (GAP-01 / T-01-19).
     let removed_rels: Vec<PathBuf> = files.iter().map(|e| e.target_rel.clone()).collect();
     remove_emptied_dirs(&game.install_dir, &removed_rels)?;
+
+    // WR-01 crash seam: die in the window before the INI restore. The pending KIND_INI row
+    // journaled above survives, so recover_on_launch can complete the restore.
+    if abort_before_ini {
+        return Err(DeployError::Aborted(report.removed));
+    }
+
+    // SFINI-02/04 choke point: after the Data/ manifest loop, restore the loose-file INI to
+    // its recorded provenance (byte-restore a PreExisting INI; delete + prune the created
+    // dirs for a CreatedByNexTwist one) and flip the pre-journaled intent to `done`. Only
+    // reached for Starfield with an active INI (see `ini_jid` above). Resolution stays
+    // inside `gameconfig` via `my_games_path`; the Data/-root guard is untouched.
+    if let Some(jid) = ini_jid {
+        let target = gameconfig::resolve_ini_target(game)?;
+        gameconfig::restore_ini_at(store, game, &target)?;
+        store.mark_done(jid)?;
+    }
 
     Ok(report)
 }

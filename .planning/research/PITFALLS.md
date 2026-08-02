@@ -1,241 +1,212 @@
 # Pitfalls Research
 
-**Domain:** Linux mod manager (Rust + Tauri) deploying mods into Windows games run via Steam Proton/Wine
-**Researched:** 2026-06-20
-**Confidence:** MEDIUM (most findings cross-checked across official Nexus wiki/docs, GitHub issues, and Linux kernel docs; web-search-only items flagged LOW)
+**Domain:** Adding Starfield (Creation Engine 2) support — reversible `StarfieldCustom.ini` editing, Proton-prefix path resolution, and CE2 load order — to NexTwist's existing non-destructive/byte-for-byte-reversible deploy engine.
+**Researched:** 2026-07-07
+**Confidence:** HIGH for load-order rules (source: Ortham, the libloot/LOOT author), the loose-file INI settings, and libloot's Starfield support (registry + docs.rs verified); MEDIUM for the loose-file regression history and Proton-prefix folder-lifecycle specifics.
 
-> Phase names below are *suggested topics* for the roadmap, not yet-existing phases. They map cleanly to the Active requirements in PROJECT.md: Game Detection, Deployment Engine, Auth/Download, Collections, Conflicts/Load Order, Profiles, Packaging.
+> Phase numbers below follow PROJECT.md ("Phase numbering continues from v1.0, starts at Phase 6"). Named phases are the likely owners; the roadmap should confirm exact numbering. The through-line: the v1.0 safety guarantee (non-destructive, byte-for-byte reversible via the journal + vanilla-backup ledger) must extend **verbatim** to the new INI write target — the INI is just another deployed artifact and must be journaled and reversible like a file op.
 
 ---
 
 ## Critical Pitfalls
 
-These cause data loss, "game won't launch", or force an architecture rewrite. They directly threaten the core value (non-destructive, reversible, conflict-aware).
-
-### Pitfall 1: Hardlink deployment fails across filesystem / btrfs subvolume / Proton "drive" boundaries
+### Pitfall 1: Purge leaves an INI behind when the file did not exist before (reversibility violation)
 
 **What goes wrong:**
-The mod staging area and the game folder end up on different filesystems (separate partition, separate btrfs subvolume, separate physical drive, or a Steam library on a different mount). `link()` returns `EXDEV` ("Invalid cross-device link") and deployment fails or silently falls back to a worse method. Crucially, **btrfs treats every subvolume as a separate device for `link()`** — even on the *same* physical disk — so a user with a `@home` subvolume staging folder and a game on `@` cannot hardlink. Proton compounds this: Wine registers the prefix as a different "drive", and tools like Vortex refuse to deploy across drive letters.
+`StarfieldCustom.ini` does **not** ship with the game — the user (or NexTwist) must create it. If NexTwist creates the file to add `[Archive]`/`sResourceDataDirsFinal`, and then "purge/uninstall" merely blanks the two keys or writes an empty `[Archive]` section, the game state is left in a configuration that did **not** exist pre-mod. That is a direct breach of the v1.0 core guarantee ("byte-for-byte pristine, restore ABSENCE"). Worse, an orphaned empty `StarfieldCustom.ini` can itself change game behaviour (it overrides defaults for any key it contains).
 
 **Why it happens:**
-Developers test on a single ext4 partition where hardlinks "just work", then ship. The btrfs-subvolume case is invisible in dev and extremely common on Fedora/openSUSE/SteamOS-adjacent setups. The Steam-library-on-second-drive case is the modal Linux gamer setup.
+The v1.0 engine's reversibility model is "backup-before-overwrite → restore original bytes." That model implicitly assumes the target file **existed** and had original bytes to restore. An INI that was *absent* has no bytes to back up, so a naïve port records "no backup needed" and purge has nothing to remove — leaving the file NexTwist created. Developers think "restore = write the backup" and forget "restore = delete the file we created."
 
 **How to avoid:**
-- Detect the filesystem and `st_dev` of both the game dir and the chosen staging dir at setup time; **force the staging folder onto the same filesystem AND same subvolume as the game** (e.g. create staging *inside* the Steam library dir for that game, not in `~/.local/share`).
-- Probe deployment capability empirically: attempt a real `link()` of a temp file from staging into the game tree, catch `EXDEV`, and surface the result before the user ever installs a mod.
-- Implement a deployment-method abstraction (hardlink / reflink / symlink / copy) and pick at runtime per game based on the probe, not a global setting.
+Treat "file absent at first touch" as a first-class ledger state, not a missing backup. Before the first INI edit, record provenance in the store: `PreExisting{ backup_hash }` (blake3 of original bytes, exactly like the vanilla-backup ledger) or `CreatedByNexTwist`. Purge dispatches on that: `PreExisting` → restore backed-up bytes byte-for-byte; `CreatedByNexTwist` → **delete the file** (restore absence), and remove the `My Games/Starfield` directory only if NexTwist created it and it is now empty (mirror the v1.0 `DIR_SENTINEL` empty-dir pristine assertion). Same intent-before-act journal: write `pending{restore_absence}` before unlink, flip to `done` after.
 
 **Warning signs:**
-`EXDEV` in logs; "deployment failed, only symlink available"; users on btrfs/Fedora/SteamOS reporting failures dev cannot reproduce on ext4.
+- The INI ledger schema has a nullable "original backup" column but no explicit "existed?" boolean.
+- A round-trip test (`deploy → purge`) asserts INI *content* equals baseline but never asserts the file's *existence* equals baseline.
+- Purge code path for the INI has no `remove_file` branch — only writes.
 
-**Phase to address:** Deployment Engine (probe + method selection); Game Detection (capture `st_dev`/fs type per game).
+**Phase to address:**
+Phase 8 — Reversible loose-file activation / INI management. Regression-lock with a testkit assertion (extend `DIR_SENTINEL`) covering both provenance branches.
 
 ---
 
-### Pitfall 2: Symlinks that Wine/Proton or the game engine won't follow
+### Pitfall 2: Clobbering an existing user `StarfieldCustom.ini` (whole-file rewrite instead of surgical merge)
 
 **What goes wrong:**
-Symlink deployment is the natural Linux fallback when hardlinks fail, but many Windows games/loaders resolve paths in ways that break on symlinks: BSA/archive loaders, some anti-tamper, and Wine's path translation can mis-handle symlinked directories. The game launches but mods "don't load", or Wine reports the file missing. Worse, symlinking a *directory* into the game tree means a Steam update writing into that path can write through the link into your staging area.
+Many Starfield users already have a hand-tuned `StarfieldCustom.ini` (FOV, mouse accel, ultrawide, `[Display]`, `[Controls]`, an existing `[Archive]` with extra keys). If NexTwist writes a canonical "known-good" INI wholesale to enable loose files, it silently deletes the user's other settings — and "restoring" a file NexTwist template-overwrote is meaningless. This is the INI analogue of "overwriting into the real game dir without a ledger" (already a v1.0 anti-pattern).
 
 **Why it happens:**
-Symlink looks like a clean, instantly-reversible solution and works in a quick smoke test. Engine-specific resolution failures only show up with real mods on real games.
+The community's canonical fix ("just paste this 3-line INI") is a *whole-file* recipe. Copying it into the tool is the path of least resistance and works in the demo (clean prefix) but destroys real users' configs.
 
 **How to avoid:**
-- Prefer **hardlinks (files, not dirs)** or **reflinks (CoW, btrfs/xfs)** over symlinks for Creation Engine games; reserve symlinks for last resort.
-- Never symlink whole directories into the game tree — deploy per-file so the game and Steam see real files.
-- Validate, per supported game, that the chosen method actually loads a known test mod under Proton (an automated post-deploy assertion).
+Never write a whole file. Parse → mutate only the `[Archive]` keys NexTwist owns (`sResourceDataDirsFinal=`, `bInvalidateOlderFiles=1`) → re-serialize preserving everything else: unrelated sections/keys, comments, key order, and the user's pre-existing values for keys NexTwist did not set. If `[Archive]` already exists, edit in place; if `sResourceDataDirsFinal` already has a non-empty user value, surface it as a conflict, don't silently overwrite. Back up full original bytes first (Pitfall 1) so even the surgical edit is reversible.
 
 **Warning signs:**
-Mods install "successfully" but have no in-game effect; works on native Linux games but not under Proton; directory symlinks appearing in the game folder.
+- Code builds the INI from a `const TEMPLATE: &str`.
+- No INI parser; the code uses `fs::write` with a literal string.
+- Tests only ever start from a non-existent or empty INI, never a populated one.
 
-**Phase to address:** Deployment Engine (per-game method validation).
+**Phase to address:**
+Phase 8 — INI management. Include a fixture INI with unrelated `[Display]`/`[Controls]` keys and assert they survive a deploy→purge cycle unchanged.
 
 ---
 
-### Pitfall 3: Overwrite collisions silently destroy original (vanilla) game files
+### Pitfall 3: CRLF / BOM / encoding drift makes the "reversible" edit not byte-for-byte
 
 **What goes wrong:**
-A mod (or hardlink/copy deploy) writes a file whose path matches a real game asset. If you overwrite a vanilla file *in place* without first backing it up, purge has nothing to restore to — the game is permanently corrupted and only a Steam re-verify/redownload fixes it. With hardlinks this is especially dangerous: deleting/replacing the original can also affect the staged copy depending on order.
+Bethesda INIs on Windows are CRLF, no BOM, ASCII/Windows-1252. A user's existing file may be CRLF (Notepad) or carry a UTF-8 BOM. If NexTwist's parser normalizes line endings to `\n`, strips/adds a BOM, or re-encodes, then even a "no semantic change" round-trip produces different bytes than the backup — the byte-for-byte guarantee fails its own hash check, and verify/repair may flag a file it just wrote as corrupt. An INI written LF-only can also be mis-parsed by some Bethesda tooling.
 
 **Why it happens:**
-Most game files are mod-added (new paths), so the in-place-overwrite bug doesn't surface until a mod *replaces* a base asset (very common for textures, meshes, `.ini`, base ESMs). Devs assume "mods only add files."
+Rust string/line APIs and most INI crates normalize line endings and assume UTF-8. Linux devs default to LF and never see CRLF until a real user's file arrives.
 
 **How to avoid:**
-- Before deploying any file that **already exists in the game tree and was not deployed by NexTwist**, move the original into a per-game backup/original-store and record it in the manifest. This is the heart of the non-destructive guarantee.
-- Maintain a manifest that distinguishes: vanilla files, NexTwist-deployed files, and user-added files. Purge restores backed-up originals and only deletes files NexTwist created.
-- Treat the manifest as the source of truth and write it transactionally (see Pitfall 4).
+Preserve the original file's line-ending style and encoding on the surgical edit; when NexTwist *creates* the file fresh, write CRLF, no BOM (Bethesda convention). Reversibility must not depend on re-parsing — Pitfall 1's byte-for-byte backup is the source of truth for restore, so restore writes the exact stored bytes, never a re-serialized version. Keep parse/edit purely for the *forward* mutation.
 
 **Warning signs:**
-No "originals" backup store exists; purge logic only deletes and never restores; deployment opens game files for write without a prior backup step.
+- Backup hash mismatch on a file NexTwist itself round-tripped with no intended change.
+- INI crate chosen without checking it round-trips CRLF and preserves unknown bytes.
+- verify/repair reports the INI as modified immediately after a clean deploy.
 
-**Phase to address:** Deployment Engine (backup-before-overwrite + manifest). This is the single most important safety mechanism in the whole product.
+**Phase to address:**
+Phase 8 — INI management. Add a CRLF-and-BOM fixture to the round-trip regression test.
 
 ---
 
-### Pitfall 4: Incomplete / non-atomic manifest leaves orphan files; purge does not return vanilla state
+### Pitfall 4: Non-idempotent INI deploy (duplicate `[Archive]` sections / stacked keys on re-run)
 
 **What goes wrong:**
-The manifest of "what we deployed" gets out of sync with the actual filesystem — because the app crashed mid-deploy, the user closed it, or a write was partial. On purge, files NexTwist created but didn't record are left behind (orphans), or recorded files were already removed and purge errors out. Net result: "purge" doesn't actually return the game to pristine — exactly the failure the product exists to prevent. Vortex itself ships a "Repair" function precisely because this happens in practice.
+Deploy can run more than once (re-deploy, profile switch, crash-replay of the journal — the v1.0 engine explicitly replays interrupted ops). A naïve "append `[Archive]\nsResourceDataDirsFinal=\nbInvalidateOlderFiles=1`" produces duplicate `[Archive]` headers or repeated keys on the second run. Bethesda INIs take the *last* value for a duplicated key, so behaviour becomes order-dependent, and the "restore original" backup may capture a NexTwist-mangled version if the backup was taken on the second pass.
 
 **Why it happens:**
-Deploy/purge are treated as best-effort loops instead of transactions. State is written after the fact rather than as a journal. There's no reconciliation between recorded state and on-disk reality.
+The v1.0 journal guarantees safe replay only if the op is **idempotent** (a stated invariant of the crash-safety model). An append-based INI edit is not idempotent, and it's easy to forget the journal will legitimately re-run this op.
 
 **How to avoid:**
-- Use a **write-ahead journal**: record intended operations before performing them; on next launch, detect an incomplete journal and roll forward/back to a consistent state.
-- Store a content hash + provenance for every deployed file so reconciliation can verify "is this file still the one we deployed, or did Steam/another tool change it?"
-- Provide a `verify`/`repair` command that diffs manifest vs. disk and reports orphans and missing files; run it automatically after any abnormal exit.
-- Make purge idempotent: missing files are a no-op, not an error.
+Make the mutation a set-key operation (find-or-create section, set-or-replace key), never append. Running it N times must yield an identical file. Take the backup exactly once, gated on the provenance record (Pitfall 1), so replay never re-snapshots a NexTwist-modified file as pristine. Fold the INI edit into the existing intent-before-act journal so replay semantics match file ops.
 
 **Warning signs:**
-Files left in the game folder after a full purge; manifest entries pointing at non-existent files; no journal/transaction log; deploy and manifest-write are separate non-atomic steps.
+- A deployed INI shows two `[Archive]` lines.
+- The backup is captured inside the same function that mutates, with no "already backed up?" guard.
+- No run-twice assertion in the INI op's test matrix.
 
-**Phase to address:** Deployment Engine (journaling + reconcile + verify/repair). Bake verify/repair in from the start; retrofitting is painful.
+**Phase to address:**
+Phase 8 — INI management, wired into the journal/replay path. Add a run-twice idempotency assertion and a crash-replay test analogous to v1.0's `crash_recovery` suite.
 
 ---
 
-### Pitfall 5: Case-sensitivity mismatch — mod ships `Textures/`, game opens `textures/`, file "not found"
+### Pitfall 5: Wrong Proton-prefix INI path — folder is inside the Wine prefix and may not exist yet
 
 **What goes wrong:**
-Wine/Proton does **not** abstract the filesystem: a Windows `fopen("Data\\Textures\\x.dds")` maps straight to a Linux `open()`. On case-sensitive ext4/btrfs, if the mod author packaged `TEXTURES/` or `Mesh.NIF` but the game requests `textures/` / `mesh.nif`, the lookup fails — mods don't load, or the game crashes. Creation Engine mods are notoriously inconsistent about casing because they were authored on case-insensitive Windows/NTFS.
+`StarfieldCustom.ini` does not live at a Linux `~/Documents` path. It lives **inside the Proton prefix**:
+`STEAM/steamapps/compatdata/1716740/pfx/drive_c/users/steamuser/Documents/My Games/Starfield/StarfieldCustom.ini`.
+Three traps: (a) the `My Games/Starfield` directory (and often `Documents`) **does not exist until the game has been launched at least once**; (b) case — Wine/Proton on a case-sensitive Linux FS may materialize `My Games` vs `My games`, differing `Documents` casing, etc., and the game folds case, so a hard-coded casing misses the real dir; (c) some prefixes redirect `Documents` (a `user.reg` folder redirect or Steam's Proton default), so it isn't always under `users/steamuser/Documents`.
 
 **Why it happens:**
-On Windows (NTFS, case-insensitive) this never matters, so mod archives are full of mixed-case paths. Devs on a single test mod that happens to be correctly-cased never see it.
+Developers reuse "put it in Documents/My Games" Windows knowledge and forget the whole path is virtualized inside `compatdata/<appid>/pfx`. The folder-not-created-until-first-launch case never appears in a dev's own already-played prefix. v1.0 already solved the analogous `plugins.txt`/AppData-in-prefix problem — the trap is *not reusing* that solved seam.
 
 **How to avoid:**
-- Deploy into a directory tree marked **case-insensitive at the filesystem level**: ext4 `casefold` (`mkfs.ext4 -O casefold` + `chattr +F dir`, dir must be empty when set) or tmpfs case-folding (Linux 6.13+). This is what Wine/Proton tooling recommends and is faster than runtime fixups.
-- Detect at setup whether the game's deploy target supports/has casefold; if not, either (a) require/offer to create a casefolded staging dir, or (b) normalize casing on install by mapping mod paths to the game's canonical casing.
-- Per-game, know the canonical casing of base directories (`Data`, `Textures`, `Meshes`, `Scripts`, ...) and rewrite incoming mod paths to match.
+Reuse v1.0's Proton-prefix + Wine case-folding resolution (`steam` crate, `casing.rs`) rather than re-deriving the path. Resolve `Documents` by reading the prefix's `user.reg` folder mappings, falling back to the default; case-fold every segment through the existing casing logic. If `My Games/Starfield` is absent, that is the "first-launch not done" state: create it (recording provenance per Pitfall 1) or, better UX, detect and warn "launch Starfield once first." Never create the file at a Linux-side `~/Documents` path — the game will never read it there.
 
 **Warning signs:**
-Mods with no in-game effect despite "successful" install; works for some mods (correctly cased) not others; `chattr +F` failing because the dir is non-empty.
+- INI path built from `dirs::document_dir()` or `$HOME` instead of the prefix.
+- The path constant contains a literal `steamuser/Documents/My Games` with fixed casing.
+- Works on the dev's machine (game already launched) but users report "INI has no effect."
 
-**Phase to address:** Game Detection / environment setup (detect casefold capability) + Deployment Engine (path-casing normalization).
+**Phase to address:**
+Phase 6 — Starfield detection & CE2 AppData path resolution (owns path/casing/first-launch), consumed by Phase 8 (INI) and Phase 7 (plugins.txt), which share the `My Games/Starfield` directory.
 
 ---
 
-### Pitfall 6: Wrong Proton prefix — writing `plugins.txt`/load order to the wrong place
+### Pitfall 6: Reordering or disabling Starfield's always-active base masters (breaks the game / corrupts saves)
 
 **What goes wrong:**
-Bethesda games read the active plugin list from `%LOCALAPPDATA%\<Game>\plugins.txt` (and historically `loadorder.txt`). Under Proton this maps to `~/.local/share/Steam/steamapps/compatdata/<APPID>/pfx/drive_c/users/steamuser/AppData/Local/<Game>/plugins.txt`. If NexTwist writes to the system `~/.config`/native HOME, a wrong `steamuser` path, or guesses the wrong appid/prefix, load order silently never applies. Each game has its own `compatdata/<APPID>` prefix, and Steam can recreate prefixes on update.
+Starfield hardcodes a set of official plugins to be **implicitly always active**; the game **ignores `plugins.txt` for them** and will not deviate from its internal order. If NexTwist writes them into its managed `plugins.txt`, lets the user disable/reorder them, or treats them as normal user plugins, results range from "no effect" (game strips them) to missing-master errors and save-corruption warnings ("This save relies on content that is no longer present").
+
+Protected, always-active base masters (current Starfield):
+- `Starfield.esm`
+- `Constellation.esm`
+- `OldMars.esm`
+- `BlueprintShips-Starfield.esm`
+- `SFBGS003.esm`, `SFBGS006.esm`, `SFBGS007.esm`, `SFBGS008.esm` (the SFBGS*.esm update/patch masters — the exact set **grows with game updates**; `SFBGS004.esm` also appears via `Starfield.ccc`)
+
+Extra subtlety (Ortham/libloot): **`BlueprintShips-*` plugins are special** — Starfield *removes all `BlueprintShips-` plugins from `plugins.txt` on startup*, and a `BlueprintShips-X.esm` auto-activates when `X` is active. A tool must never write them to load-order files or order them by hand.
 
 **Why it happens:**
-Devs reuse Windows path logic, or assume one prefix. The `compatdata/<APPID>/pfx/.../steamuser/...` path is non-obvious and varies (`steamuser` vs username, Flatpak Steam relocates everything under `~/.var/app/com.valvesoftware.Steam`).
+These files look like ordinary ESMs. A load-order tool naturally enumerates all plugins uniformly and offers enable/disable + drag-to-reorder. The "hardcoded, plugins.txt-ignored" behaviour is invisible unless you know CE2 specifics.
 
 **How to avoid:**
-- Resolve the prefix from Steam's own data: parse `libraryfolders.vdf` + the game's `appmanifest_<APPID>.acf` to get install dir and appid, then derive `compatdata/<APPID>/pfx`.
-- Handle Flatpak and Snap Steam path roots, and `STEAM_COMPAT_DATA_PATH` if present.
-- Locate `plugins.txt` by globbing the prefix's `AppData/Local/<Game>` rather than hardcoding the user folder name; verify the file exists/has the right header before writing.
-- Re-resolve the prefix on each session (Steam may rebuild it).
+Maintain an explicit **protected/implicitly-active set**; never write those to the managed `plugins.txt`, never expose enable/disable or reorder for them (grey them out / lock, as MO2 did after its bug #2051), never count them against user-facing limits. Delegate the determination to **libloot** — it already knows Starfield's implicitly-active list and BlueprintShips rules — rather than hand-maintaining the list (the SFBGS set changes per update, so a hard-coded array rots). Treat the SFBGS list as data from libloot's Starfield game handle/masterlist, not a constant.
 
 **Warning signs:**
-Load order edits have no effect in-game; `plugins.txt` written but game ignores it; Flatpak Steam users can't get any mods active; hardcoded `steamuser` or `~/.local/share/Steam` assumptions in code.
+- Managed `plugins.txt` contains any `*Starfield.esm` / `*SFBGS0**.esm` / `*BlueprintShips-*` line.
+- UI lets the user uncheck `Starfield.esm`.
+- Load-order code enumerates plugins with a plain directory scan instead of libloot's game handle.
 
-**Phase to address:** Game Detection (Steam/Proton prefix resolution) + Load Order management.
+**Phase to address:**
+Phase 7 — Starfield plugin load order. Verify: a fixture plugin dir round-trips through sort/write with no protected master appearing in `plugins.txt`.
 
 ---
 
-### Pitfall 7: Archive extraction path traversal (zip-slip) and malicious symlink entries
+### Pitfall 7: Mishandling the new medium-master tier and CE2 form-count / index limits
 
 **What goes wrong:**
-A downloaded mod archive contains entries like `../../../../home/user/.bashrc` or absolute paths, or (per Rust `zip` **CVE-2025-29787**) a symlink entry that later entries write *through*, escaping the target dir. Result: arbitrary file write outside the mod folder — a real RCE/data-loss vector since mods are third-party. Several Rust crates do **not** protect against this by default: `async_zip` explicitly refuses to, and `async-tar` had the "TARmageddon" traversal bug.
+Starfield introduces a **medium master** tier (new vs Skyrim/FO4's full+ESL two-tier model): full masters (≤253 index slots), **medium masters** (up to 256, ≤65,535 forms each, FormIDs `FDxxyyyy`), and small/light masters (ESL, up to 4,096, ≤4,095 forms). A tool ported from FO4/Skyrim two-tier assumptions misclassifies plugins, counts against the wrong limit, and presents a wrong mod-limit picture. Overrides also consume extra index slots, so naive counting is wrong.
 
 **Why it happens:**
-Devs assume the extraction crate sanitizes paths. It often doesn't. Symlink-in-archive bypasses naive `..` checks.
+The v1.0 plugin layer targeted Skyrim SE / FO4, which have no medium tier. Reusing that classification/counting logic silently for Starfield produces subtly wrong load-order and limit reporting.
 
 **How to avoid:**
-- For every entry: reject absolute paths and any path containing `..`; **canonicalize the resolved destination and assert it is still under the extraction root** after joining.
-- Refuse to create symlink entries during extraction (or resolve+validate their targets); do not follow an extracted symlink when writing subsequent entries.
-- Pin and audit the extraction crate version (avoid vulnerable `zip` 1.3.0–2.2.x ranges); add a unit test with a crafted zip-slip archive.
-- Extract to a temp dir, validate, then move into staging — never extract directly into the game tree.
+Don't hand-classify plugin types or count limits — let libloot/esplugin (already in the stack) report plugin type and validity per its Starfield support, which understands the medium tier and the `FDxxyyyy` scheme. If NexTwist surfaces a "mod limit," derive it from libloot's per-type counts, and treat any hard-coded limit constant as game-specific data, not shared across Bethesda games.
 
 **Warning signs:**
-Extraction code that joins entry paths without re-canonicalizing; no zip-slip test fixture; following symlinks during unpack.
+- Plugin-type enum has only `{Full, Light}` with no `Medium`.
+- Limit constants (`253`, `4096`) shared across all Bethesda games.
+- Load-order view mislabels a medium master as full/light.
 
-**Phase to address:** Auth/Download or Deployment Engine — whichever owns extraction. Add the malicious-archive test before shipping any download feature.
-
----
-
-## Moderate Pitfalls
-
-### Pitfall 8: RAR licensing makes bundling `unrar` in an AppImage legally unsafe
-
-**What goes wrong:** Many older Nexus mods ship as `.rar`. The reference `unrar`/`libunrar` uses a **non-free license** that prohibits using it to create a competing RAR-compatible archiver and restricts redistribution — risky to bundle in a distributed AppImage. Shipping it can violate the license and block distro packaging.
-
-**How to avoid:** Use a permissively-licensed extractor — `libarchive` (handles zip/7z/tar and RAR read), `7z`/`p7zip`, `unar`/`The Unarchiver`, or a Rust crate (`sevenz-rust`, `compress-tools` which wraps libarchive). Verify the chosen path can read RAR5. Audit all bundled binaries' licenses for AppImage redistribution.
-
-**Phase to address:** Auth/Download (extraction stack choice) + Packaging (license audit).
+**Phase to address:**
+Phase 7 — Starfield plugin load order. Verify against a fixture with one plugin of each tier.
 
 ---
 
-### Pitfall 9: NexusMods API limits & "downloads require the website/Premium" break the free-user flow
+### Pitfall 8: Loose-file loading silently regresses after a Bethesda game update
 
-**What goes wrong:** API download *links* are gated to Premium accounts; **free users must initiate downloads from nexusmods.com** (the site hands off via `nxm://`). Building the UX assuming the app can fetch any download URL directly will work for the dev (likely Premium) and fail for most users. Rate limits (historically ~2500/day + 100/hr per personal key; reset 00:00 GMT) and the **API Acceptable Use Policy / app-approval requirement** can throttle or block an unregistered third-party app.
+**What goes wrong:**
+Starfield's history includes updates that changed loose-file / archive-invalidation behaviour — e.g. the Vortex Starfield extension **removed** its loose-file feature (~ext v0.6.7) because a bug introduced around game version ~1.10.31.0 changed how the `sResourceDataDirsFinal` mechanism worked; community "enable loose files" recipes have shifted across patches. Risk: NexTwist writes the "correct" INI, it works today, then a Starfield update lands and mods silently stop loading in-game while NexTwist still reports "deployed OK." The safety guarantee isn't violated (nothing corrupted), but the feature quietly breaks and NexTwist gets blamed.
 
-**How to avoid:** Design the download flow around `nxm://` handoff from the website for free users (register the handler, see Pitfall 10), and direct API downloads only for Premium. Honor `X-RL-*` rate-limit headers with backoff; cache mod metadata to minimize calls. Register the app with Nexus under the API Acceptable Use Policy early; adopt OAuth2 login (the path NexusMods.App uses). Show users their remaining quota.
+**Why it happens:**
+The INI recipe is treated as a permanent constant. Bethesda ships updates that touch the resource loader; a live-service Creation Engine game is a moving target. There's no in-tool signal linking "deployed" to "actually loaded in-game."
 
-**Phase to address:** Auth/Download.
+**How to avoid:**
+(a) Keep the INI keys NexTwist writes in one place, easy to update, with version-notes on which game builds were validated. (b) Provide a lightweight **in-game verification affordance** — deploy a tiny sentinel loose file and give the user a documented one-step check so "deployed" can be confirmed as "loaded." (c) Detect the installed Starfield build and warn when it's newer than the last NexTwist-validated build ("Starfield updated; loose-file loading may need re-verification"). (d) Watch reference implementations (Nexus `game-starfield` Vortex extension, modding.wiki loose-file page) as the canary for recipe changes.
 
----
+**Warning signs:**
+- Users report "mods installed but nothing changes in-game" clustered right after a Starfield patch.
+- No record of which game build the INI recipe was validated against.
+- No end-to-end "is it actually loaded" check — only "files are on disk."
 
-### Pitfall 10: `nxm://` handler registration on Linux is fragile (AppImage, Flatpak, multiple handlers)
-
-**What goes wrong:** Without a registered `nxm://` handler, free-user downloads from the website have nowhere to go. AppImages have no fixed install path, so the `.desktop` `Exec=` can point at a moved/deleted binary; multiple managers fight over the default handler; Flatpak sandboxing complicates registration.
-
-**How to avoid:** Generate the `.desktop` with `MimeType=x-scheme-handler/nxm` on first run; register via `xdg-mime`/`xdg-settings`; for AppImages, write an absolute path that's stable (or use a launcher in `~/.local/bin`). Detect and warn if another app currently owns `x-scheme-handler/nxm`. Provide a one-click "set as default handler" and a self-test (`xdg-open "nxm://test"`).
-
-**Phase to address:** Auth/Download + Packaging (AppImage path stability).
-
----
-
-### Pitfall 11: Collections — missing/archived mods, version drift, and FOMOD automation
-
-**What goes wrong:** Collections pin exact mod *versions*; mods get archived/deleted/updated, so a collection that worked yesterday fails today. FOMOD scripted installers require replaying the curator's chosen options; if NexTwist can't automate FOMOD choices, collection install stalls or installs wrong files. NexusMods.App's own issue tracker shows FOMOD-with-predefined-choices bugs were a recurring source of broken collection installs.
-
-**How to avoid:** Pull the curator-pinned version; if archived/deleted, fall back to newest with an explicit warning, never silently. Implement the FOMOD XML installer (`ModuleConfig.xml`) including conditional flags and predefined-choice replay; persist chosen options per mod (the "magic wand" preset model). Validate the full collection in a dry run (resolve all downloads + options) before touching the filesystem; report unresolvable mods up front instead of failing midway.
-
-**Phase to address:** Collections (depends on a working FOMOD installer + download + deployment).
+**Phase to address:**
+Phase 9 — On-hardware verification (owns the deployed-vs-loaded gap); the version-drift warning belongs to Phase 6 (detection).
 
 ---
 
-### Pitfall 12: Archive invalidation / loose-file precedence not handled for Bethesda games
+### Pitfall 9: Staleness / availability of libloot's Starfield masterlist and game-handle behaviour
 
-**What goes wrong:** Creation Engine games load packed BSA/BA2 archives and loose files with specific precedence rules. Without correct archive-invalidation handling, loose mod files (textures/meshes) get ignored in favor of base BSAs, so mods appear installed but have no effect. The relevant `.ini` settings live in the (Proton-prefix) `Documents/My Games/<Game>/*.ini`.
+**What goes wrong:**
+libloot's Starfield support has evolved rapidly (LOOT/libloot changelogs across 0.23–0.26 changed `Starfield.ccc` handling — e.g. `SFBGS004.esm` added to the implicit set, and LOOT *stopped* writing `My Games\Starfield\Starfield.ccc`). **Verified 2026-07-07:** the pinned `libloot 0.29.5` already supports Starfield — `GameType::Starfield` exists in the crate's public API, and 0.29.5 is on the same 0.29.x line as the current max-stable 0.29.6, so **no dependency bump or MSRV change is needed to add Starfield** (crates.io registry + docs.rs cross-check). The residual risk is therefore *not* "does libloot support Starfield" (it does) but **masterlist currency**: if NexTwist ships a stale/absent Starfield masterlist, sorting can produce wrong order, miss newly-implicit masters, or fight the game over `Starfield.ccc`. Also: `Starfield.ccc` is loaded from `My Games\Starfield\Starfield.ccc` if present, else from the install dir — writing one into the prefix is another *reversible* write target with the same absence/restore concerns as the INI.
 
-**How to avoid:** Per supported Bethesda game, apply the correct archive-invalidation method (modern SE/FO4: set `[Archive] bInvalidateOlderFiles=1`, `sResourceDataDirsFinal=` in the prefix's `Skyrim.ini`/`Fallout4.ini`; older titles use empty-BSA tricks). Locate those `.ini`s inside the Proton prefix `My Games` folder (same prefix-resolution problem as Pitfall 6). Document casing for the `Data` tree (ties into Pitfall 5).
+**Why it happens:**
+Bethesda's update masters (SFBGS*) and CE2 quirks are a moving target that libloot tracks via masterlist + code; a bundled masterlist drifts out of date. Teams also forget the masterlist is fetched/updateable content, not compiled-in.
 
-**Phase to address:** Load Order / game-specific support (Bethesda first per PROJECT.md).
+**How to avoid:**
+Treat the masterlist as updateable data (fetch/refresh path, bundled fallback, "masterlist age" indicator) rather than assuming the compiled-in libloot is enough. **Do not** have NexTwist author/manage `Starfield.ccc` in the prefix unless deliberately needed — current libloot no longer writes it, and letting the game own it avoids an extra reversible write target. If NexTwist ever does write `.ccc`, route it through the same provenance/journal/restore-absence machinery as the INI (Pitfall 1).
 
----
+**Warning signs:**
+- Sort results disagree with LOOT desktop on the same load order.
+- Newly-released SFBGS masters aren't recognized as implicit.
+- A bundled masterlist file with a months-old date and no refresh path.
 
-### Pitfall 13: Steam game update / re-verify silently breaks deployment
-
-**What goes wrong:** A Steam update or "Verify integrity of game files" deletes/replaces files Steam owns — but **ignores files it never installed** (most mods) and can overwrite a vanilla file you'd hardlinked/backed-up, breaking deployment and leaving the manifest stale. Worse, an update can re-create the Proton prefix, invalidating prefix paths.
-
-**How to avoid:** Detect game-version changes (hash `appmanifest_<APPID>.acf` build id / key files) on app launch; if changed, mark deployment stale and prompt re-deploy + re-resolve prefix. Never assume the on-disk game matches the last-deployed state — reconcile (Pitfall 4). Document for users that they should purge before verifying integrity.
-
-**Phase to address:** Game Detection (version/build tracking) + Deployment Engine (staleness reconcile).
-
----
-
-## Minor Pitfalls
-
-### Pitfall 14: Tauri IPC blocking on long downloads / large-file handling
-
-**What goes wrong:** Running a multi-GB collection download as a blocking `#[tauri::command]` freezes the IPC bridge and UI; passing large file bodies through the JS↔Rust IPC boundary is slow and memory-heavy.
-
-**How to avoid:** Stream downloads in async Rust tasks; report progress via Tauri **events** (`emit`), not IPC return values. Never read whole archives into memory across IPC — keep file bytes in Rust, send only progress/paths to the webview. Use the OS-native HTTP stack/streaming and write to disk directly.
-
-**Phase to address:** Auth/Download (download manager architecture).
-
----
-
-### Pitfall 15: Insecure OAuth token / credential storage
-
-**What goes wrong:** Storing the Nexus OAuth token in plaintext (config file, localStorage) exposes the user's account. Stronghold (the obvious Tauri choice) is **deprecated and removed in Tauri v3**.
-
-**How to avoid:** Use the OS keyring (Secret Service / KWallet via a keyring crate or Tauri keyring plugin) for the refresh/access token; fall back to an encrypted vault with the key in the keyring only where Secret Service is unavailable (headless). Do not adopt Stronghold for new work. Scope tokens minimally; handle refresh.
-
-**Phase to address:** Auth/Download (credential storage), reviewed in any security gate.
+**Phase to address:**
+Phase 7 — load order (masterlist currency; libloot version already confirmed sufficient); the `.ccc`-as-write-target decision is a Phase 8 concern if pursued.
 
 ---
 
@@ -243,116 +214,109 @@ Extraction code that joins entry paths without re-canonicalizing; no zip-slip te
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Copy-deploy instead of hardlink/reflink | Always works, no EXDEV/fs concerns | 2x disk for every game; slow deploy; CoW benefits lost | MVP fallback only, behind a probe; never the sole strategy |
-| Overwrite vanilla files in place (no backup store) | Simpler deploy code | Breaks the non-destructive core value; unrecoverable corruption | **Never** |
-| Manifest written after deploy, no journal | Faster to build | Orphans + un-restorable purge after any crash | **Never** for the safety path |
-| Hardcode `steamuser` / single Steam root | Works on dev machine | Fails for Flatpak/Snap Steam, custom usernames, 2nd-drive libraries | Spike only; replace before any release |
-| Use Rust `zip` crate default extract, no path checks | Fast to wire up | Zip-slip RCE on third-party archives | **Never** |
-| Bundle `unrar` for RAR support | One-line RAR support | Non-free license; blocks distro packaging | Never in distributed builds |
-| Assume API can fetch any download URL | Simple download UX | Broken for all free users (Premium-gated links) | Never — design for nxm:// handoff from day one |
+| Whole-file INI template written with `fs::write` | Fastest to ship; matches community copy-paste recipe | Destroys users' existing INI settings; not reversibly restorable; breaks core guarantee | **Never** for the real path; only in a throwaway spike |
+| Hard-coded `SFBGS*.esm` protected-master array | No libloot round-trip to gate the UI | Rots on every Bethesda update that adds a master; wrong enable/disable gating | Only as a belt-and-suspenders *fallback* behind libloot's list, never the source of truth |
+| Backup-only reversibility (no "created-by-us" provenance) | Reuses v1.0 vanilla-backup ledger unchanged | Purge can't restore ABSENCE; leaves orphan INI/dirs | Never — the headline pitfall for this milestone |
+| Hard-coded prefix INI path with fixed casing | Works on the dev's already-launched prefix | Fails on case-sensitive FS, redirected Documents, first-launch-not-done | Never — reuse v1.0 casing/prefix seam |
+| Ship a bundled Starfield masterlist with no refresh path | No network code needed | Drifts stale as Bethesda adds SFBGS masters; wrong sorts | MVP-only; add refresh/age indicator before wide release |
 
 ## Integration Gotchas
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| NexusMods API | Direct download links for everyone; ignoring rate-limit headers; unregistered app | Premium → API links, free → nxm:// website handoff; honor `X-RL-*`; register under Acceptable Use Policy; OAuth2 |
-| Steam library | Single root, single drive, NTFS-style assumptions | Parse `libraryfolders.vdf` + `appmanifest_*.acf`; support multi-drive, Flatpak/Snap roots |
-| Proton prefix | Writing load order to native HOME / wrong prefix | Derive `compatdata/<APPID>/pfx/.../steamuser/AppData/Local/<Game>`; re-resolve each session |
-| Wine filesystem | Assume case-insensitive like Windows | Casefold the deploy tree or normalize mod path casing |
-| FOMOD installers | Treat as plain archives | Implement `ModuleConfig.xml` installer with flags + predefined-choice replay |
-| Archive libs | Trust crate to prevent traversal | Canonicalize + bounds-check every entry; reject symlink/absolute/`..`; pin safe versions |
-
-## Performance Traps
-
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Re-hashing/relinking entire load order on every deploy | Long stalls deploying large lists | Incremental deploy: diff manifest, only touch changed files | Large Skyrim setups (hundreds of mods, 10k+ files) |
-| Wine's runtime case-insensitive lookups instead of fs casefold | Slow file access in-game | Use ext4/tmpfs casefold at deploy target | Texture-heavy mods, many files |
-| Large file bytes over Tauri IPC | High RAM, UI jank | Stream in Rust; events for progress only | Multi-GB collections |
-| Synchronous metadata calls per mod during collection resolve | Slow installs; hits rate limit | Batch + cache metadata; respect rate limits | Collections with 100s of mods |
+| Proton prefix (`compatdata/1716740/pfx`) | Using a Linux-side `~/Documents/My Games` path | Resolve inside the prefix via v1.0's steam/casing seam; read `user.reg` for Documents redirection; handle folder-absent (first launch) |
+| Wine case-folding | Hard-coded `My Games`/`Documents`/`steamuser` casing | Case-fold every segment through `casing.rs`; the on-disk casing Wine materializes isn't guaranteed |
+| libloot (Starfield) | Hand-enumerating plugins and classifying types | Use libloot's `GameType::Starfield` game handle (present in pinned 0.29.5) for type, validity, implicit-active set, and BlueprintShips rules |
+| `plugins.txt` (asterisk format) | Writing protected/implicit masters or `BlueprintShips-*` into it | Never write implicit masters; the game strips `BlueprintShips-*` on startup regardless |
+| `Starfield.ccc` | Authoring/writing it into the prefix | Let the game own it; current libloot stopped writing it. If written, journal it as a reversible target |
 
 ## Security Mistakes
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Zip-slip / symlink-in-archive extraction | Arbitrary file write / RCE from untrusted mods | Canonicalize+bounds-check entries; reject symlinks/abs/`..`; pin non-vulnerable crates; test fixture |
-| Plaintext OAuth token | Account takeover | OS keyring; encrypted vault fallback; no Stronghold (deprecated) |
-| Extracting directly into game tree | Malicious archive corrupts game | Extract to temp, validate, then move |
-| Trusting collection/mod file hashes only from API | Tampered download installed | Verify downloaded file hash against API-provided hash before install |
-| nxm:// handler hijack / pointing Exec at arbitrary path | Malicious handler interception | Validate handler ownership; stable absolute Exec path |
+| Trusting a mod-supplied `StarfieldCustom.ini` and merging it wholesale | A mod could inject arbitrary INI keys (paths, loader settings) into the user's prefix | Only ever set the two keys NexTwist owns; treat any mod-provided INI as data to inspect, not apply verbatim |
+| Following an INI-relative path outside `My Games/Starfield` when creating parents | Write-through outside the intended prefix location | Bound INI writes to the resolved prefix Starfield dir; reuse the spirit of v1.0's zip-slip/symlink-write-through defenses |
 
 ## UX Pitfalls
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| "Deploy succeeded" with no in-game effect (case/symlink/archive-invalidation) | User can't tell mods are broken | Post-deploy validation + load a known test asset; surface red/green status per game |
-| Failing a collection install midway | User left with a half-modded game | Dry-run resolve all mods/options first; report blockers before touching disk |
-| Silent fallback to copy/symlink | Confusing disk usage or broken mods | Tell the user which method is active and why; explain EXDEV/casefold remediation |
-| No "remaining API quota" feedback | Sudden rate-limit walls mid-session | Show quota; queue + backoff |
-| Purge that doesn't truly restore vanilla | Erodes the trust that is the product's reason to exist | Verify/repair + show "game is pristine" confirmation with diff vs. manifest |
+| Enabling loose files silently, no confirmation | User's existing INI changed without consent; distrust | Show the exact `[Archive]` change; note it's reversible; record provenance |
+| Reporting "deployed" with no "is it loaded in-game" signal | User thinks mods work; they don't (post-update regression) | Provide an in-game verification step (Pitfall 8) |
+| Showing protected base masters as toggleable | User disables `Starfield.esm`, corrupts save, blames tool | Lock/grey implicit masters (MO2 issue #2051 pattern) |
+| Silent no-op when `My Games/Starfield` doesn't exist | INI written nowhere useful; mods don't load | Detect first-launch-not-done and guide "launch the game once" |
+
+## Performance Traps
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Re-hashing the whole game/staging tree to verify INI reversibility | Slow verify on huge Bethesda load orders | Hash only the INI (and journaled targets), not a blind disk scan — reuse v1.0's manifest/journal-bounded verify | Large texture-pack load orders (tens of GB) |
+| Re-running libloot full sort on every UI interaction | UI lag with many plugins | Sort on demand / cache; libloot sort is not free | Hundreds of active plugins |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Deployment:** Tested on ext4 *and* btrfs-subvolume *and* second-drive Steam library — verify EXDEV handling, not just the dev's single ext4 partition.
-- [ ] **Purge:** After install→purge, the game folder byte-for-byte matches vanilla (no orphans, originals restored) — verify with a hash diff, not "looks empty".
-- [ ] **Overwrite safety:** A mod that *replaces* a base game file is backed up and restored on purge — verify the original returns.
-- [ ] **Crash recovery:** Kill the app mid-deploy, relaunch — verify journal reconcile leaves a consistent state.
-- [ ] **Case sensitivity:** A mod packaged with mismatched casing actually loads in-game under Proton — verify, don't assume.
-- [ ] **Prefix:** Load order applies for default Steam, Flatpak Steam, and a custom username — verify in-game plugin list.
-- [ ] **Free-user download:** Tested with a non-Premium account via nxm:// handoff — not just the dev's Premium account.
-- [ ] **Archive safety:** A crafted zip-slip / symlink archive is rejected — verify with a test fixture.
-- [ ] **Collection:** A collection containing an archived/deleted mod and a FOMOD-with-choices installs or fails gracefully with a clear report.
-- [ ] **Archive invalidation:** Loose texture/mesh mods visibly override base BSAs in-game.
-- [ ] **Steam update:** After a simulated game update/verify, app detects staleness and offers re-deploy.
+- [ ] **Reversible INI (absence):** Purge tested from the *absent-INI* start state — asserts the file and any NexTwist-created parent dirs are gone, not blanked.
+- [ ] **Reversible INI (restore):** Purge tested from a *pre-existing populated INI* — asserts unrelated `[Display]`/`[Controls]` keys and original bytes (incl. CRLF/BOM) restored exactly.
+- [ ] **Idempotency:** INI deploy run twice (and crash-replayed) yields one `[Archive]` section, identical bytes.
+- [ ] **Path:** INI resolves inside the Proton prefix, case-folded, Documents-redirection handled — verified on a real prefix, not just the dev's.
+- [ ] **Load order:** No protected/implicit master or `BlueprintShips-*` ever appears in the managed `plugins.txt`.
+- [ ] **Load order:** Medium-master tier classified correctly (not full/light).
+- [ ] **libloot:** Sort matches LOOT desktop on the same inputs; masterlist currency indicated.
+- [ ] **On hardware:** A real loose-file mod is confirmed *visible in-game*, not merely "on disk" (PROJECT.md's stated milestone bar).
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Orphan files after purge | LOW–MEDIUM | verify/repair command diffs manifest vs disk, deletes recorded orphans, restores backed-up originals |
-| Vanilla file overwritten with no backup | HIGH | Only fixable by Steam "Verify integrity" re-download; prevention (backup store) is the real fix |
-| Wrong prefix / load order never applied | LOW | Re-resolve prefix from acf/vdf, re-write plugins.txt in correct path |
-| EXDEV deployment failure | LOW | Probe + relocate staging onto same fs/subvolume, or fall back to reflink/copy |
-| Case-mismatch broken mod | LOW–MEDIUM | Casefold the deploy dir (must be empty) or normalize casing and redeploy |
-| Half-installed collection | MEDIUM | Dry-run resolver state lets you resume; otherwise purge collection and reinstall |
-| Leaked plaintext token | MEDIUM | Revoke token on Nexus, re-auth via OAuth, migrate to keyring |
+| Orphan INI left after purge (P1) | LOW | Add provenance branch + restore-absence; ship a one-time cleanup that removes a NexTwist-signature empty INI |
+| Clobbered user INI (P2) | HIGH (user data lost) | Only recoverable if a byte-for-byte backup was taken; otherwise unrecoverable — prevention is the only defense |
+| Protected master disabled/reordered (P6) | MEDIUM | Rebuild `plugins.txt` from libloot's implicit set; user may need a save-integrity check |
+| Loose files stopped loading post-update (P8) | LOW–MEDIUM | Detect game version drift; refresh the INI recipe; re-run in-game verification |
+| Stale masterlist wrong sort (P9) | LOW | Refresh masterlist; re-sort (no libloot bump needed — 0.29.5 already supports Starfield) |
+
+## Testing Traps (fixtures vs on-hardware)
+
+**Unit/integration without a live Starfield install — use fixture prefixes (extend v1.0 `testkit`):**
+- Build a fake Proton prefix tree: `compatdata/1716740/pfx/drive_c/users/steamuser/Documents/My Games/Starfield/` with variants — INI absent, INI present-and-populated (CRLF + unrelated sections), INI present with an existing `[Archive]`, and a case-mismatched (`My games`) variant.
+- Build a fake Starfield Data dir with plugins of each tier (full/medium/small master) plus the protected base masters and a `BlueprintShips-X.esm`, to drive libloot classification and the "never write protected masters" assertion.
+- Reuse the `DIR_SENTINEL` blake3 pristine-tree assertion to lock byte-for-byte reversibility across both INI provenance branches (absent→gone, present→restored) and empty-dir cleanup.
+- Add an idempotency test (op run twice) and a crash-replay test (mirror the `crash_recovery` suite) for the INI op through the journal.
+- All headless — no webview, no live game — consistent with the `crates/*` zero-Tauri-dep boundary.
+
+**What must be checked on real hardware (owner has Starfield on Proton — PROJECT.md):**
+- The in-prefix INI path actually resolves on a genuine Proton prefix (Documents redirection, real Wine casing).
+- The `My Games/Starfield` folder-lifecycle: behaviour before vs after the game's first launch.
+- Enabling loose files via the written INI makes a real loose-file mod **visible in-game** (the milestone's explicit bar), not merely present on disk.
+- Sort output agrees with LOOT desktop and the game doesn't strip/re-order what NexTwist wrote.
+- Post-update sanity: after a Starfield patch, re-confirm loose files still load (the regression canary).
 
 ## Pitfall-to-Phase Mapping
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| 1 Hardlink/EXDEV/btrfs | Deployment Engine + Game Detection | Deploy succeeds on ext4, btrfs subvol, 2nd-drive library |
-| 2 Symlink not followed | Deployment Engine | Known test mod loads in-game under Proton |
-| 3 Overwrite destroys vanilla | Deployment Engine (backup store) | Replaced base file restored on purge |
-| 4 Manifest/orphans/purge | Deployment Engine (journal + verify/repair) | Hash-diff vanilla after install→purge; crash-mid-deploy recovers |
-| 5 Case sensitivity | Game Detection + Deployment Engine | Mixed-case mod loads in-game |
-| 6 Wrong Proton prefix | Game Detection + Load Order | Load order applies on default/Flatpak/custom-user Steam |
-| 7 Zip-slip | Auth/Download (extraction) | Crafted malicious archive rejected (test fixture) |
-| 8 RAR license | Auth/Download + Packaging | License audit of bundled extractors; RAR5 reads |
-| 9 API limits/Premium gating | Auth/Download | Free account downloads via nxm:// handoff |
-| 10 nxm:// handler | Auth/Download + Packaging | `xdg-open nxm://test` reaches the app from AppImage |
-| 11 Collections/FOMOD | Collections | Collection with archived mod + FOMOD choices resolves or fails cleanly |
-| 12 Archive invalidation | Load Order / Bethesda support | Loose files override base BSAs in-game |
-| 13 Steam update breakage | Game Detection + Deployment Engine | App flags staleness after build-id change |
-| 14 Tauri IPC/large files | Auth/Download | Multi-GB download streams with progress, no UI freeze |
-| 15 Token storage | Auth/Download + security gate | Token in keyring, not plaintext; no Stronghold |
+| 1. Purge must restore INI absence | Phase 8 (INI) | Deploy→purge from absent start asserts file+dirs gone (extend `DIR_SENTINEL`) |
+| 2. Don't clobber existing user INI | Phase 8 (INI) | Populated-INI fixture: unrelated keys survive round-trip |
+| 3. CRLF/BOM byte-for-byte | Phase 8 (INI) | CRLF+BOM fixture round-trips with matching backup hash |
+| 4. Idempotent INI deploy | Phase 8 (INI) + journal/replay | Run-twice + crash-replay assert single `[Archive]`, identical bytes |
+| 5. Proton-prefix path/casing/first-launch | Phase 6 (detection/paths) | Resolves correct in-prefix path on a real + case-sensitive fixture prefix |
+| 6. Never touch protected base masters | Phase 7 (load order) | No implicit master/`BlueprintShips-*` in managed `plugins.txt` |
+| 7. Medium-master tier + limits | Phase 7 (load order) | Each-tier fixture classified correctly via libloot |
+| 8. Post-update loose-file regression | Phase 9 (HW verify) + Phase 6 (version drift) | Real mod visible in-game; version-drift warning fires on newer build |
+| 9. Masterlist staleness; `.ccc` | Phase 7 (load order) | Sort matches LOOT desktop; masterlist age surfaced |
 
 ## Sources
 
-- Nexus Mods Wiki — Deployment Methods (hardlink/symlink mechanics, purge): https://wiki.nexusmods.com/index.php/Deployment_Methods (MEDIUM)
-- Vortex Wiki / DeepWiki — Mod Deployment & manifest-based safety, Repair for orphans: https://deepwiki.com/Nexus-Mods/Vortex/3.2-mod-deployment ; https://github.com/Nexus-Mods/Vortex/wiki/MODDINGWIKI-Users-FAQ (MEDIUM)
-- Vortex GitHub issues — symlink deploy failures, purge not purging: https://github.com/Nexus-Mods/Vortex/issues/9266 ; https://github.com/Nexus-Mods/Vortex/issues/6234 ; https://github.com/Nexus-Mods/Vortex/issues/5497 (MEDIUM)
-- Phoronix / kernel — Wine + ext4 casefold, tmpfs case-folding (Linux 6.13): https://www.phoronix.com/news/Linux-6.13-Tmpfs-Case-Folding (MEDIUM)
-- WineHQ forum — Wine does not abstract filesystem, case mismatch crashes: https://forum.winehq.org/viewtopic.php?t=2959 (LOW)
-- btrfs cross-subvolume hardlink EXDEV: https://itsfoss.gitlab.io/blog/getting-invalid-cross-device-link-doing-a-cp--l---same-volume/ ; kernel patch threads (MEDIUM)
-- Skyrim plugins.txt / loadorder.txt location, MO2 profile paths: Step Mods, LOOT docs, MO2 issue #644 (MEDIUM)
-- NexusMods API rate limits / Premium-gated downloads / Acceptable Use Policy: https://help.nexusmods.com/article/105 ; https://help.nexusmods.com/article/114 (MEDIUM)
-- NexusMods.App downloads FAQ + nxm:// xdg-mime handler on Linux; OAuth2 issue #19: https://nexus-mods.github.io/NexusMods.App/users/faq/NexusModsDownloads/ ; https://github.com/Nexus-Mods/NexusMods.App/issues/19 (MEDIUM)
-- NexusMods.App FOMOD docs + collection FOMOD-choices bug; Collections version pinning/archived fallback: https://nexus-mods.github.io/NexusMods.App/developers/misc/AboutFomod/ ; https://modding.wiki/en/nexusmods/collections/create/mod-options (MEDIUM)
-- Zip-slip: Rust `zip` CVE-2025-29787, async-tar TARmageddon, async_zip no-protection stance, Snyk zip-slip: https://www.sentinelone.com/vulnerability-database/cve-2025-29787/ ; https://github.com/snyk/zip-slip-vulnerability ; https://linuxsecurity.com/news/security-vulnerabilities/linux-tar-async-tar-vulnerability-tarmageddon (MEDIUM)
-- Tauri 2 — Stronghold deprecation, keyring/OS-native secure storage, IPC: https://v2.tauri.app/plugin/stronghold/ ; https://github.com/orgs/tauri-apps/discussions/7846 ; https://v2.tauri.app/security/ (MEDIUM)
-- Steam verify-integrity ignores non-Steam files, can overwrite modded base files: https://steamcommunity.com/sharedfiles/filedetails/?id=2834863313 (LOW)
+- Ortham (LOOT/libloot author) — "Load order in Starfield" (2024-06-28), "part 2: blueprint plugins" (2024-07-30), "October 2024 edition" (2024-10-12), "BlueprintShips plugins" (2026-05-04). Implicit-active masters, medium-master tier, `FDxxyyyy` scheme, `Starfield.ccc` semantics, BlueprintShips stripping/auto-activation. **HIGH** (authoritative — the load-order library's author). https://blog.ortham.net/
+- LOOT docs — "Changing plugin types in Starfield"; Version History 0.24.0/0.26.0 (`Starfield.ccc` handling, `SFBGS004.esm`, stopped writing `My Games\Starfield\Starfield.ccc`). **HIGH**. https://loot.github.io / loot.readthedocs.io
+- crates.io registry + docs.rs — `libloot` max-stable 0.29.6 (pinned 0.29.5 same 0.29.x line); `GameType::Starfield` present in the public API → Starfield supported with zero dependency/MSRV change. **HIGH** (direct registry + generated-docs verification, 2026-07-07). https://crates.io/crates/libloot / https://docs.rs/libloot
+- Nexus Mods — "Base StarfieldCustom.ini to Enable Loose File Mods" (mods/273), "Best Practices with Loose Files" (articles/578), "Howto: Archive Invalidation" (articles/116). INI `[Archive]`/`sResourceDataDirsFinal=`/`bInvalidateOlderFiles=1`, `.txt` extension trap, file location. **HIGH** (universally corroborated recipe).
+- modding.wiki — "Loose File Modding" (Starfield). INI settings + fixes. **MEDIUM–HIGH**.
+- AFK Mods — "Starfield ESM Modules — What are they?"; Unofficial Starfield Patch readme (master list Starfield/Constellation/OldMars/SFBGS00x/BlueprintShips). **MEDIUM** (community, cross-checked with Ortham).
+- ModOrganizer2 issue #2051 — basegame ESMs disableable when they should be greyed out (protected-master UI-locking pattern). **MEDIUM**.
+- Nexus-Mods/game-starfield (Vortex extension) + Nexus news 14883 — loose-file feature removed (~ext v0.6.7) after game ~1.10.31.0 broke it; regression history. **MEDIUM**.
+- Bethesda Support a_id 62179 — "save relies on content no longer present" (consequence of disabled/missing masters). **MEDIUM**.
+- NexTwist `.planning/PROJECT.md` + `CLAUDE.md` — v1.0 crash-safety journal, vanilla-backup ledger, `DIR_SENTINEL` pristine assertion, casing/steam prefix seam, libloot 0.29.5, milestone scope/phase numbering. **HIGH** (project-internal).
 
 ---
-*Pitfalls research for: Linux/Proton NexusMods mod manager (Rust + Tauri)*
-*Researched: 2026-06-20*
+*Pitfalls research for: Starfield (CE2) support + reversible StarfieldCustom.ini editing on Linux/Proton*
+*Researched: 2026-07-07*

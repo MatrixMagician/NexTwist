@@ -47,7 +47,12 @@ pub struct VerifyReport {
     /// orphans/managed). `repair` removes exactly these (and only these). Distinct from
     /// `orphans` (files) so the UI can tell the two apart.
     pub orphan_dirs: Vec<PathBuf>,
-    /// True when no drift of any kind was found.
+    /// StarfieldCustom.ini drift while loose files are deployed (SFINI-05), or `None` for a
+    /// non-Starfield game / no drift. The INI lives OUTSIDE the `deploy_root`, so it cannot
+    /// ride the `missing`/`changed`/orphan walk — it is a distinct, `is_starfield`-gated
+    /// check resolved entirely inside `gameconfig` (never `resolve_target`/`guard_within_root`).
+    pub ini_drift: Option<crate::gameconfig::IniDrift>,
+    /// True when no drift of any kind was found (INI drift included).
     pub pristine: bool,
 }
 
@@ -61,6 +66,9 @@ pub struct RepairReport {
     /// Number of orphan EMPTY directories removed (the ONLY thing repair deletes — file
     /// orphans remain report-only, so no file is ever deleted; T-01-16 / T-01-20).
     pub removed_orphan_dirs: usize,
+    /// Whether a drifted StarfieldCustom.ini was re-activated to its recorded state (SFINI-05).
+    /// A user-blocked conflict is NOT drift, so it is never re-activated / clobbered here.
+    pub restored_ini: bool,
     /// Orphans (files) surfaced for the UI — NEVER deleted by repair.
     pub orphans: Vec<PathBuf>,
 }
@@ -106,10 +114,19 @@ pub fn verify(store: &Store, game: &Game) -> Result<VerifyReport, DeployError> {
     // not on the ancestor path of any managed target nor of a vanilla-backed original.
     report.orphan_dirs = walk_orphan_dirs(store, game, &data_dir, &managed)?;
 
+    // SFINI-05: the StarfieldCustom.ini participates in verify like a deployed file, but it
+    // lives OUTSIDE the deploy root, so it is a distinct `is_starfield`-gated check whose
+    // path/INI logic stays inside `gameconfig` (never `resolve_target`/`guard_within_root`,
+    // never widens the `deploy_root`-bounded orphan walk above — T-08-03).
+    if game.appid == steam::STARFIELD {
+        report.ini_drift = crate::gameconfig::ini_drift(store, game)?;
+    }
+
     report.pristine = report.missing.is_empty()
         && report.changed.is_empty()
         && report.orphans.is_empty()
-        && report.orphan_dirs.is_empty();
+        && report.orphan_dirs.is_empty()
+        && report.ini_drift.is_none();
     Ok(report)
 }
 
@@ -129,6 +146,7 @@ pub fn repair(store: &Store, game: &Game) -> Result<RepairReport, DeployError> {
         restored_missing: 0,
         restored_changed: 0,
         removed_orphan_dirs: 0,
+        restored_ini: false,
         orphans: report.orphans.clone(),
     };
 
@@ -188,6 +206,20 @@ pub fn repair(store: &Store, game: &Game) -> Result<RepairReport, DeployError> {
         if !removed_any {
             break;
         }
+    }
+
+    // SFINI-05: re-activate a drifted StarfieldCustom.ini to its recorded state, exactly as
+    // the deploy-tail hook does — under `Block`, so a genuine user conflict stays Blocked
+    // (surfaced, never clobbered) and is therefore never treated as repairable drift (its
+    // `ini_drift` is already `None`). Path/INI logic stays inside `gameconfig`; `verify.rs`
+    // never touches `my_games_path`/`resolve_target`/`guard_within_root` (T-08-03).
+    if game.appid == steam::STARFIELD && report.ini_drift.is_some() {
+        let outcome = crate::gameconfig::ensure_ini_active(
+            store,
+            game,
+            crate::gameconfig::IniConflictResolution::Block,
+        )?;
+        out.restored_ini = matches!(outcome, crate::gameconfig::IniOutcome::Activated);
     }
 
     Ok(out)

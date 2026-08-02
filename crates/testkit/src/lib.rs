@@ -95,6 +95,107 @@ pub fn fake_proton_prefix(
     Ok(root.to_path_buf())
 }
 
+/// Options for [`fake_my_games_prefix`] — the CE2 `Documents/My Games/<folder>` fixture.
+///
+/// All fields default to the simplest shape (canonical casing, no marker, no `user.reg`),
+/// so a bare `MyGamesOpts::default()` builds an empty first-launch-pending prefix.
+#[derive(Default)]
+pub struct MyGamesOpts<'a> {
+    /// Build the `Documents/My Games/<folder>` tail MIS-CASED
+    /// (`documents/my games/<folder lowercased>`) to exercise the case-fold resolver.
+    /// Default builds the canonical Bethesda casing.
+    pub case_variant: bool,
+    /// Seed a file with this name inside the `My Games/<folder>` dir. A non-empty dir
+    /// flips the resolver from `FirstLaunchPending` to `Ready`.
+    pub marker: Option<&'a str>,
+    /// Write `<root>/user.reg` with a `"Personal"` value under the Wine
+    /// `User Shell Folders` section. The value is a logical Windows path
+    /// (single backslashes, e.g. `C:\users\steamuser\Documents`); the fixture escapes
+    /// the backslashes exactly as Wine does on disk.
+    pub personal: Option<&'a str>,
+}
+
+/// Build a fake Proton-prefix tree seeded with the CE2 `Documents/My Games/<folder>`
+/// subtree the `steam::ce2` resolver targets, returning `root` (the prefix root).
+///
+/// This is the `Documents/My Games` sibling of [`fake_proton_prefix`] (which seeds
+/// `AppData/Local`). Starfield's `StarfieldCustom.ini` + first-launch marker live under
+/// `<root>/drive_c/users/steamuser/Documents/My Games/<folder>/` — this fixture lets the
+/// case-fold / first-launch / redirection resolver tests run headlessly in CI.
+///
+/// **Read-only invariant:** Phase 6 performs NO writes to a real prefix; this builder only
+/// materializes a *fake* prefix on a temp dir so the read-only resolver has something to
+/// probe.
+///
+/// Shapes (via [`MyGamesOpts`]):
+/// * canonical `Documents/My Games/<folder>` (default),
+/// * `case_variant` → mis-cased `documents/my games/<folder lowercased>` (the MANDATORY
+///   SFDET-02 case-mismatch fixture),
+/// * `marker` → a seeded file inside the folder (flips `FirstLaunchPending` → `Ready`),
+/// * `personal` → a `user.reg` carrying a `"Personal"` shell-folder redirect.
+pub fn fake_my_games_prefix(
+    root: &Path,
+    folder: &str,
+    opts: MyGamesOpts<'_>,
+) -> io::Result<PathBuf> {
+    let base = root.join("drive_c").join("users").join("steamuser");
+    let my_games = if opts.case_variant {
+        base.join("documents")
+            .join("my games")
+            .join(folder.to_lowercase())
+    } else {
+        base.join("Documents").join("My Games").join(folder)
+    };
+    fs::create_dir_all(&my_games)?;
+    if let Some(name) = opts.marker {
+        fs::write(my_games.join(name), b"")?;
+    }
+    if let Some(personal) = opts.personal {
+        // Wine stores backslashes doubled in user.reg; mirror that on disk.
+        let escaped = personal.replace('\\', "\\\\");
+        let reg = format!(
+            "[Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Explorer\\\\User Shell Folders]\n\"Personal\"=\"{escaped}\"\n"
+        );
+        fs::write(root.join("user.reg"), reg)?;
+    }
+    Ok(root.to_path_buf())
+}
+
+/// Write a minimal esplugin-parseable plugin file (a bare 24-byte TES4 header record) into
+/// `dir` under `name`, with the given raw TES4 header flags.
+///
+/// The header layout mirrors the Plan-02 spike fixture: `b"TES4"`, a zero subrecord-size,
+/// the 32-bit little-endian `flags`, then a zero form-id and 8 padding bytes. Callers pass
+/// the flag bits their game classifier reads — `0x1` = master, and for Starfield `0x400` =
+/// medium (see [`write_medium_plugin`]). This is the ONE shared plugin-fixture builder the
+/// loadorder integration tests reuse, so the header shape lives in exactly one place.
+pub fn write_plugin_header(dir: &Path, name: &str, flags: u32) -> io::Result<()> {
+    let mut bytes = Vec::with_capacity(24);
+    bytes.extend_from_slice(b"TES4");
+    bytes.extend_from_slice(&0u32.to_le_bytes()); // size_of_subrecords = 0
+    bytes.extend_from_slice(&flags.to_le_bytes()); // TES4 record header flags
+    bytes.extend_from_slice(&0u32.to_le_bytes()); // form_id
+    bytes.extend_from_slice(&[0u8; 8]); // version control + unknown (ignored)
+    fs::create_dir_all(dir)?;
+    fs::write(dir.join(name), &bytes)
+}
+
+/// Write a minimal master (`0x1`) or regular (`0x0`) plugin fixture — the non-medium
+/// convenience over [`write_plugin_header`].
+pub fn write_min_plugin(dir: &Path, name: &str, master: bool) -> io::Result<()> {
+    write_plugin_header(dir, name, if master { 0x1 } else { 0x0 })
+}
+
+/// Write a Starfield MEDIUM master fixture: a TES4 header with the master (`0x1`) AND the
+/// Starfield medium (`0x400`) flag set, so `esplugin::Plugin::is_medium_plugin()` returns
+/// true when parsed under `GameId::Starfield` (and false under SkyrimSE/Fallout4, which do
+/// not support the medium flag — verified `esplugin 6.1.4 plugin.rs:503-510`). A medium
+/// master is still a master (`is_master_file()` true → `PluginKind::Esm`), so `medium` is a
+/// separate boolean, never a fourth `PluginKind`.
+pub fn write_medium_plugin(dir: &Path, name: &str) -> io::Result<()> {
+    write_plugin_header(dir, name, 0x1 | 0x400)
+}
+
 fn write_tree(root: &Path, files: &[(&str, &[u8])]) -> io::Result<()> {
     for (rel, bytes) in files {
         let path = root.join(rel);
@@ -350,6 +451,73 @@ mod tests {
         assert!(
             !appdata_local.join("Plugins.txt").exists(),
             "no Plugins.txt should be seeded when plugins_txt is None"
+        );
+    }
+
+    #[test]
+    fn fake_my_games_prefix_builds_shapes_on_request() {
+        // (a) canonical, no marker, no user.reg → dir exists, folder empty, no user.reg.
+        let d = TempDir::new().unwrap();
+        let root = fake_my_games_prefix(d.path(), "Starfield", MyGamesOpts::default()).unwrap();
+        assert_eq!(root, d.path());
+        let canonical = root.join("drive_c/users/steamuser/Documents/My Games/Starfield");
+        assert!(canonical.is_dir(), "canonical My Games/<folder> must exist");
+        assert_eq!(fs::read_dir(&canonical).unwrap().count(), 0, "folder empty");
+        assert!(!root.join("user.reg").exists(), "no user.reg unless requested");
+
+        // (b) case-variant tail exists under the mis-cased path.
+        let d2 = TempDir::new().unwrap();
+        fake_my_games_prefix(
+            d2.path(),
+            "Starfield",
+            MyGamesOpts { case_variant: true, ..Default::default() },
+        )
+        .unwrap();
+        assert!(
+            d2.path().join("drive_c/users/steamuser/documents/my games/starfield").is_dir(),
+            "case-variant mis-cased tail must exist"
+        );
+
+        // (c) marker + user.reg written only when requested.
+        let d3 = TempDir::new().unwrap();
+        fake_my_games_prefix(
+            d3.path(),
+            "Starfield",
+            MyGamesOpts {
+                marker: Some("StarfieldCustom.ini"),
+                personal: Some(r"C:\users\steamuser\Documents"),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let folder = d3.path().join("drive_c/users/steamuser/Documents/My Games/Starfield");
+        assert!(folder.join("StarfieldCustom.ini").is_file(), "marker seeded");
+        let reg = fs::read_to_string(d3.path().join("user.reg")).unwrap();
+        assert!(reg.contains("\"Personal\"=\"C:\\\\users\\\\steamuser\\\\Documents\""));
+        assert!(reg.contains("User Shell Folders"));
+    }
+
+    #[test]
+    fn plugin_header_builders_set_the_expected_flags() {
+        let dir = TempDir::new().unwrap();
+        write_min_plugin(dir.path(), "Regular.esp", false).unwrap();
+        write_min_plugin(dir.path(), "Master.esm", true).unwrap();
+        write_medium_plugin(dir.path(), "Medium.esm").unwrap();
+
+        // The 24-byte TES4 header carries the flags at bytes [8..12) (little-endian).
+        let flags = |name: &str| -> u32 {
+            let b = fs::read(dir.path().join(name)).unwrap();
+            assert_eq!(&b[0..4], b"TES4", "valid TES4 magic");
+            assert_eq!(b.len(), 24, "minimal 24-byte header");
+            u32::from_le_bytes(b[8..12].try_into().unwrap())
+        };
+        assert_eq!(flags("Regular.esp"), 0x0, "regular plugin: no flags");
+        assert_eq!(flags("Master.esm") & 0x1, 0x1, "master flag set");
+        assert_eq!(flags("Medium.esm") & 0x1, 0x1, "medium master is still a master");
+        assert_eq!(
+            flags("Medium.esm") & 0x400,
+            0x400,
+            "Starfield medium flag (0x400) set"
         );
     }
 

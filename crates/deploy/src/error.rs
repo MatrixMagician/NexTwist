@@ -48,6 +48,16 @@ pub enum DeployError {
     /// completed means the game is pristine (or journal-recoverable), never unreversible.
     #[error("profile switch error: {0}")]
     Profile(String),
+
+    /// A pre-existing NON-EMPTY user `sResourceDataDirsFinal` value blocks automatic
+    /// StarfieldCustom.ini activation (SFINI-03). Carries the user's current value so the
+    /// UI can offer keep-mine vs use-NexTwist. NexTwist never clobbers it silently — the
+    /// engine surfaces this rather than overwriting (auto-write only an empty/absent value).
+    #[error("StarfieldCustom.ini conflict: user set sResourceDataDirsFinal to {current_value:?}")]
+    IniConflict {
+        /// The user's current non-empty `sResourceDataDirsFinal` value.
+        current_value: String,
+    },
 }
 
 impl DeployError {

@@ -16,12 +16,16 @@
 pub mod error;
 pub mod loot;
 pub mod masterlist;
+pub mod reconcile;
 pub mod scan;
 
 pub use error::LoadOrderError;
+pub use reconcile::{reconcile_plugins_txt, ReconcileState};
 pub use loot::{
-    appdata_folder_name, appdata_local_path, apply_load_order, masters_first_order, propose_sort,
-    SortProposal,
+    appdata_folder_name, appdata_local_path, apply_load_order, masters_first_order,
+    propose_sort, protected_plugins, SortProposal,
 };
-pub use masterlist::ensure_masterlist;
-pub use scan::{esplugin_game_id, scan_plugins, scan_plugins_for};
+pub use masterlist::{ensure_masterlist, masterlist_snapshot_date};
+pub use scan::{
+    esplugin_game_id, scan_plugin_views_for, scan_plugins, scan_plugins_for, PluginView,
+};

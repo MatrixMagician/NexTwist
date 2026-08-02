@@ -28,6 +28,8 @@ use crate::error::LoadOrderError;
 const SKYRIM_SE: u32 = 489830;
 /// Fallout 4 AppID (mirrors `loot::FALLOUT4`).
 const FALLOUT4: u32 = 377160;
+/// Starfield AppID (mirrors `loot::STARFIELD`).
+const STARFIELD: u32 = 1716740;
 
 /// The masterlist branch pinned to the libloot 0.29.x major (Pitfall 5). Bump this in
 /// lock-step with the `libloot` workspace version.
@@ -41,12 +43,29 @@ const MASTERLIST_HOST: &str = "https://raw.githubusercontent.com";
 /// domain, legally safe to embed (RESEARCH Pattern 3).
 const SKYRIMSE_SNAPSHOT: &str = include_str!("../assets/skyrimse/masterlist.yaml");
 const FALLOUT4_SNAPSHOT: &str = include_str!("../assets/fallout4/masterlist.yaml");
+const STARFIELD_SNAPSHOT: &str = include_str!("../assets/starfield/masterlist.yaml");
 
 /// The LOOT repo slug for a supported AppID (`loot/<slug>`), or `None` if unsupported.
 fn game_slug(appid: u32) -> Option<&'static str> {
     match appid {
         SKYRIM_SE => Some("skyrimse"),
         FALLOUT4 => Some("fallout4"),
+        STARFIELD => Some("starfield"),
+        _ => None,
+    }
+}
+
+/// The recorded snapshot date (git commit date of the bundled `masterlist.yaml`) for a
+/// supported AppID, surfaced as the SFLO-02 "masterlist from {date} — may be stale" note.
+///
+/// The bundled snapshot is `include_str!`'d into the binary, so there is NO runtime file to
+/// `stat` for an mtime (07-RESEARCH Pitfall 3) — the date is recorded as a const here and
+/// bumped in lock-step whenever the bundled `assets/<slug>/masterlist.yaml` is refreshed.
+/// Only Starfield is dated this phase (its Phase-6 snapshot commit date); the other games
+/// return `None` (their note is out of scope until a bump records their dates).
+pub fn masterlist_snapshot_date(appid: u32) -> Option<&'static str> {
+    match appid {
+        STARFIELD => Some("2026-07-07"),
         _ => None,
     }
 }
@@ -56,6 +75,7 @@ fn bundled_snapshot(appid: u32) -> Option<&'static str> {
     match appid {
         SKYRIM_SE => Some(SKYRIMSE_SNAPSHOT),
         FALLOUT4 => Some(FALLOUT4_SNAPSHOT),
+        STARFIELD => Some(STARFIELD_SNAPSHOT),
         _ => None,
     }
 }
@@ -269,6 +289,22 @@ mod tests {
         let body = std::fs::read_to_string(&got).unwrap();
         assert!(!body.is_empty(), "bundled snapshot seeds the cache offline");
         assert_eq!(body, SKYRIMSE_SNAPSHOT);
+    }
+
+    #[test]
+    fn starfield_bundled_snapshot_is_present_and_nonempty() {
+        // The Starfield allow-list arms + bundled CC0 snapshot (SFDET-01): game_slug maps
+        // 1716740 -> "starfield", and the offline fallback seeds the cache from the bundled
+        // snapshot (non-empty). Mirrors `falls_back_to_bundled_snapshot_when_offline`.
+        assert_eq!(game_slug(STARFIELD), Some("starfield"));
+        assert_eq!(bundled_snapshot(STARFIELD), Some(STARFIELD_SNAPSHOT));
+        assert!(!STARFIELD_SNAPSHOT.is_empty(), "bundled Starfield snapshot is non-empty");
+
+        let dir = TempDir::new().unwrap();
+        let fetch = |_: &str| -> Result<String, String> { Err("offline".into()) };
+        let got =
+            ensure_masterlist_with_fetcher(dir.path(), STARFIELD, true, fetch).unwrap();
+        assert_eq!(std::fs::read_to_string(&got).unwrap(), STARFIELD_SNAPSHOT);
     }
 
     #[test]

@@ -28,6 +28,7 @@ pub mod backup;
 pub mod casefold;
 pub mod conflict;
 pub mod engine;
+pub mod gameconfig;
 pub mod journal;
 pub mod method;
 pub mod probe;
@@ -40,6 +41,10 @@ mod path_guard;
 pub use casefold::normalize_to_canonical;
 pub use conflict::{resolve, ModInput, WinnerFile};
 pub use error::DeployError;
+pub use gameconfig::{
+    ensure_ini_active, ini_drift, preview_ini_activation, restore_ini, IniActivationPreview,
+    IniConflictResolution, IniDrift, IniOutcome, INI_FILENAME,
+};
 pub use profile::{switch_profile, SwitchReport};
 pub use method::{apply_idempotent, choose_method, DeploymentMethod};
 pub use probe::{probe, Casefold, FsCaps};

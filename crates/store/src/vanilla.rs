@@ -47,6 +47,23 @@ impl Store {
         Ok(n > 0)
     }
 
+    /// Delete the vanilla backup row for a (appid, target_rel), if present. The
+    /// content-addressed blob is intentionally left in place (it is dedup-shared and
+    /// cheap; a future GC may reclaim it). Idempotent — deleting a missing row is a no-op.
+    ///
+    /// Used by the reversible StarfieldCustom.ini restore to reset provenance to
+    /// "never activated" once the INI has been restored, so a *future* user-created file
+    /// is never mistaken for a NexTwist-created one.
+    pub fn remove_vanilla(&self, appid: u32, target_rel: &Path) -> Result<(), StoreError> {
+        self.conn
+            .execute(
+                "DELETE FROM vanilla_backup WHERE appid = ?1 AND target_rel = ?2",
+                params![appid, target_rel.to_string_lossy()],
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+        Ok(())
+    }
+
     /// The recorded blake3 hash of the vanilla original for a (appid, target_rel),
     /// if one was backed up.
     pub fn vanilla_for(
