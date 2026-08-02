@@ -156,11 +156,31 @@ something you introduced, not pre-existing noise. Two caveats worth knowing:
 
 ## Workflow
 
-This project runs the GSD workflow. Planning artifacts live in `.planning/`
-(`ROADMAP.md`, `STATE.md`, phase dirs). Route file-changing work through a GSD entry
-point (`/gsd-quick`, `/gsd-debug`, `/gsd-execute-phase`) rather than editing directly,
-unless explicitly told to bypass. The codebase is graphmind-indexed — prefer `/gm` for
-code exploration before grep.
+Work is driven by **jcode** plus the Matt Pocock engineering skills — there is no separate
+planning system to keep in sync, and no planning artifacts to update. The durable record of
+a change is the code, its tests, the Conventional Commit, and the GitHub issue it closes.
+
+Reach for the skill that matches the shape of the work:
+
+| Situation | Skill |
+| --- | --- |
+| A vague idea or plan that needs stress-testing before you build | `/grilling`, `/grill-with-docs` |
+| A change big enough to need decomposition | `/to-tickets`, `/wayfinder` |
+| Turning a discussion into a written spec on the tracker | `/to-spec` |
+| Building a feature or fixing a bug test-first | `/tdd` |
+| Something is broken, slow, or throwing | `/diagnosing-bugs` |
+| Reviewing a branch or PR against standards and spec | `/code-review` |
+| Reshaping a module's interface, or finding deepening opportunities | `/codebase-design`, `/improve-codebase-architecture` |
+| Suspected over-engineering | `/ponytail-review`, `/ponytail-audit` |
+| Naming a domain concept or recording a decision | `/domain-modeling` |
+| Triaging incoming issues and external PRs | `/triage` |
+| Handing work to another agent or session | `/handoff` |
+| Not sure which applies | `/ask-matt` |
+
+Edit code directly; there is no gate to route through. What is NOT optional is the
+[definition of done](#definition-of-done) above — a change is finished when the gates pass
+and anything touching `deploy`/`store` carries a test proving the reversibility or
+crash-recovery property still holds.
 
 ## Agent skills
 
@@ -178,4 +198,12 @@ The five canonical triage roles, using their default label strings
 ### Domain docs
 
 Single-context: `CONTEXT.md` plus `docs/adr/` at the repo root. See
-`docs/agents/domain.md`.
+`docs/agents/domain.md`. Neither exists yet — `/domain-modeling` creates them lazily when a
+term or decision actually needs pinning down, so do not scaffold them upfront.
+
+### Reference documents
+
+`docs/reference/` holds the background research and UI contracts the code cites by name
+(`RESEARCH Pitfall 1`, `UI-SPEC §B.2`). They are read-only history: when a decision changes,
+change the code and record the new decision as an ADR rather than rewriting the research
+that justified the old one. See `docs/reference/README.md`.

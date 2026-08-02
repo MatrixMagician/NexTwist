@@ -1,4 +1,9 @@
-<!-- GSD:project-start source:PROJECT.md -->
+# NexTwist — stack rationale
+
+Why the dependencies are what they are, and the "what NOT to use" rules that protect the
+AppImage's size, portability, and licensing. Build/test commands and the architecture live
+in `AGENTS.md` (and `CLAUDE.md`, its Claude Code twin); this file is the background those
+two assume.
 
 ## Project
 
@@ -14,11 +19,7 @@ NexTwist is a Rust + Tauri desktop application that brings Vortex/Mod-Organizer-
 - **Platform**: Linux desktop only for v1; manages Windows games run via Steam Proton / Wine
 - **Mod source**: NexusMods only for v1 (API/auth, downloads, Collections)
 - **Distribution**: AppImage (single portable binary) as the primary v1 channel
-- **Deployment strategy**: To be determined during research — evaluate symlink vs hardlink vs overlay/VFS approaches for correctness and reversibility under Proton
-
-<!-- GSD:project-end -->
-
-<!-- GSD:stack-start source:research/STACK.md -->
+- **Deployment strategy**: resolved to the per-target `reflink → hardlink → symlink → copy` ladder (see `crates/deploy`); the rationale is in "Stack Patterns by Variant" below
 
 ## Technology Stack
 
@@ -128,48 +129,3 @@ NexTwist is a Rust + Tauri desktop application that brings Vortex/Mod-Organizer-
 - UnRAR license restriction (non-free, GPL-incompatible) — unrar crate docs.rs/lib.rs + general Debian/Fedora packaging knowledge — **MEDIUM**.
 - Tauri v2 frontend framework comparison (Svelte bundle/startup advantage, create-tauri-app templates) — Tauri docs & 2025/2026 comparison articles — **MEDIUM**.
 
-<!-- GSD:stack-end -->
-
-<!-- GSD:conventions-start source:CONVENTIONS.md -->
-
-## Conventions
-
-Conventions not yet established. Will populate as patterns emerge during development.
-<!-- GSD:conventions-end -->
-
-<!-- GSD:architecture-start source:ARCHITECTURE.md -->
-
-## Architecture
-
-Architecture not yet mapped. Follow existing patterns found in the codebase.
-<!-- GSD:architecture-end -->
-
-<!-- GSD:skills-start source:skills/ -->
-
-## Project Skills
-
-No project skills found. Add skills to any of: `.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, `.github/skills/`, or `.codex/skills/` with a `SKILL.md` index file.
-<!-- GSD:skills-end -->
-
-<!-- GSD:workflow-start source:GSD defaults -->
-
-## GSD Workflow Enforcement
-
-Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
-
-Use these entry points:
-
-- `/gsd-quick` for small fixes, doc updates, and ad-hoc tasks
-- `/gsd-debug` for investigation and bug fixing
-- `/gsd-execute-phase` for planned phase work
-
-Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
-<!-- GSD:workflow-end -->
-
-<!-- GSD:profile-start -->
-
-## Developer Profile
-
-> Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
-> This section is managed by `generate-claude-profile` -- do not edit manually.
-<!-- GSD:profile-end -->

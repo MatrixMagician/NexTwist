@@ -1,4 +1,3 @@
-<!-- GSD:GENERATED quick-260623-m42 -->
 # Changelog
 
 All notable changes to NexTwist are documented here.

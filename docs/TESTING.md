@@ -1,4 +1,3 @@
-<!-- generated-by: gsd-doc-writer -->
 # Testing
 
 NexTwist's test strategy follows the project's central architectural rule: the safety-critical engine lives in `crates/*` as pure, headless Rust with zero Tauri dependencies, so the entire engine is unit-, integration-, and property-testable in CI **without a webview or system GUI libraries**. The tests that prove the core safety guarantee — non-destructive, byte-for-byte reversible, conflict-aware deployment — are the most heavily exercised part of the suite.
@@ -140,7 +139,7 @@ The release workflow (`.github/workflows/release.yml`, triggered on `v*` tags) r
 
 ## The In-Game / UAT Boundary
 
-A subset of behavior cannot be verified headlessly because it requires a real OS desktop session, a built AppImage, and a real Steam Proton install running an actual Bethesda game. These are handled as **manual UAT (User Acceptance Testing)** items, documented per phase under `.planning/phases/<phase>/<n>-UAT.md` and `<n>-VALIDATION.md`.
+A subset of behavior cannot be verified headlessly because it requires a real OS desktop session, a built AppImage, and a real Steam Proton install running an actual Bethesda game. These are handled as **manual verification** items, tracked as GitHub issues labelled `needs-hardware-check` and confirmed on real hardware before a release.
 
 What lands on the manual side of the boundary:
 
