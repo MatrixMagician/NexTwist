@@ -38,10 +38,16 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+
+      # Formatting gate. CONTRIBUTING.md states rustfmt is enforced by CI, but no step
+      # actually ran it, so the tree drifted across 78 files. Runs before the expensive
+      # build steps so a formatting-only failure reports in seconds.
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
 
       - name: Build frontend (static SPA Tauri embeds)
         run: |
