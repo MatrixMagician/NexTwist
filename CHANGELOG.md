@@ -13,17 +13,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   masters-first / protected-master reorder rules, and the display formatters now live in
   pure `frontend/src/lib/{fomod,plugins,format}.ts` modules instead of inline in
   `+page.svelte`, covered by 25 vitest cases.
+- **Session auth centralised** — `AppState::session_auth` / `nexus_client` are now the one
+  definition of how a NexusMods session authenticates and how the shared rate limiter is
+  wired, replacing copies in the download and Collection adapters.
+- **FOMOD wizard projection moved into the engine** — `fomod::wizard::project` owns the
+  spec's `order` attribute (steps/groups/plugins) and the authored type-state; the Tauri
+  adapter is now pure serde field renaming.
 - **Plugin state merge moved into the engine** — `loadorder::merge_plugin_state` /
   `enabled_names` now own the D-07/D-13 merge (stored enable/order + protected stamping +
   display sort) that the Tauri adapter previously hand-rolled.
+- **`Plugins.txt` reads and view downgrades moved into the engine** —
+  `loadorder::read_plugins_txt` (with its absent-means-empty rule) and
+  `loadorder::view_to_plugin` replace adapter-side copies.
 - **Staging subdir naming consolidated** — `extract::staging_dir_name` replaces the
   byte-identical `sanitize()` copies in the download and FOMOD adapters, with a
   property-style test asserting the result is always exactly one normal path component.
+
+### Removed
+
+- **GSD tooling and every reference to it.** The repo no longer carries a parallel planning
+  system: `.planning/` is gone and `AGENTS.md`/`CLAUDE.md` document jcode plus the
+  engineering skills as the way work happens. The research and UI-spec documents the source
+  comments cite by name were preserved under `docs/reference/`.
 
 ### Fixed
 
 - Two stray NUL bytes in `frontend/src/routes/+page.svelte` made git treat the file as
   binary, so every diff and code review of the UI showed only `Bin`.
+- `uninstall_collection` re-queried every mod for the game once per collection member
+  instead of looking the row up by id.
 
 ### CI
 
