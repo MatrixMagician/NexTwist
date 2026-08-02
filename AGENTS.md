@@ -203,10 +203,3 @@ The five canonical triage roles, using their default label strings
 Single-context: `CONTEXT.md` plus `docs/adr/` at the repo root. See
 `docs/agents/domain.md`. Neither exists yet — `/domain-modeling` creates them lazily when a
 term or decision actually needs pinning down, so do not scaffold them upfront.
-
-### Reference documents
-
-`docs/reference/` holds the background research and UI contracts the code cites by name
-(`RESEARCH Pitfall 1`, `UI-SPEC §B.2`). They are read-only history: when a decision changes,
-change the code and record the new decision as an ADR rather than rewriting the research
-that justified the old one. See `docs/reference/README.md`.

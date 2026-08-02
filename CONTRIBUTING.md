@@ -39,8 +39,6 @@ This document does not duplicate setup instructions. For getting up and running:
 - See **docs/DEVELOPMENT.md** for local development setup, build commands, and code-style
   tooling.
 - See **docs/ARCHITECTURE.md** for the crate-layer breakdown and the crash-safety model.
-- See **docs/reference/** for the background research and UI contracts the source comments
-  cite by name.
 
 The repository is a virtual Cargo workspace. The headless engine in `crates/*` needs no
 system libraries; only the full desktop app (`src-tauri`, a workspace member) needs the

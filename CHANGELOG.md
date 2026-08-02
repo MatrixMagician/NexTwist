@@ -32,10 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- **GSD tooling and every reference to it.** The repo no longer carries a parallel planning
-  system: `.planning/` is gone and `AGENTS.md`/`CLAUDE.md` document jcode plus the
-  engineering skills as the way work happens. The research and UI-spec documents the source
-  comments cite by name were preserved under `docs/reference/`.
+- **GSD tooling, its planning documents, and every reference to them.** The repo no longer
+  carries a parallel planning system: `.planning/` is gone and `AGENTS.md`/`CLAUDE.md`
+  document jcode plus the engineering skills as the way work happens. The research and
+  UI-spec documents went with it, and the ~750 source-comment citations that pointed at
+  them (`RESEARCH Pitfall 4`, `UI-SPEC §B.2`, `WR-03`, ...) were rewritten so each comment
+  states its own reasoning instead of referring to a document that no longer exists.
 
 ### Fixed
 
