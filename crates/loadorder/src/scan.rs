@@ -274,6 +274,40 @@ pub fn esplugin_game_id(appid: u32) -> Option<GameId> {
     game_id_for(appid)
 }
 
+/// Merge a profile's persisted enable/order and the live protected-master set onto a scan
+/// (D-07/D-13), returning the list in display order (`order`, then name for stability).
+///
+/// The scan owns which plugins exist and their `kind`/`medium` badges; the store owns
+/// `enabled`/`order`; the live libloot probe owns `protected`. A scanned plugin with no
+/// stored row keeps the scan default (disabled, order 0). This is a pure transform so the
+/// merge rules are unit-testable without a Tauri runtime, a DB, or a game prefix — the
+/// command layer only gathers the three inputs and calls this.
+pub fn merge_plugin_state(
+    mut scanned: Vec<PluginView>,
+    stored: &[Plugin],
+    protected: &std::collections::HashSet<String>,
+) -> Vec<PluginView> {
+    for view in &mut scanned {
+        if let Some(s) = stored.iter().find(|s| s.name == view.name) {
+            view.enabled = s.enabled;
+            view.order = s.order;
+        }
+        view.protected = protected.contains(&view.name);
+    }
+    scanned.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.name.cmp(&b.name)));
+    scanned
+}
+
+/// The set of names that are enabled after a merge — the input the live `protected_plugins`
+/// probe needs. Kept next to [`merge_plugin_state`] so callers never hand-roll it.
+pub fn enabled_names(views: &[PluginView]) -> std::collections::HashSet<String> {
+    views
+        .iter()
+        .filter(|v| v.enabled)
+        .map(|v| v.name.clone())
+        .collect()
+}
+
 /// Internal: the scan operates per-game, but [`scan_plugins`] does not receive an appid —
 /// it is called with already-resolved roots. We default the classifier to SkyrimSE-class
 /// header semantics ONLY for the standalone helper used in tests; the Tauri command path
@@ -519,6 +553,115 @@ mod tests {
             !v[0].protected,
             "every scanned view starts protected == false"
         );
+    }
+
+    fn view(name: &str, kind: PluginKind) -> PluginView {
+        PluginView {
+            name: name.to_string(),
+            kind,
+            enabled: false,
+            order: 0,
+            medium: false,
+            protected: false,
+        }
+    }
+
+    fn stored(name: &str, enabled: bool, order: u32) -> Plugin {
+        Plugin {
+            name: name.to_string(),
+            kind: PluginKind::Esp,
+            enabled,
+            order,
+        }
+    }
+
+    #[test]
+    fn merge_applies_stored_enable_and_order() {
+        let scanned = vec![
+            view("B.esp", PluginKind::Esp),
+            view("A.esm", PluginKind::Esm),
+        ];
+        let rows = [stored("A.esm", true, 1), stored("B.esp", true, 0)];
+        let merged = merge_plugin_state(scanned, &rows, &Default::default());
+        assert_eq!(
+            merged.iter().map(|v| v.name.as_str()).collect::<Vec<_>>(),
+            ["B.esp", "A.esm"],
+            "stored order drives display order, not the scan order"
+        );
+        assert!(merged.iter().all(|v| v.enabled));
+    }
+
+    #[test]
+    fn merge_keeps_the_scan_kind_not_the_stored_kind() {
+        // The scan owns classification; a stale stored row must not downgrade an .esm badge.
+        let merged = merge_plugin_state(
+            vec![view("A.esm", PluginKind::Esm)],
+            &[stored("A.esm", true, 0)],
+            &Default::default(),
+        );
+        assert_eq!(merged[0].kind, PluginKind::Esm);
+    }
+
+    #[test]
+    fn merge_leaves_unstored_plugins_disabled_and_sorts_them_by_name() {
+        let scanned = vec![
+            view("Z.esp", PluginKind::Esp),
+            view("Y.esp", PluginKind::Esp),
+        ];
+        let merged = merge_plugin_state(scanned, &[], &Default::default());
+        assert_eq!(
+            merged.iter().map(|v| v.name.as_str()).collect::<Vec<_>>(),
+            ["Y.esp", "Z.esp"],
+            "equal orders tie-break by name for a stable list"
+        );
+        assert!(merged.iter().all(|v| !v.enabled));
+    }
+
+    #[test]
+    fn merge_stamps_protected_and_clears_it_when_the_probe_set_is_empty() {
+        let protected: std::collections::HashSet<String> = ["A.esm".to_string()].into();
+        let merged = merge_plugin_state(
+            vec![
+                view("A.esm", PluginKind::Esm),
+                view("B.esp", PluginKind::Esp),
+            ],
+            &[],
+            &protected,
+        );
+        assert!(merged.iter().find(|v| v.name == "A.esm").unwrap().protected);
+        assert!(!merged.iter().find(|v| v.name == "B.esp").unwrap().protected);
+
+        // Re-merging with an empty set (the degraded-probe path) must CLEAR the flag rather
+        // than leave a stale `true` behind.
+        let again = merge_plugin_state(merged, &[], &Default::default());
+        assert!(again.iter().all(|v| !v.protected));
+    }
+
+    #[test]
+    fn merge_is_idempotent() {
+        let rows = [stored("A.esm", true, 1), stored("B.esp", false, 0)];
+        let protected: std::collections::HashSet<String> = ["A.esm".to_string()].into();
+        let scanned = vec![
+            view("A.esm", PluginKind::Esm),
+            view("B.esp", PluginKind::Esp),
+        ];
+        let once = merge_plugin_state(scanned, &rows, &protected);
+        let twice = merge_plugin_state(once.clone(), &rows, &protected);
+        assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn enabled_names_reflects_the_merged_state() {
+        let rows = [stored("A.esm", true, 0), stored("B.esp", false, 1)];
+        let merged = merge_plugin_state(
+            vec![
+                view("A.esm", PluginKind::Esm),
+                view("B.esp", PluginKind::Esp),
+            ],
+            &rows,
+            &Default::default(),
+        );
+        assert_eq!(enabled_names(&merged), ["A.esm".to_string()].into());
     }
 
     #[test]

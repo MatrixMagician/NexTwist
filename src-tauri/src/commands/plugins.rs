@@ -46,7 +46,7 @@ fn merged_plugins_locked(
         .collect();
     let data_dir = game.install_dir.join("Data");
     // SFLO-03: scan into the richer PluginView so each row carries `medium` from the header.
-    let mut merged =
+    let merged =
         loadorder::scan_plugin_views_for(game_id, &roots, &data_dir).map_err(boundary_err)?;
 
     let profile_id = guard
@@ -60,32 +60,20 @@ fn merged_plugins_locked(
         .list_plugin_state(profile_id)
         .map_err(boundary_err)?;
 
-    // Merge the per-profile enable/order onto the scanned view (match by name).
-    for view in &mut merged {
-        if let Some(s) = stored.iter().find(|s| s.name == view.name) {
-            view.enabled = s.enabled;
-            view.order = s.order;
-        }
-    }
-
-    // SFLO-03 protected: fill each view's `protected` from the LIVE libloot probe. This is the
-    // engine's authority — the adapter only supplies the paths + enabled-name set (no name
-    // literals). Computed for every supported game (SSE/FO4 base masters are implicitly active
-    // too). Degrade gracefully: a probe Err (unresolvable prefix / libloot open failure) is
-    // LOGGED and the protected set treated as EMPTY — v1.0 `list_plugins` succeeded from
-    // scan+store alone, so a probe failure must never break the list view (no SSE/FO4 regression).
-    let enabled_names: std::collections::HashSet<String> = merged
-        .iter()
-        .filter(|v| v.enabled)
-        .map(|v| v.name.clone())
-        .collect();
-    let protected = protected_set(&game, appid, &enabled_names);
-    for view in &mut merged {
-        view.protected = protected.contains(&view.name);
-    }
-
-    merged.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.name.cmp(&b.name)));
-    Ok(merged)
+    // SFLO-03 protected: the LIVE libloot probe is the engine's authority — the adapter only
+    // supplies the paths + enabled-name set (no name literals). Computed for every supported
+    // game (SSE/FO4 base masters are implicitly active too). Degrade gracefully: a probe Err
+    // (unresolvable prefix / libloot open failure) is LOGGED and the protected set treated as
+    // EMPTY — v1.0 `list_plugins` succeeded from scan+store alone, so a probe failure must
+    // never break the list view (no SSE/FO4 regression).
+    //
+    // The enable/order/protected merge itself is `loadorder::merge_plugin_state` (pure and
+    // unit-tested in the engine); this adapter only gathers its three inputs. The probe needs
+    // the post-store enabled set, so merge once with an empty protected set to settle
+    // `enabled`, probe, then merge again to stamp `protected`.
+    let settled = loadorder::merge_plugin_state(merged, &stored, &Default::default());
+    let protected = protected_set(&game, appid, &loadorder::enabled_names(&settled));
+    Ok(loadorder::merge_plugin_state(settled, &stored, &protected))
 }
 
 /// Compute the implicitly-active protected-master set from the live libloot probe, degrading
