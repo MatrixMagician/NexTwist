@@ -135,7 +135,11 @@ pub struct PluginView {
 
 /// Drop the Phase-7 view-only booleans (`medium`/`protected`) to the persisted
 /// [`core::Plugin`](Plugin) the apply/sort callers consume unchanged.
-fn view_to_plugin(v: PluginView) -> Plugin {
+///
+/// Public because the command layer holds `PluginView`s (what it lists to the UI) but the
+/// apply/sort engine entry points speak `core::Plugin`; without this the shell would
+/// hand-roll the same field-by-field downgrade.
+pub fn view_to_plugin(v: PluginView) -> Plugin {
     Plugin {
         name: v.name,
         kind: v.kind,

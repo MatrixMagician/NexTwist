@@ -22,11 +22,11 @@ pub mod scan;
 pub use error::LoadOrderError;
 pub use loot::{
     SortProposal, appdata_folder_name, appdata_local_path, apply_load_order, masters_first_order,
-    propose_sort, protected_plugins,
+    propose_sort, protected_plugins, read_plugins_txt,
 };
 pub use masterlist::{ensure_masterlist, masterlist_snapshot_date};
 pub use reconcile::{ReconcileState, reconcile_plugins_txt};
 pub use scan::{
     PluginView, enabled_names, esplugin_game_id, merge_plugin_state, scan_plugin_views_for,
-    scan_plugins, scan_plugins_for,
+    scan_plugins, scan_plugins_for, view_to_plugin,
 };

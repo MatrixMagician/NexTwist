@@ -266,12 +266,7 @@ pub async fn sort_with_loot(
     let plugins: Vec<Plugin> = merged_plugins(&state, appid)
         .await?
         .into_iter()
-        .map(|v| Plugin {
-            name: v.name,
-            kind: v.kind,
-            enabled: v.enabled,
-            order: v.order,
-        })
+        .map(loadorder::view_to_plugin)
         .collect();
     let folder = loadorder::appdata_folder_name(appid)
         .ok_or_else(|| format!("game {appid} is not supported"))?;
@@ -332,24 +327,21 @@ pub async fn reconcile_plugins(
     let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
 
     // An absent Plugins.txt is treated as empty (never-launched game reconciles cleanly), NOT
-    // an error; any other read error is a real boundary error.
-    let on_disk_txt = match std::fs::read_to_string(appdata_local.join("Plugins.txt")) {
-        Ok(txt) => txt,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(boundary_err(e)),
-    };
+    // an error; any other read error is a real boundary error. The filename is libloot's
+    // contract, so the engine owns it (`read_plugins_txt`).
+    let on_disk_txt = loadorder::read_plugins_txt(&appdata_local).map_err(boundary_err)?;
 
     // Protected set from the live libloot probe (data-driven EXPECTED set); enabled_names =
     // the recorded state's enabled plugins (what NexTwist itself writes as `*` lines). IN-02:
     // degrade gracefully via the same `protected_set` helper `list_plugins` uses — a probe
     // failure (unresolvable prefix / libloot hiccup) logs and treats protected as EMPTY rather
     // than hard-failing this advisory reconciliation surface with a scary error toast.
-    let enabled_names: std::collections::HashSet<String> = recorded
+    let enabled: std::collections::HashSet<String> = recorded
         .iter()
         .filter(|p| p.enabled)
         .map(|p| p.name.clone())
         .collect();
-    let protected = protected_set(&game, appid, &enabled_names);
+    let protected = protected_set(&game, appid, &enabled);
 
     Ok(loadorder::reconcile_plugins_txt(
         &recorded,

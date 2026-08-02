@@ -402,13 +402,9 @@ pub async fn uninstall_collection(
         // 3. Remove the collection's staged mod trees + their managed_mod rows, then drop the
         //    V5 collection rows (collection_mod + fomod_choice CASCADE off the collection).
         for cm in &mods {
-            if let Some(m) = guard
-                .store
-                .list_mods(appid)
-                .map_err(boundary_err)?
-                .into_iter()
-                .find(|m| m.id == cm.mod_id)
-            {
+            // Look the row up by id rather than re-scanning every mod for the game once per
+            // collection member (that made uninstall O(mods x collection size) queries).
+            if let Some(m) = guard.store.get_mod(cm.mod_id).map_err(boundary_err)? {
                 // Best-effort remove the staged tree (already purged from the live game).
                 let _ = std::fs::remove_dir_all(&m.staging_root);
             }

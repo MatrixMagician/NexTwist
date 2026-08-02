@@ -77,6 +77,25 @@ pub fn appdata_local_path(prefix: &Path, game_name: &str) -> PathBuf {
         .join(game_name)
 }
 
+/// Read the asterisk-format `Plugins.txt` from a prefix AppData/Local dir, treating an
+/// ABSENT file as empty rather than an error.
+///
+/// A never-launched game (or one NexTwist has not written a load order for yet) simply has
+/// no `Plugins.txt`, and every caller wants that to reconcile cleanly rather than surface an
+/// error. The filename itself is libloot's contract, so it lives here instead of being
+/// spelled out by each caller.
+///
+/// # Errors
+/// [`LoadOrderError::Io`] for any read failure OTHER than not-found.
+pub fn read_plugins_txt(appdata_local: &Path) -> Result<String, LoadOrderError> {
+    let path = appdata_local.join("Plugins.txt");
+    match std::fs::read_to_string(&path) {
+        Ok(txt) => Ok(txt),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(e) => Err(LoadOrderError::io(&path, e)),
+    }
+}
+
 /// Map a supported Steam AppID to its [`libloot::GameType`]; `None` for any other game.
 ///
 /// Only the two supported Bethesda titles are accepted (allow-list, mirrors the
@@ -565,5 +584,28 @@ mod tests {
     fn open_game_rejects_empty_appdata_as_no_local_appdata() {
         let err = open_game(SKYRIM_SE, Path::new("/nonexistent"), Path::new("")).unwrap_err();
         assert!(matches!(err, LoadOrderError::NoLocalAppData(_)));
+    }
+
+    #[test]
+    fn read_plugins_txt_treats_an_absent_file_as_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        // A never-launched game has no Plugins.txt; that must reconcile cleanly, not error.
+        assert_eq!(read_plugins_txt(dir.path()).unwrap(), "");
+    }
+
+    #[test]
+    fn read_plugins_txt_returns_the_asterisk_file_verbatim() {
+        let dir = tempfile::tempdir().unwrap();
+        let body = "*Enabled.esp\nDisabled.esp\n";
+        std::fs::write(dir.path().join("Plugins.txt"), body).unwrap();
+        assert_eq!(read_plugins_txt(dir.path()).unwrap(), body);
+    }
+
+    #[test]
+    fn read_plugins_txt_surfaces_a_non_notfound_error() {
+        let dir = tempfile::tempdir().unwrap();
+        // A directory where the file should be is a real error, not "empty".
+        std::fs::create_dir(dir.path().join("Plugins.txt")).unwrap();
+        assert!(read_plugins_txt(dir.path()).is_err());
     }
 }
