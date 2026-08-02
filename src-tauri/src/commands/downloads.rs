@@ -16,12 +16,12 @@
 
 use std::path::PathBuf;
 
-use nexus::{CancelFlag, NexusAuth, NexusClient};
+use nexus::{CancelFlag, NexusClient};
 use serde::Serialize;
 use tauri::{Emitter, State};
 use tokio::sync::Mutex;
 
-use crate::commands::{appid_for_domain, boundary_err, require_game};
+use crate::commands::{appid_for_domain, require_game};
 use crate::state::AppState;
 
 /// The per-item progress payload emitted on `download://progress`. Mirrors the
@@ -128,23 +128,15 @@ pub(crate) async fn run_download_to_window(
 
     // Resolve session auth + the shared rate limiter + register a cancel flag — lock held
     // only briefly.
-    let (auth, limiter, cancel) = {
+    let (client, cancel) = {
         let mut guard = state.lock().await;
-        let auth = match guard.access_token.clone() {
-            Some(tok) => NexusAuth::Bearer(tok),
-            None => {
-                let api_key = crate::keyring::load_refresh_token()
-                    .map_err(boundary_err)?
-                    .ok_or_else(|| "not logged in: no NexusMods session".to_string())?;
-                NexusAuth::ApiKey(api_key)
-            }
-        };
-        // WR-03: clone the ONE process-wide limiter so this download coordinates its
-        // budget + backoff with every other in-flight NexusMods request.
-        let limiter = guard.rate_limiter.clone();
+        // `AppState::nexus_client` resolves the session auth and clones the ONE process-wide
+        // limiter, so this download coordinates its budget + backoff with every other
+        // in-flight NexusMods request (WR-03) without the adapter re-deriving either.
+        let client = guard.nexus_client()?;
         let cancel = CancelFlag::new();
         guard.downloads.insert(id.to_string(), cancel.clone());
-        (auth, limiter, cancel)
+        (client, cancel)
     };
 
     let result = run_download(
@@ -157,8 +149,7 @@ pub(crate) async fn run_download_to_window(
         file_id,
         key.as_deref(),
         expires.as_deref(),
-        auth,
-        limiter,
+        client,
         &cancel,
     )
     .await;
@@ -253,14 +244,12 @@ async fn run_download(
     file_id: u64,
     key: Option<&str>,
     expires: Option<&str>,
-    auth: NexusAuth,
-    limiter: std::sync::Arc<nexus::RateLimiter>,
+    // Built by `AppState::nexus_client`, so it already carries the session auth and the
+    // SHARED process-wide limiter (WR-03): parallel downloads honour one budget + one
+    // backoff deadline.
+    client: NexusClient,
     cancel: &CancelFlag,
 ) -> Result<RunOk, DownloadFailure> {
-    // WR-03: build the client with the SHARED process-wide limiter (not a fresh one) so
-    // parallel downloads honour one budget + one backoff deadline.
-    let client = NexusClient::with_limiter(nexus::NEXUS_API_BASE, auth, limiter).map_err(fail)?;
-
     // 1. REST v1 download link (premium omits key/expires; free passes them).
     let links = client
         .download_link(game_domain, nexus_mod_id, file_id, key, expires)

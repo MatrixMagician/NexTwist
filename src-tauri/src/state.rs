@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use nexus::{CancelFlag, RateLimiter};
+use nexus::{CancelFlag, NexusAuth, NexusClient, RateLimiter};
 use store::Store;
 
 use crate::auth::PendingOAuth;
@@ -57,6 +57,41 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Resolve the credential for the current NexusMods session, preferring the in-memory
+    /// OAuth bearer and falling back to the keyring API key.
+    ///
+    /// This is the ONE definition of "how is this session authenticated". Every adapter that
+    /// talks to NexusMods needs it, and each one previously re-derived it inline — a copy
+    /// that could silently drift (e.g. only one of them learning about a new auth mode).
+    /// Returns the "not logged in" boundary error when neither credential exists.
+    pub fn session_auth(&self) -> Result<NexusAuth, String> {
+        match self.access_token.clone() {
+            Some(tok) => Ok(NexusAuth::Bearer(tok)),
+            None => {
+                let api_key = crate::keyring::load_refresh_token()
+                    .map_err(|e| e.to_string())?
+                    .ok_or_else(|| "not logged in: no NexusMods session".to_string())?;
+                Ok(NexusAuth::ApiKey(api_key))
+            }
+        }
+    }
+
+    /// Build a `NexusClient` for the current session against the ONE process-wide rate
+    /// limiter (WR-03).
+    ///
+    /// Cloning the shared limiter `Arc` (rather than letting a client build its own) is what
+    /// makes N parallel requests honour a single hourly budget and a single reactive `X-RL-*`
+    /// backoff deadline instead of each carving out a fresh one. Going through this method
+    /// means an adapter cannot accidentally construct an unlimited client.
+    pub fn nexus_client(&self) -> Result<NexusClient, String> {
+        NexusClient::with_limiter(
+            nexus::NEXUS_API_BASE,
+            self.session_auth()?,
+            self.rate_limiter.clone(),
+        )
+        .map_err(|e| e.to_string())
+    }
+
     /// Build the app state: ensure the app-data dir exists and open the store DB under it.
     pub fn init(data_dir: PathBuf) -> anyhow::Result<Self> {
         std::fs::create_dir_all(&data_dir)?;
@@ -75,5 +110,50 @@ impl AppState {
             // One shared limiter for the whole process (WR-03).
             rate_limiter: Arc::new(RateLimiter::new()),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state() -> AppState {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let s = AppState::init(dir.path().to_path_buf()).expect("init");
+        // Keep the tempdir alive for the process; the state holds the open DB handle.
+        std::mem::forget(dir);
+        s
+    }
+
+    /// An OAuth session prefers the in-memory bearer and must NOT consult the keyring —
+    /// this is what lets the auth path work on a machine with no Secret Service backend.
+    #[test]
+    fn session_auth_prefers_the_in_memory_oauth_bearer() {
+        let mut st = state();
+        st.access_token = Some("tok-123".to_string());
+        match st.session_auth() {
+            Ok(NexusAuth::Bearer(t)) => assert_eq!(t, "tok-123"),
+            other => panic!("expected a bearer, got {other:?}"),
+        }
+    }
+
+    /// Every client this state builds carries the ONE process-wide limiter (WR-03), so
+    /// parallel requests share a budget instead of each carving out a fresh one.
+    #[test]
+    fn nexus_client_shares_the_one_process_wide_limiter() {
+        let mut st = state();
+        st.access_token = Some("tok-123".to_string());
+        let before = Arc::strong_count(&st.rate_limiter);
+        let client = st.nexus_client().expect("client");
+        assert!(
+            Arc::strong_count(&st.rate_limiter) > before,
+            "the client must hold a clone of the shared limiter, not build its own"
+        );
+        drop(client);
+        assert_eq!(
+            Arc::strong_count(&st.rate_limiter),
+            before,
+            "dropping a client releases its limiter handle"
+        );
     }
 }

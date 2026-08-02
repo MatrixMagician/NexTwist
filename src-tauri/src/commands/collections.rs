@@ -30,8 +30,7 @@
 
 use futures_util::stream::{self, StreamExt};
 use nexus::{
-    Collection as NexusCollection, NexusAuth, NexusClient, ResolveReport, SourceType,
-    replay_choices,
+    Collection as NexusCollection, NexusClient, ResolveReport, SourceType, replay_choices,
 };
 use serde::Serialize;
 use tauri::State;
@@ -439,24 +438,11 @@ fn premium_gate(is_premium: bool) -> Result<(), String> {
     }
 }
 
-/// Build a `NexusClient` with the SHARED process-wide limiter + the session auth (OAuth
-/// bearer or the keyring API key). Mirrors the download path's auth resolution so the
-/// Collection metadata reads coordinate the same rate budget (WR-03).
+/// Lock the state and build a session `NexusClient` (`AppState::nexus_client` owns the auth
+/// resolution + shared-limiter wiring, so the Collection reads coordinate the same rate
+/// budget as downloads by construction — WR-03).
 async fn build_client(state: &State<'_, Mutex<AppState>>) -> Result<NexusClient, String> {
-    let (auth, limiter) = {
-        let guard = state.lock().await;
-        let auth = match guard.access_token.clone() {
-            Some(tok) => NexusAuth::Bearer(tok),
-            None => {
-                let api_key = crate::keyring::load_refresh_token()
-                    .map_err(boundary_err)?
-                    .ok_or_else(|| "not logged in: no NexusMods session".to_string())?;
-                NexusAuth::ApiKey(api_key)
-            }
-        };
-        (auth, guard.rate_limiter.clone())
-    };
-    NexusClient::with_limiter(nexus::NEXUS_API_BASE, auth, limiter).map_err(boundary_err)
+    state.lock().await.nexus_client()
 }
 
 /// Replay a downloaded mod's pinned FOMOD choices headlessly against its staged tree.
