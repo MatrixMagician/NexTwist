@@ -141,7 +141,7 @@ fn conflict_winner_set_deploys_unique_and_pristine() {
     rels.sort();
     rels.dedup();
     assert_eq!(rels.len(), 3, "one owner per target_rel");
-    // D-03: the winning mod id is recorded for the contested file.
+    // The winning mod id is recorded for the contested file.
     let shared_entry = deployed
         .iter()
         .find(|e| e.target_rel == std::path::Path::new("Data/shared.esp"))

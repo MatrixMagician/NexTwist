@@ -11,7 +11,7 @@
 //!   blindly deleting. After purge the game folder is byte-for-byte pristine.
 //! * [`recover_on_launch`] — replay any non-`done` journal rows to a consistent state.
 //!
-//! The ordering invariant (Pattern 1) is non-negotiable: a `pending` journal row is
+//! The ordering invariant is non-negotiable: a `pending` journal row is
 //! durable BEFORE any syscall; the manifest row + `done` flip happen together AFTER.
 
 use std::collections::BTreeSet;
@@ -33,7 +33,7 @@ use crate::method::{apply_idempotent, choose_method};
 use crate::path_guard::{guard_within_root, lexical_normalize};
 use crate::probe::{Casefold, FsCaps, probe};
 
-/// An unsafe-filesystem warning surfaced through [`DeployReport`] so the UI (Plan 06)
+/// An unsafe-filesystem warning surfaced through [`DeployReport`] so the UI
 /// can warn the user before/at deploy (ENV-04 "warn about unsafe configurations").
 ///
 /// These are WARNINGS, not gates: deploy still proceeds (the method ladder safely
@@ -81,7 +81,7 @@ pub struct DeployReport {
     /// to show the user before relying on this deployment (ENV-04 warning half).
     pub fs_warnings: Vec<FsWarning>,
     /// Resolved targets whose source file was missing at deploy time and were therefore
-    /// NOT deployed (WR-04). The resolver walked these moments earlier, so a miss is
+    /// NOT deployed. The resolver walked these moments earlier, so a miss is
     /// unexpected (a race / external delete) and is surfaced to the UI rather than
     /// silently dropped — `deployed` counts only files actually placed, and the user can
     /// see exactly which expected files are absent from the deployment.
@@ -96,7 +96,7 @@ pub struct PurgeReport {
     /// Number of vanilla originals restored.
     pub restored: usize,
     /// Paths present under the deploy root that provenance does not explain. Reported,
-    /// never deleted (Pitfall 4: purge must not delete user/vanilla files).
+    /// never deleted (purge must not delete user/vanilla files).
     pub orphans: Vec<PathBuf>,
 }
 
@@ -125,7 +125,7 @@ pub fn deploy(
     // Starfield only. The hook lives on the PUBLIC `deploy` (never `deploy_inner`, which
     // `deploy_with_abort` shares) so the crash-sim path never triggers INI activation. A
     // `Block` conflict returns Ok (nothing written); a real I/O / containment / symlink
-    // error propagates via `?`. All logic lives in `gameconfig` (Plan 01).
+    // error propagates via `?`. All logic lives in `gameconfig`.
     if game.appid == steam::STARFIELD {
         gameconfig::ensure_ini_active(store, game, IniConflictResolution::Block)?;
     }
@@ -270,7 +270,7 @@ pub fn deploy_winners(
         if !src.is_file() {
             // A winner whose source vanished is skipped defensively (the resolver read
             // it moments ago; a race here just means one fewer file, never corruption).
-            // WR-04: record it so the report is honest about the incomplete deployment
+            // Record it so the report is honest about the incomplete deployment
             // rather than silently omitting it from `deployed`.
             report.skipped.push(w.rel.clone());
             continue;
@@ -316,7 +316,7 @@ pub fn deploy_winners(
 /// Reconcile a game's on-disk deployment to a fresh conflict-winner set (CONF-03): a full
 /// **purge-to-pristine** of the CURRENT deployment followed by a **fresh deploy** of
 /// `winners`, in one journaled sequence — exactly the discipline [`crate::switch_profile`]
-/// uses for a profile switch (Pitfall 4: always purge between deployments, never a
+/// uses for a profile switch (always purge between deployments, never a
 /// diff-deploy).
 ///
 /// ## Why the bare [`deploy_winners`] is unsafe as a re-deploy
@@ -340,7 +340,7 @@ pub fn redeploy_winners(
     game: &Game,
     winners: &[WinnerFile],
 ) -> Result<(PurgeReport, DeployReport), DeployError> {
-    // 1. Back to byte-for-byte pristine first (Pitfall 4) — restores every vanilla
+    // 1. Back to byte-for-byte pristine first — restores every vanilla
     //    original and clears the manifest so the fresh deploy records correct provenance.
     let purged = purge(store, game)?;
     // 2. Fresh deploy of the new winner set through the unchanged safe engine.
@@ -501,7 +501,7 @@ fn purge_inner(
     // (never a blind scan of the vanilla tree), so a vanilla directory is never a
     // candidate; bottom-up `remove_dir` additionally refuses any dir still holding files
     // (a vanilla dir, or a dir an unmanaged orphan lives in), so the game Data/ tree's
-    // pre-existing shape is never disturbed (GAP-01 / T-01-19).
+    // pre-existing shape is never disturbed.
     let removed_rels: Vec<PathBuf> = files.iter().map(|e| e.target_rel.clone()).collect();
     remove_emptied_dirs(&game.install_dir, &removed_rels)?;
 
@@ -600,7 +600,7 @@ pub fn recover_on_launch(store: &Store, game: &Game) -> Result<RecoveryReport, D
     // If recovery rolled any PURGE rows forward (a crash-mid-purge), the directories the
     // original deploy created may now be empty — clean them up exactly as purge() does,
     // from the journal-derived relpath set (never a disk scan), so a crash-then-recover
-    // converges to a directory-pristine tree (GAP-01 / T-01-21).
+    // converges to a directory-pristine tree.
     if !outcome.purged_rels.is_empty() {
         remove_emptied_dirs(&game.install_dir, &outcome.purged_rels)?;
     }

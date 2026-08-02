@@ -3,7 +3,7 @@
 //!
 //! Every type maps to a LOCAL element name (`#[serde(rename = ...)]`) because quick-xml's
 //! serde is namespace-ignorant by default — we match `config`, not `{ns}config`, so the
-//! `xsi:noNamespaceSchemaLocation` attribute on real-world files is ignored (Pitfall 5).
+//! `xsi:noNamespaceSchemaLocation` attribute on real-world files is ignored.
 //! Every OPTIONAL element/attribute carries `#[serde(default)]` so a legitimately-absent
 //! element deserializes as empty rather than erroring (the XSD marks `moduleDependencies`,
 //! `requiredInstallFiles`, `installSteps`, `conditionalFileInstalls` and most leaf

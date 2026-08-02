@@ -1,4 +1,4 @@
-//! Profile + membership facade (D-13/D-14/D-16): the `profile` and `profile_mod`
+//! Profile + membership facade: the `profile` and `profile_mod`
 //! table facades.
 //!
 //! A profile is a lightweight reference set over the shared staging store — it owns
@@ -60,7 +60,7 @@ impl Store {
     /// active flag on every profile for the game, then sets it on the target. Returns
     /// `false` if the target id does not belong to that game (nothing activated).
     pub fn set_active_profile(&self, appid: u32, profile_id: i64) -> Result<bool, StoreError> {
-        // INVARIANT (WR-08): `unchecked_transaction` is REQUIRED here, not a footgun. The
+        // INVARIANT: `unchecked_transaction` is REQUIRED here, not a footgun. The
         // whole `Store` facade exposes `&self` methods over an owned `Connection`, so the
         // checked `Connection::transaction()` (which needs `&mut self`) is not callable
         // from a `&self` method. Every `Store` call site is top-level (no method wraps
@@ -89,7 +89,7 @@ impl Store {
 
     /// Clear the active flag on every profile for a game, leaving NO active profile.
     ///
-    /// Used to recover from a mid-switch failure (WR-02): if `switch_profile` purges the
+    /// Used to recover from a mid-switch failure: if `switch_profile` purges the
     /// old deployment to pristine but a later step (deploy / plugins write) fails, the
     /// store must not keep the OLD profile flagged active — its deployment no longer exists
     /// on disk. Clearing the flag makes the persisted "no active profile" state honest
@@ -178,7 +178,7 @@ impl Store {
                 "cannot delete the active profile; switch to another profile first".into(),
             ));
         }
-        // INVARIANT (WR-08): `unchecked_transaction` is required for the same reason as
+        // INVARIANT: `unchecked_transaction` is required for the same reason as
         // `set_active_profile` — the `&self` facade over an owned `Connection` cannot call
         // the checked `transaction()` (`&mut self`). All call sites are top-level, so no
         // outer transaction is ever open. (The child-row deletes below are also covered by
@@ -231,7 +231,7 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
 
-    /// Insert a real managed mod for a game and return its id (WR-06: `profile_mod.mod_id`
+    /// Insert a real managed mod for a game and return its id (`profile_mod.mod_id`
     /// now FK-references `managed_mod(id)`, so tests must use real mod rows).
     fn add_test_mod(store: &Store, appid: u32, name: &str) -> i64 {
         store
@@ -339,7 +339,7 @@ mod tests {
         assert!(store.list_profile_mods(p).unwrap().is_empty());
     }
 
-    /// WR-06: a membership row referencing a non-existent profile or mod is now REJECTED
+    /// A membership row referencing a non-existent profile or mod is now REJECTED
     /// by the foreign keys (it was silently inserted as a dangling row under V2).
     #[test]
     fn dangling_membership_rejected_by_fk() {
@@ -363,7 +363,7 @@ mod tests {
         assert_eq!(store.list_profile_mods(p).unwrap(), vec![(m, true, 1)]);
     }
 
-    /// WR-06: `ON DELETE CASCADE` sheds a mod's membership rows when the mod is removed.
+    /// `ON DELETE CASCADE` sheds a mod's membership rows when the mod is removed.
     #[test]
     fn remove_mod_cascades_membership() {
         let dir = TempDir::new().unwrap();
@@ -380,7 +380,7 @@ mod tests {
         );
     }
 
-    /// CR-02: deleting the ACTIVE profile is refused (it may have a live deployment and
+    /// Deleting the ACTIVE profile is refused (it may have a live deployment and
     /// would leave the game with zero active profiles). The caller must switch away first.
     #[test]
     fn delete_active_profile_is_refused() {

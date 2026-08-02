@@ -4,7 +4,7 @@
 //! the typed error to a `String` at the IPC boundary.
 //!
 //! A profile owns no files — it is a lightweight reference set over the shared staging
-//! store (D-13/D-14). `switch_profile` reconciles the on-disk deployment through the
+//! store. `switch_profile` reconciles the on-disk deployment through the
 //! UNCHANGED safe engine (purge old → deploy new winner set → write new plugins.txt →
 //! mark active); it ALREADY writes the target profile's `plugins.txt` internally (the
 //! Task-1 wiring is deploy → loadorder direct), so this adapter does not re-apply it.
@@ -60,7 +60,7 @@ pub async fn create_profile(
 /// Switch the active profile (PROF-02), reconciling the deployment through the safe
 /// engine: `deploy::switch_profile` purges the current deployment to pristine, deploys
 /// the target profile's winner set, writes its `plugins.txt`, and marks it active. This
-/// is the disk-mutating action the UI gates behind a confirmation modal (UI-SPEC §D.2).
+/// is the disk-mutating action the UI gates behind a confirmation modal.
 #[tauri::command]
 pub async fn switch_profile(
     state: State<'_, Mutex<AppState>>,
@@ -72,10 +72,10 @@ pub async fn switch_profile(
 }
 
 /// Delete a profile and its mod/plugin selections (PROF-01). Staged mod files are KEPT
-/// (D-14: only the profile + its references are removed). Idempotent: a missing id
+/// (only the profile + its references are removed). Idempotent: a missing id
 /// returns `false`.
 ///
-/// REFUSES to delete the currently-active profile (CR-02): the store returns a clear
+/// REFUSES to delete the currently-active profile: the store returns a clear
 /// error ("cannot delete the active profile; switch to another profile first") which is
 /// surfaced verbatim to the UI so it can gate the Delete button and prompt a switch. This
 /// preserves the safety invariant that the active profile's live deployment is never

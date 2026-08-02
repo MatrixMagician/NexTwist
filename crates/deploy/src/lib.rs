@@ -66,7 +66,7 @@ pub fn deploy_root(install_dir: &Path) -> PathBuf {
     // is filesystem-dependent and unordered, so a first-match-wins choice would be
     // NONDETERMINISTIC if a case-sensitive Linux FS (exactly NexTwist's Proton target)
     // somehow held both `Data` and `data` — a purge computed against one casing could then
-    // leave files under the other, breaking reversibility (WR-07). Choose deterministically.
+    // leave files under the other, breaking reversibility. Choose deterministically.
     if let Ok(rd) = std::fs::read_dir(install_dir) {
         let mut matches: Vec<String> = rd
             .flatten()

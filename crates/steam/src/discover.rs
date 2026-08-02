@@ -16,7 +16,7 @@ use crate::resolve::{SUPPORTED_APPIDS, is_supported};
 
 /// An installed, supported game found during discovery.
 ///
-/// Derives serde so the Tauri command layer (Plan 06) can return it across the IPC
+/// Derives serde so the Tauri command layer can return it across the IPC
 /// boundary unchanged — the shape is a pure-data DTO with no I/O dependencies.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DetectedGame {
@@ -52,7 +52,7 @@ pub fn detect_games() -> Result<Vec<DetectedGame>, SteamError> {
         roots.push(extra);
     }
 
-    // TODO(A2): Snap root (~/snap/steam/common/.steam/steam) is LOW confidence and is
+    // TODO: Snap root (~/snap/steam/common/.steam/steam) is LOW confidence and is
     // intentionally NOT auto-detected here — Snap users use `add_game_by_folder`.
 
     if roots.is_empty() {

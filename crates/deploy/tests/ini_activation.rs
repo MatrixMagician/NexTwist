@@ -104,7 +104,7 @@ fn seed_ini(game: &Game, bytes: &[u8]) {
 }
 
 // ---------------------------------------------------------------------------
-// SFINI-01 — preview reports intent without writing.
+// Preview reports intent without writing.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -293,7 +293,7 @@ fn ini_conflict_blocks() {
 }
 
 // ---------------------------------------------------------------------------
-// WR-02 — a UTF-16-BOM INI is refused (no write), the user's bytes stay intact.
+// A UTF-16-BOM INI is refused (no write), the user's bytes stay intact.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -344,7 +344,7 @@ fn ini_utf16_bom_is_refused_no_write() {
 }
 
 // ---------------------------------------------------------------------------
-// SFINI-04 — deploy×2 / profile-switch / crash-replay all converge to one [Archive].
+// Deploy×2 / profile-switch / crash-replay all converge to one [Archive].
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -386,7 +386,7 @@ fn ini_idempotent_one_archive() {
 }
 
 // ---------------------------------------------------------------------------
-// SFINI-05 — recover_on_launch replays a crashed KIND_INI op to a consistent state.
+// Recover_on_launch replays a crashed KIND_INI op to a consistent state.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -432,7 +432,7 @@ fn ini_crash_recovery_consistent() {
 }
 
 // ---------------------------------------------------------------------------
-// WR-01 — a crash in the window between the last Data/ finish_purge and the INI
+// A crash in the window between the last Data/ finish_purge and the INI
 // restore leaves a pending KIND_INI intent that recover_on_launch replays.
 // ---------------------------------------------------------------------------
 
@@ -556,7 +556,7 @@ fn nonstarfield_deploy_touches_no_ini() {
 }
 
 // ---------------------------------------------------------------------------
-// SFINI-05 — verify()/repair() treat the INI like a deployed file.
+// Verify()/repair() treat the INI like a deployed file.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -599,7 +599,7 @@ fn ini_verify_detects_removed_ini() {
 }
 
 // ---------------------------------------------------------------------------
-// CR-01 — a PreExisting INI, deleted on disk then re-activated (repair/deploy),
+// A PreExisting INI, deleted on disk then re-activated (repair/deploy),
 // must NEVER have its real-hash provenance downgraded to the absence marker;
 // purge must restore the user's ORIGINAL bytes, not delete the file.
 // ---------------------------------------------------------------------------
@@ -628,7 +628,7 @@ fn ini_reactivation_of_absent_preexisting_preserves_original_on_purge() {
     );
 
     // Repair re-activates while the file is absent. This must NOT downgrade the PreExisting
-    // provenance to the CreatedByNexTwist absence marker (CR-01).
+    // provenance to the CreatedByNexTwist absence marker.
     repair(&store, &game).unwrap();
     assert!(ini_path(&game).exists(), "repair re-created the INI");
 

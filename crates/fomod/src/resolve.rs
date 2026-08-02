@@ -66,7 +66,7 @@ impl Selection {
 }
 
 /// Validate that `selection` honors every VISIBLE group's declared selection cardinality
-/// (WR-02). Pure — reads only the parsed module + the selection.
+///. Pure — reads only the parsed module + the selection.
 ///
 /// The webview enforces these constraints for UX, but it is NOT a trust boundary: a crafted
 /// IPC selection could submit a `SelectExactlyOne` group with two options, or a

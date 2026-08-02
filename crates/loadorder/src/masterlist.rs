@@ -1,10 +1,10 @@
-//! Per-game LOOT masterlist fetch + cache + bundled fallback (PLUGIN-03, D-10).
+//! Per-game LOOT masterlist fetch + cache + bundled fallback.
 //!
 //! "Sort with LOOT" needs the game's masterlist (the LOOT project's CC0-1.0 sorting
 //! metadata). This module resolves a cached `masterlist.yaml`, fetching it over HTTPS when
 //! absent/stale and falling back to a bundled snapshot when offline.
 //!
-//! ## Trust boundary (T-02-10)
+//! ## Trust boundary
 //!
 //! The fetch is **pinned**: HTTPS only, host `raw.githubusercontent.com`, repo
 //! `loot/<game-slug>`, branch [`MASTERLIST_BRANCH`] (`v0.29`, matching the libloot 0.29.x
@@ -12,7 +12,7 @@
 //! pinned to the libloot major so the masterlist schema always matches the parser. The
 //! masterlist is itself parsed by libloot (a trusted CC0 source), never by hand here.
 //!
-//! ## Caching (D-10)
+//! ## Caching
 //!
 //! Cache path: `<app_data>/masterlists/<appid>/masterlist.yaml`. With `refresh == false`
 //! and a cache present, [`ensure_masterlist`] returns the cache WITHOUT any network call.
@@ -31,16 +31,16 @@ const FALLOUT4: u32 = 377160;
 /// Starfield AppID (mirrors `loot::STARFIELD`).
 const STARFIELD: u32 = 1716740;
 
-/// The masterlist branch pinned to the libloot 0.29.x major (Pitfall 5). Bump this in
+/// The masterlist branch pinned to the libloot 0.29.x major. Bump this in
 /// lock-step with the `libloot` workspace version.
 pub const MASTERLIST_BRANCH: &str = "v0.29";
 
-/// The pinned raw-content host the masterlist is fetched from (T-02-10).
+/// The pinned raw-content host the masterlist is fetched from.
 const MASTERLIST_HOST: &str = "https://raw.githubusercontent.com";
 
 /// Bundled CC0 masterlist snapshots, compiled into the binary so the offline fallback
 /// needs no filesystem layout at runtime (works inside an AppImage). CC0-1.0 — public
-/// domain, legally safe to embed (RESEARCH Pattern 3).
+/// domain, legally safe to embed.
 const SKYRIMSE_SNAPSHOT: &str = include_str!("../assets/skyrimse/masterlist.yaml");
 const FALLOUT4_SNAPSHOT: &str = include_str!("../assets/fallout4/masterlist.yaml");
 const STARFIELD_SNAPSHOT: &str = include_str!("../assets/starfield/masterlist.yaml");
@@ -132,7 +132,7 @@ where
     let slug = game_slug(appid).ok_or(LoadOrderError::UnsupportedGame(appid))?;
     let cache = cache_path(app_data, appid);
 
-    // Fresh cache + no forced refresh → return it, no network (D-10).
+    // Fresh cache + no forced refresh → return it, no network.
     if cache.is_file() && !refresh {
         return Ok(cache);
     }
@@ -177,7 +177,7 @@ fn write_cache(cache: &Path, body: &str) -> Result<(), LoadOrderError> {
 
 /// The real HTTPS fetch: a one-shot blocking rustls request to the pinned URL.
 ///
-/// Redirects are DISABLED (WR-01 / T-02-10): `reqwest`'s default client follows up to 10
+/// Redirects are DISABLED: `reqwest`'s default client follows up to 10
 /// redirects with no host restriction, so a 30x (or a MITM injecting one at the CDN edge)
 /// could send the client to an arbitrary host whose body would then be cached and fed to
 /// the libloot masterlist parser — defeating the host pinning, which would otherwise only
@@ -222,7 +222,7 @@ mod tests {
             url,
             "https://raw.githubusercontent.com/loot/skyrimse/v0.29/masterlist.yaml"
         );
-        // T-02-10 / Pitfall 5: HTTPS, the pinned host, and the libloot-major branch.
+        // HTTPS, the pinned host, and the libloot-major branch.
         assert!(url.starts_with("https://raw.githubusercontent.com/"));
         assert!(url.contains("/v0.29/"));
     }

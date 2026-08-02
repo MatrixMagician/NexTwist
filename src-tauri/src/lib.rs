@@ -79,8 +79,8 @@ pub fn run() {
         .try_init();
 
     tauri::Builder::default()
-        // OS-integration plugins (NXM-01). ORDER IS LOAD-BEARING: tauri-plugin-single-instance
-        // MUST be registered BEFORE tauri-plugin-deep-link (RESEARCH Anti-Pattern) — on Linux,
+        // OS-integration plugins. ORDER IS LOAD-BEARING: tauri-plugin-single-instance
+        // MUST be registered BEFORE tauri-plugin-deep-link — on Linux,
         // with single-instance's `deep-link` feature, a second `nxm://` invocation while the app
         // is open is forwarded to the live instance and routed to `on_open_url` automatically
         // (never a duplicate window). Registering deep-link first would lose the forwarded URL.
@@ -100,12 +100,12 @@ pub fn run() {
             recover_all_on_launch(&app_state);
             app.manage(tokio::sync::Mutex::new(app_state));
 
-            // Register the `nxm://` scheme + capture handler (NXM-01). On Linux this needs
+            // Register the `nxm://` scheme + capture handler. On Linux this needs
             // `xdg-mime` + `update-desktop-database` on PATH for dev/installed-runtime
             // registration; in a shipped AppImage the plugin's `register_all()` reads
             // `$APPIMAGE` for a durable absolute `Exec=` path. Failures here are non-fatal —
             // the app still opens. The Phase-5 self-test below surfaces a WARN when NexTwist
-            // is not the registered default (T-05-01), making a stale/hijacked handler observable.
+            // is not the registered default, making a stale/hijacked handler observable.
             #[cfg(any(windows, target_os = "linux"))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;

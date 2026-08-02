@@ -80,7 +80,7 @@ export interface DeployReport {
   backed_up: number;
   methods: [string, string][];
   fs_warnings: FsWarning[];
-  /** Resolved targets whose source file was missing at deploy time (WR-04): NOT deployed
+  /** Resolved targets whose source file was missing at deploy time: NOT deployed
    *  and surfaced so the UI can warn the deployment is incomplete. */
   skipped: string[];
 }
@@ -186,14 +186,14 @@ export interface DownloadResult {
   staging_root: string;
 }
 
-/** One row in the downloads list (UI-SPEC §B). Built/updated from progress events. */
+/** One row in the downloads list. Built/updated from progress events. */
 export type DownloadState =
   | "queued"
   | "downloading"
   | "extracting"
   | "done"
   | "failed"
-  // WR-01/WR-02: a transient, auto-recoverable rate-limit pause (NEXUS-05). NOT a
+  // A transient, auto-recoverable rate-limit pause. NOT a
   // terminal failure — the row shows a paused state and the list shows the backoff notice.
   | "ratelimited";
 
@@ -252,7 +252,7 @@ export interface NxmExpired {
   reason: string;
 }
 
-// --- FOMOD guided installer (FOMOD-01/FOMOD-02). 1:1 mirrors of commands/fomod.rs. ---
+// --- FOMOD guided installer. 1:1 mirrors of commands/fomod.rs. ---
 
 /** The 5 FOMOD selection-group types (mirrors fomod::GroupType, PascalCase over IPC). */
 export type GroupType =
@@ -405,7 +405,7 @@ export interface DownloadCollectionReport {
 }
 
 /** Resolve a Collection manifest into the resolve report — the resolve-before-download HARD
- *  GATE (COLL-02). Issues ONLY metadata reads (zero downloads, zero disk writes). */
+ *  GATE. Issues ONLY metadata reads (zero downloads, zero disk writes). */
 export const resolveCollection = (
   appid: number,
   manifestJson: string,
@@ -428,13 +428,13 @@ export const downloadCollection = (args: {
   });
 
 /** Deploy an installed Collection as its dedicated profile via the existing switch_profile
- *  path (COLL-04). No new deploy primitive. */
+ *  path. No new deploy primitive. */
 export const deployCollection = (
   appid: number,
   collectionId: number,
 ): Promise<SwitchReport> => invoke("deploy_collection", { appid, collectionId });
 
-/** Uninstall an installed Collection fully reversibly (COLL-05): purge-to-pristine + drop
+/** Uninstall an installed Collection fully reversibly: purge-to-pristine + drop
  *  the profile + remove the staged mods, leaving the game byte-for-byte vanilla. */
 export const uninstallCollection = (
   appid: number,
@@ -455,11 +455,11 @@ export const listGames = (): Promise<Game[]> => invoke("list_games");
 export const starfieldStatus = (appid: number): Promise<StarfieldStatus> =>
   invoke("starfield_status", { appid });
 
-/** Preview loose-file (StarfieldCustom.ini) activation — read-only, writes nothing (SFINI-01). */
+/** Preview loose-file (StarfieldCustom.ini) activation — read-only, writes nothing. */
 export const previewIniActivation = (appid: number): Promise<IniActivationPreview> =>
   invoke("preview_ini_activation", { appid });
 
-/** Apply loose-file activation, resolving a pre-existing user value per `resolution` (SFINI-03). */
+/** Apply loose-file activation, resolving a pre-existing user value per `resolution`. */
 export const applyIniActivation = (
   appid: number,
   resolution: IniConflictResolution,
@@ -502,7 +502,7 @@ export const savePluginOrder = (appid: number, order: PluginInfo[]): Promise<str
 export const sortWithLoot = (appid: number): Promise<SortProposal> =>
   invoke("sort_with_loot", { appid });
 
-/** SFLO-04: classify the on-disk plugins.txt vs recorded intent (Starfield only). */
+/** Classify the on-disk plugins.txt vs recorded intent (Starfield only). */
 export const reconcilePlugins = (appid: number): Promise<ReconcileState> =>
   invoke("reconcile_plugins", { appid });
 
@@ -574,7 +574,7 @@ export const onDownloadProgress = (
   listen<DownloadProgress>("download://progress", (e) => handler(e.payload));
 
 /**
- * Subscribe to `nxm://` deep-link arrivals (NXM-01). The shell emits this when a website
+ * Subscribe to `nxm://` deep-link arrivals. The shell emits this when a website
  * "Mod Manager Download" link is routed to the running app (a new downloads row begins).
  * The UI shows the non-blocking "Download started from NexusMods" toast.
  */
@@ -584,7 +584,7 @@ export const onNxmArrival = (
   listen<NxmArrival>("nxm://arrival", (e) => handler(e.payload));
 
 /**
- * Subscribe to expired/invalid `nxm://` link notices (UI-SPEC §C.3). The shell emits this
+ * Subscribe to expired/invalid `nxm://` link notices. The shell emits this
  * for a malformed/expired/unredeemable link so the UI shows the Warning notice instead of
  * a stuck Failed download row.
  */

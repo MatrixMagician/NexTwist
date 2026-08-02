@@ -7,7 +7,7 @@
 //! the IPC boundary.
 //!
 //! The active-state/order source of truth is the per-profile `plugin_state` store table
-//! (D-07/D-13); `plugins.txt` in the Proton prefix is DERIVED from it (regenerable; not
+//!`plugins.txt` in the Proton prefix is DERIVED from it (regenerable; not
 //! the pristine invariant — RESEARCH OQ3). `list_plugins` MERGES the on-disk scan
 //! (filenames + ESM/ESL/ESP badges) with the stored enable/order per profile.
 
@@ -19,7 +19,7 @@ use tokio::sync::{Mutex, MutexGuard};
 use crate::commands::{boundary_err, require_game};
 use crate::state::AppState;
 
-/// Build the merged plugin view for a game using an ALREADY-HELD state guard (WR-03).
+/// Build the merged plugin view for a game using an ALREADY-HELD state guard.
 ///
 /// Identical merge to [`merged_plugins`] but it performs every store read (active profile,
 /// scan roots, stored state) and the on-disk scan under the SAME lock the caller holds, so
@@ -45,7 +45,7 @@ fn merged_plugins_locked(
         .map(|m| m.staging_root)
         .collect();
     let data_dir = game.install_dir.join("Data");
-    // SFLO-03: scan into the richer PluginView so each row carries `medium` from the header.
+    // Scan into the richer PluginView so each row carries `medium` from the header.
     let merged =
         loadorder::scan_plugin_views_for(game_id, &roots, &data_dir).map_err(boundary_err)?;
 
@@ -123,7 +123,7 @@ async fn merged_plugins(
     state: &State<'_, Mutex<AppState>>,
     appid: u32,
 ) -> Result<Vec<loadorder::PluginView>, String> {
-    // WR-03: acquire the state lock once and build the entire merged view (all store reads
+    // Acquire the state lock once and build the entire merged view (all store reads
     // + the scan) under it, so the scan and the stored-state read it is merged with are a
     // consistent snapshot rather than two separately-locked reads with a scan between.
     let guard = state.lock().await;
@@ -140,7 +140,7 @@ pub async fn list_plugins(
     merged_plugins(&state, appid).await
 }
 
-/// Enable/disable a single plugin (PLUGIN-01). Persists to the active profile's
+/// Enable/disable a single plugin. Persists to the active profile's
 /// `plugin_state` only — writing `plugins.txt` happens on `save_plugin_order` (the UI sends
 /// the full desired list there). The plugin's kind/order are taken from the current merged
 /// list so the stored row stays consistent with the scan.
@@ -151,7 +151,7 @@ pub async fn set_plugin_enabled(
     name: String,
     enabled: bool,
 ) -> Result<(), String> {
-    // WR-03: hold the state lock for the WHOLE read-modify-write (resolve active profile,
+    // Hold the state lock for the WHOLE read-modify-write (resolve active profile,
     // build the merged view, toggle, persist) so the row written cannot be stale relative
     // to a concurrent plugin op. The on-disk scan inside the merge runs under the lock too
     // — on a single-user desktop app the brief extra hold is worth the atomicity.
@@ -181,7 +181,7 @@ pub async fn set_plugin_enabled(
         .map_err(boundary_err)
 }
 
-/// Persist a plugin load order (PLUGIN-02) and write the asterisk `plugins.txt` at the
+/// Persist a plugin load order and write the asterisk `plugins.txt` at the
 /// Proton-prefix AppData location via libloot (masters-first enforced internally).
 ///
 /// `order` is the full desired plugin list (name/kind/enabled/order) in the user's chosen
@@ -190,7 +190,7 @@ pub async fn set_plugin_enabled(
 /// write failure the libloot reason is surfaced verbatim for the UI-SPEC plugins.txt error
 /// copy.
 ///
-/// WR-05: the file write precedes the DB persist so a libloot/IO failure leaves the DB
+/// The file write precedes the DB persist so a libloot/IO failure leaves the DB
 /// UNTOUCHED — matching the user's "nothing was saved" mental model when the command
 /// returns an error. (Writing the DB first would record the new order while the on-disk
 /// `plugins.txt` was never written, leaving the persisted state and the prefix disagreeing
@@ -205,12 +205,12 @@ pub async fn save_plugin_order(
     let profile_id = active_profile_id(&state, appid).await?;
 
     // Persist under one held lock for a consistent snapshot; the write-before-persist
-    // ordering (WR-05) lives in the synchronous core so it is unit-testable.
+    // ordering lives in the synchronous core so it is unit-testable.
     let guard = state.lock().await;
     save_plugin_order_inner(&guard.store, &game, profile_id, &order)
 }
 
-/// Synchronous core of [`save_plugin_order`] (WR-05): write the asterisk `plugins.txt` at
+/// Synchronous core of [`save_plugin_order`]: write the asterisk `plugins.txt` at
 /// the Proton-prefix AppData location FIRST, then persist every plugin row to the profile's
 /// `plugin_state` only after the file write succeeds.
 ///
@@ -227,7 +227,7 @@ fn save_plugin_order_inner(
     order: &[Plugin],
 ) -> Result<std::path::PathBuf, String> {
     // 1. Write plugins.txt at the prefix AppData via libloot (masters-first; D-08). Doing
-    //    this FIRST means a failure here leaves the DB untouched (WR-05: nothing saved).
+    //    this FIRST means a failure here leaves the DB untouched (nothing saved).
     let folder = loadorder::appdata_folder_name(game.appid)
         .ok_or_else(|| format!("game {} is not supported", game.appid))?;
     let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
@@ -251,7 +251,7 @@ fn save_plugin_order_inner(
     Ok(written)
 }
 
-/// Propose a LOOT-sorted order (PLUGIN-03, D-12) — returns the proposed order + critical
+/// Propose a LOOT-sorted order — returns the proposed order + critical
 /// warnings WITHOUT writing. The UI reviews it and calls `save_plugin_order` only on
 /// confirm (no silent apply).
 #[tauri::command]
@@ -285,7 +285,7 @@ pub async fn sort_with_loot(
     .map_err(boundary_err)
 }
 
-/// Reconcile the on-disk `plugins.txt` against the recorded plugin state (SFLO-04).
+/// Reconcile the on-disk `plugins.txt` against the recorded plugin state.
 ///
 /// Thin adapter: under one held lock it resolves the managed game + active profile, reads the
 /// recorded per-profile plugin state, reads the on-disk asterisk `plugins.txt` from the prefix
@@ -355,7 +355,7 @@ mod tests {
     use nextwist_core::PluginKind;
     use std::fs;
 
-    /// WR-05 (failure-injection): if the `plugins.txt` write fails, the DB `plugin_state`
+    /// If the `plugins.txt` write fails, the DB `plugin_state`
     /// is left UNTOUCHED — the write-before-persist ordering holds even on the error path.
     ///
     /// This is the failure path the code-fixer flagged as reasoned-through but not directly

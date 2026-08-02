@@ -48,7 +48,7 @@ fn plugin(name: &str, kind: PluginKind, enabled: bool, order: u32) -> Plugin {
     }
 }
 
-/// PLUGIN-02: apply a desired order and assert the written Plugins.txt is asterisk-format,
+/// Apply a desired order and assert the written Plugins.txt is asterisk-format,
 /// masters-first, bounded under the prefix.
 #[test]
 fn writes_asterisk_masters_first() {
@@ -76,7 +76,7 @@ fn writes_asterisk_masters_first() {
 
     let written = apply_load_order(SKYRIM_SE, &install, &appdata_local, &desired).unwrap();
 
-    // The write is bounded inside the prefix AppData (T-02-11).
+    // The write is bounded inside the prefix AppData.
     assert!(
         written.starts_with(&appdata_local),
         "plugins.txt {written:?} must be under the prefix AppData {appdata_local:?}"
@@ -117,7 +117,7 @@ fn writes_asterisk_masters_first() {
     assert!(!game.is_plugin_active("Off.esp"), "Off.esp is inactive");
 }
 
-/// PLUGIN-01: a disabled plugin is reflected as NOT active (no leading asterisk).
+/// A disabled plugin is reflected as NOT active (no leading asterisk).
 #[test]
 fn toggle_active_reflected() {
     let tmp = TempDir::new().unwrap();
@@ -178,7 +178,7 @@ fn missing_on_disk_plugin_is_dropped_not_fatal() {
     assert!(game.is_plugin_active("Skyrim.esm"), "master is active");
 }
 
-/// Masterlist: a fresh cache is reused with no network (D-10).
+/// Masterlist: a fresh cache is reused with no network.
 #[test]
 fn ensure_masterlist_uses_cache_offline() {
     let dir = TempDir::new().unwrap();
@@ -205,7 +205,7 @@ fn bundled_snapshot_is_present_and_nonempty() {
     assert!(!body.is_empty(), "masterlist must be non-empty");
 }
 
-/// PLUGIN-03 (D-12): propose_sort returns a proposed order and WRITES NOTHING — the
+/// Propose_sort returns a proposed order and WRITES NOTHING — the
 /// prefix Plugins.txt is untouched until a separate apply.
 #[test]
 fn propose_sort_returns_order_without_writing() {
@@ -245,7 +245,7 @@ fn propose_sort_returns_order_without_writing() {
         "Mod.esp in proposed: {:?}",
         proposal.proposed
     );
-    // D-12: propose writes NOTHING — the prefix Plugins.txt must still be absent.
+    // Propose writes NOTHING — the prefix Plugins.txt must still be absent.
     assert!(
         !plugins_txt.exists(),
         "propose_sort must not write Plugins.txt (propose-then-apply)"
@@ -358,7 +358,7 @@ fn fo4_multi_master_game_master_first_active_survives() {
     );
 }
 
-/// SFLO-03: `protected_plugins` flags a libloot-implicitly-active base master (Starfield.esm)
+/// `protected_plugins` flags a libloot-implicitly-active base master (Starfield.esm)
 /// and does NOT flag a user-enabled regular `.esp`. The protected set is derived purely from
 /// `is_plugin_active` — no hard-coded name list in the engine.
 #[test]
@@ -388,7 +388,7 @@ fn protected_plugins_flags_implicit_master_not_user_esp() {
     );
 }
 
-/// CR-01 (the REAL save flow, previously untested): a locked Starfield base master arrives at
+/// A locked Starfield base master arrives at
 /// its RESTING representation — `enabled == false` (it is active WITHOUT a `*` line; NexTwist
 /// never asterisk-writes masters, libloot owns their activation) — included UNCHANGED in a
 /// normal desired list. This is exactly what `list_plugins` produces for a protected master and
@@ -472,7 +472,7 @@ fn starfield_pinned_master_reorder_is_neutralized() {
     );
 }
 
-/// SFLO-01: `apply_load_order` writes an asterisk-format Plugins.txt bounded under the
+/// `apply_load_order` writes an asterisk-format Plugins.txt bounded under the
 /// Starfield prefix AppData — enabled regular plugins as `*Name`, implicit masters omitted.
 #[test]
 fn starfield_asterisk() {
@@ -496,7 +496,7 @@ fn starfield_asterisk() {
     ];
     let written = apply_load_order(STARFIELD, &install, &appdata_local, &desired).unwrap();
 
-    // Bounded inside the prefix AppData (T-07-03 / T-02-11).
+    // Bounded inside the prefix AppData.
     assert!(
         written.starts_with(&appdata_local),
         "plugins.txt {written:?} must be under the Starfield prefix AppData {appdata_local:?}"
@@ -516,7 +516,7 @@ fn starfield_asterisk() {
     );
 }
 
-/// SFLO-02: `propose_sort` over the bundled Starfield masterlist is DETERMINISTIC (same
+/// `propose_sort` over the bundled Starfield masterlist is DETERMINISTIC (same
 /// inputs → same order across runs) and carries the recorded masterlist snapshot date.
 #[test]
 fn starfield_sort_determinism() {

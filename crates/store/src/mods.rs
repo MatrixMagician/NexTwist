@@ -1,4 +1,4 @@
-//! Multi-mod registry (D-01/D-13): the `managed_mod` table facade.
+//! Multi-mod registry: the `managed_mod` table facade.
 //!
 //! Phase 2 makes mods first-class: many [`core::ManagedMod`] rows coexist per game,
 //! each carrying a `rank` (lower = higher priority) that orders file-conflict winners

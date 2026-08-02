@@ -1,4 +1,4 @@
-//! FOMOD guided-installer adapter (FOMOD-01/FOMOD-02) — the thin IPC boundary over the
+//! FOMOD guided-installer adapter — the thin IPC boundary over the
 //! headless `crates/fomod` engine. Per the Anti-Pattern-4 contract (see `commands/mod.rs`):
 //! NO FOMOD business logic lives here. Each `#[tauri::command]`:
 //!
@@ -13,7 +13,7 @@
 //!   `fomod/ModuleConfig.xml`, and return a SERIALIZABLE projection of the AST (the
 //!   wizard renders radio/checkbox groups + type-states from this). A malformed
 //!   `ModuleConfig.xml` returns the verbatim [`fomod::FomodError`] string so the
-//!   frontend can offer the plain-mod fallback (UI-SPEC §A.8).
+//!   frontend can offer the plain-mod fallback.
 //! * [`resolve_fomod`] — the PURE dry-run: given the user's selection, call
 //!   `fomod::resolve` and return a serializable file-install plan with a per-destination
 //!   conflict classification. Writes NOTHING (the locked dry-run-before-apply gate).
@@ -75,7 +75,7 @@ impl SelectionDto {
 
 // ── Serializable dry-run plan + conflict preview (adapter → webview) ────────────────
 
-/// The conflict classification for the dry-run preview (UI-SPEC §A.6). This mirrors the
+/// The conflict classification for the dry-run preview. This mirrors the
 /// FOMOD safety gate's three buckets: a clean plan, a priority-resolvable overwrite, or a
 /// BLOCKING conflict that disables Install.
 ///
@@ -108,7 +108,7 @@ pub struct PlanEntry {
     pub priority: i32,
 }
 
-/// The full dry-run result the wizard shows BEFORE any staging write (FOMOD-02).
+/// The full dry-run result the wizard shows BEFORE any staging write.
 #[derive(Debug, Clone, Serialize)]
 pub struct ResolvePreview {
     /// The ordered, deduped file-install plan.
@@ -126,7 +126,7 @@ pub struct ResolvePreview {
 /// Extracts the archive into a validated temporary tree (the SAME defended extractor the
 /// install path uses), then calls the pure `fomod::parse_module_config`. A non-FOMOD or
 /// malformed archive returns the verbatim `FomodError` string so the frontend offers the
-/// plain-mod fallback (UI-SPEC §A.8). The temp tree is dropped on return — this writes
+/// plain-mod fallback. The temp tree is dropped on return — this writes
 /// nothing to staging.
 #[tauri::command]
 pub async fn parse_fomod(
@@ -143,7 +143,7 @@ pub async fn parse_fomod(
     Ok(fomod::project(&module))
 }
 
-/// The PURE dry-run resolve (FOMOD-02): turn the user's selection into the file-install
+/// The PURE dry-run resolve: turn the user's selection into the file-install
 /// plan + conflict classification WITHOUT writing anything.
 ///
 /// Re-extracts the archive to a temp tree (so source-path resolution and the live
@@ -163,7 +163,7 @@ pub async fn resolve_fomod(
     let module = parse_module_config(&tree_root).map_err(boundary_err)?;
     let sel = selection.into_selection();
 
-    // Server-side cardinality validation (WR-02): the webview is not a trust boundary, so a
+    // Server-side cardinality validation: the webview is not a trust boundary, so a
     // crafted IPC selection that violates a group's SelectExactlyOne/AtLeastOne/AtMostOne
     // constraint is rejected here before the plan is computed.
     validate_selection(&module, &sel).map_err(boundary_err)?;
@@ -196,7 +196,7 @@ pub async fn apply_fomod(
     let (temp, tree_root) = extract_to_temp(&archive).map_err(boundary_err)?;
     let module = parse_module_config(&tree_root).map_err(boundary_err)?;
     let sel = selection.into_selection();
-    // Server-side cardinality validation (WR-02): reject a selection that violates a group's
+    // Server-side cardinality validation: reject a selection that violates a group's
     // declared cardinality BEFORE any disk write, regardless of what the UI submitted.
     validate_selection(&module, &sel).map_err(boundary_err)?;
     let plan = resolve(&module, &sel).map_err(boundary_err)?;
@@ -437,7 +437,7 @@ mod tests {
         let (_guard, tree_root) = super::extract_to_temp(&archive).expect("extract simple.zip");
         let module = fomod::parse_module_config(&tree_root).expect("parse");
 
-        // A staging dir we assert stays untouched by the dry-run (FOMOD-02: writes nothing).
+        // A staging dir we assert stays untouched by the dry-run (writes nothing).
         let staging = tmp.path().join("staging");
         std::fs::create_dir_all(&staging).unwrap();
         let before = walkdir_files(&staging).len();

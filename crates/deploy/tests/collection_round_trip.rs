@@ -1,10 +1,10 @@
-//! collection_round_trip (COLL-04 / COLL-05) — BLOCKING-PRISTINE.
+//! collection_round_trip — BLOCKING-PRISTINE.
 //!
 //! The headline Collection safety gate, proven WITHOUT any network: a Collection deploys as
-//! a dedicated profile through the EXISTING `switch_profile` path (COLL-04), and uninstalling
+//! a dedicated profile through the EXISTING `switch_profile` path, and uninstalling
 //! it — `purge` to pristine → drop the profile (after clearing its active flag, since
 //! `delete_profile` rejects an active profile) → remove the staged trees — leaves the game
-//! **byte-for-byte vanilla** (COLL-05). This is the exact orchestration
+//! **byte-for-byte vanilla**. This is the exact orchestration
 //! `src-tauri/src/commands/collections.rs::{deploy_collection, uninstall_collection}` runs,
 //! exercised here directly against the headless engine + store with the testkit blake3
 //! DIR_SENTINEL pristine harness — no Tauri, no live Premium account, no download.
@@ -99,7 +99,7 @@ fn add_mod(store: &Store, appid: u32, name: &str, root: &std::path::Path, rank: 
 
 /// A `collection.json` whose `modRules` make the author-intended winner DIFFER from the
 /// engine's mod_id tie-break, so a deploy driven by the REAL rule→rank mapping resolves the
-/// contested path differently than the old hardcoded `rank: 1` would have (BL-01).
+/// contested path differently than the old hardcoded `rank: 1` would have.
 ///
 /// Manifest order: `modB` is index 0, `modA` is index 1. The rule "modA loads AFTER modB"
 /// pushes modA DOWN the rank ladder (it loses conflicts to modB). Combined with adding modA's
@@ -126,7 +126,7 @@ const MANIFEST_JSON: &str = r#"{
   ]
 }"#;
 
-/// COLL-04 + COLL-05 + BL-01 (BLOCKING-PRISTINE): a Collection deploys as a dedicated profile
+/// A Collection deploys as a dedicated profile
 /// via `switch_profile`, the modded files land with the **manifest rule-derived ranks**
 /// deciding conflicts (computed by the real `nexus::compute_collection_ranks`, never
 /// hand-set), and uninstalling it (purge → delete_profile → remove staged trees) returns the
@@ -218,7 +218,7 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
             .unwrap();
     }
 
-    // ── DEPLOY (COLL-04): create the dedicated profile, set membership by the STORED
+    // ── DEPLOY: create the dedicated profile, set membership by the STORED
     //    (rule-derived) rank, deploy via the SAME switch_profile path (no new primitive). ──
     let profile_id = store
         .create_profile(game.appid, "Collection: Test Collection")
@@ -253,7 +253,7 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
         "the collection profile is now active"
     );
 
-    // ── UNINSTALL (COLL-05): purge → clear active flag → delete_profile → drop rows. ──
+    // ── UNINSTALL: purge → clear active flag → delete_profile → drop rows. ──
     // 1. Purge to pristine (the deployment is restored byte-for-byte vanilla).
     let purged = purge(&store, &game).unwrap();
     assert!(
@@ -291,7 +291,7 @@ fn collection_install_deploy_uninstall_round_trips_pristine() {
         "collection rows removed"
     );
 
-    // ── NON-NEGOTIABLE: the install is byte-for-byte pristine after uninstall (COLL-05). ──
+    // ── NON-NEGOTIABLE: the install is byte-for-byte pristine after uninstall. ──
     let after = snapshot_tree(&fx.install).unwrap();
     assert_trees_identical(&pristine, &after);
     assert!(

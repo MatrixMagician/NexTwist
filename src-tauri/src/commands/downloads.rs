@@ -7,12 +7,12 @@
 //! 3. streams the file to a staging-adjacent temp path via `nexus::download_to`, wrapping
 //!    the headless `Fn(u64, Option<u64>)` progress callback into
 //!    `window.emit("download://progress", …)` (the single Tauri-type touch point),
-//! 4. hands the finished archive to `extract::install_archive` VERBATIM (NEXUS-06 — the
+//! 4. hands the finished archive to `extract::install_archive` VERBATIM (the
 //!    exact terminus `commands/mods.rs` uses for a local archive), then
 //! 5. persists the mod (`store.add_mod`) + its Nexus provenance (`store.add_nexus_source`).
 //!
 //! A `NexusError::Redeem` (expired free-user link) is surfaced as a distinct "expired
-//! link" string, NOT a failed-download row (UI-SPEC §C.3). Errors map via `boundary_err`.
+//! link" string, NOT a failed-download row. Errors map via `boundary_err`.
 
 use std::path::PathBuf;
 
@@ -132,7 +132,7 @@ pub(crate) async fn run_download_to_window(
         let mut guard = state.lock().await;
         // `AppState::nexus_client` resolves the session auth and clones the ONE process-wide
         // limiter, so this download coordinates its budget + backoff with every other
-        // in-flight NexusMods request (WR-03) without the adapter re-deriving either.
+        // in-flight NexusMods request without the adapter re-deriving either.
         let client = guard.nexus_client()?;
         let cancel = CancelFlag::new();
         guard.downloads.insert(id.to_string(), cancel.clone());
@@ -173,10 +173,10 @@ pub(crate) async fn run_download_to_window(
             is_redeem,
             retry_after,
         }) => {
-            // WR-02: a rate-limit is transient and auto-recoverable — surface it as a
+            // A rate-limit is transient and auto-recoverable — surface it as a
             // distinct "ratelimited" state (which drives the WR-01 UI notice and a paused,
             // retryable row), NOT a terminal "failed" row. An expired free-user link is
-            // surfaced as "expired" (UI-SPEC §C.3). Everything else is a real "failed".
+            // surfaced as "expired". Everything else is a real "failed".
             let state_label = if retry_after.is_some() {
                 "ratelimited"
             } else if is_redeem {
@@ -200,7 +200,7 @@ pub async fn cancel_download(state: State<'_, Mutex<AppState>>, id: String) -> R
 }
 
 /// A typed download failure carrying whether it was a redeemable (expired-link) error
-/// and, for a rate-limit, the retry-after seconds (WR-02).
+/// and, for a rate-limit, the retry-after seconds.
 struct DownloadFailure {
     reason: String,
     is_redeem: bool,
@@ -209,7 +209,7 @@ struct DownloadFailure {
     retry_after: Option<u64>,
 }
 
-/// RAII cleanup for the untrusted partial download archive (CR-01).
+/// RAII cleanup for the untrusted partial download archive.
 ///
 /// While the temp `.nextwist-dl-*.archive` exists in the deploy-trusted staging dir, this
 /// guard ensures it is unlinked when it goes out of scope — on success (after the explicit
@@ -245,7 +245,7 @@ async fn run_download(
     key: Option<&str>,
     expires: Option<&str>,
     // Built by `AppState::nexus_client`, so it already carries the session auth and the
-    // SHARED process-wide limiter (WR-03): parallel downloads honour one budget + one
+    // SHARED process-wide limiter: parallel downloads honour one budget + one
     // backoff deadline.
     client: NexusClient,
     cancel: &CancelFlag,
@@ -282,7 +282,7 @@ async fn run_download(
             retry_after: None,
         })?;
     let archive_path = staging_dir.join(format!(".nextwist-dl-{id}.archive"));
-    // CR-01 (BLOCKER): RAII-guard the untrusted partial archive so it is unlinked on
+    // RAII-guard the untrusted partial archive so it is unlinked on
     // EVERY exit from the download/extract window — a chunk/transport/IO error, an
     // extract failure, a cancel, or a panic. A leftover `.nextwist-dl-*.archive` is
     // partially-written, untrusted bytes inside the deploy-trusted staging dir; it must
@@ -315,7 +315,7 @@ async fn run_download(
         t => Some(t),
     };
 
-    // 4. Reuse the extract→staging pipeline VERBATIM (NEXUS-06). The downloaded archive
+    // 4. Reuse the extract→staging pipeline VERBATIM. The downloaded archive
     //    is indistinguishable from a local one here; extract enforces zip-slip/symlink/`..`
     //    defenses identically. Stage under a per-mod subdir of the game's staging dir.
     emit_progress(window, id, written, total_hint, "extracting", None);
@@ -360,7 +360,7 @@ async fn run_download(
 }
 
 /// Map any headless error into a `DownloadFailure`, flagging the redeemable (expired
-/// free-user link) case and, for a rate-limit, the retry-after seconds (WR-02).
+/// free-user link) case and, for a rate-limit, the retry-after seconds.
 fn fail<E: Into<NexusErrorLike>>(e: E) -> DownloadFailure {
     let like = e.into();
     DownloadFailure {
@@ -374,14 +374,14 @@ fn fail<E: Into<NexusErrorLike>>(e: E) -> DownloadFailure {
 struct NexusErrorLike {
     reason: String,
     is_redeem: bool,
-    /// `Some(secs)` for a `NexusError::RateLimited` (WR-02); `None` otherwise.
+    /// `Some(secs)` for a `NexusError::RateLimited`; `None` otherwise.
     retry_after: Option<u64>,
 }
 
 impl From<nexus::NexusError> for NexusErrorLike {
     fn from(e: nexus::NexusError) -> Self {
         let is_redeem = matches!(e, nexus::NexusError::Redeem(_));
-        // WR-02: carry the retry-after seconds so the shell can surface the transient,
+        // Carry the retry-after seconds so the shell can surface the transient,
         // auto-recoverable rate-limit state instead of a terminal failure.
         let retry_after = match &e {
             nexus::NexusError::RateLimited(secs) => Some(*secs),

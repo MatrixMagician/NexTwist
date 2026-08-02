@@ -4,7 +4,7 @@
 //! fields of the NexusMods REST v1 / OAuth responses; richer mod/file metadata DTOs
 //! land in Plan 02. Naming follows the `core::model` round-trip convention.
 //!
-//! SECURITY (NEXUS-02): [`OAuthTokens`] is an **in-memory** carrier. The short-lived
+//! SECURITY: [`OAuthTokens`] is an **in-memory** carrier. The short-lived
 //! `access` token never touches disk; only the long-lived `refresh` string is handed
 //! to the shell to store in the OS keyring. There is deliberately NO code path here
 //! (or anywhere in this crate) that serialises an [`OAuthTokens`] to a file — the
@@ -75,9 +75,9 @@ pub struct ModFile {
     pub display_name: String,
 }
 
-/// A parsed `nxm://` download link (NXM-01 / NEXUS-04).
+/// A parsed `nxm://` download link.
 ///
-/// Shape (RESEARCH Pattern 5):
+/// Shape:
 /// `nxm://<game_domain>/mods/<mod_id>/files/<file_id>?key=<k>&expires=<ts>&user_id=<u>`.
 ///
 /// `mod_id`/`file_id` are validated as `u64` by the parser — a [`NxmLink`] can only exist
@@ -212,7 +212,7 @@ impl NxmLink {
 /// `url`/`serde_urlencoded` dep is added). Returns the first match. The decoded value is
 /// treated as opaque by every caller.
 ///
-/// WR-04: every value this reads (`key`/`expires`/`user_id`/`code`/`state`) is an
+/// Every value this reads (`key`/`expires`/`user_id`/`code`/`state`) is an
 /// **opaque** token, NOT a `application/x-www-form-urlencoded` form field. OAuth
 /// `code`/`state` (and base64url-adjacent keys) legitimately contain a literal `+`, so we
 /// use **raw** RFC-3986 percent-decoding that does NOT apply the form `+`→space rule — a
@@ -229,7 +229,7 @@ fn query_get(query: &str, name: &str) -> Option<String> {
 /// Minimal RFC-3986 percent-decoder for **opaque** query values.
 ///
 /// Unlike `application/x-www-form-urlencoded` decoding, this does NOT translate `+` into a
-/// space: the only callers here are opaque OAuth/redemption tokens (WR-04), which may
+/// space: the only callers here are opaque OAuth/redemption tokens, which may
 /// contain a literal `+` (base64url-adjacent). A `+` is therefore passed through
 /// untouched. Invalid `%XX` sequences are passed through literally rather than panicking
 /// (defensive: untrusted input must never crash the handler).
@@ -266,7 +266,7 @@ fn percent_decode(s: &str) -> String {
 mod tests {
     use super::*;
 
-    /// WR-04: a literal `+` in an OAuth `code`/`state` (or an opaque key) must be
+    /// A literal `+` in an OAuth `code`/`state` (or an opaque key) must be
     /// preserved, NOT decoded to a space — these are not form fields. A `+`→space here
     /// produced spurious CSRF mismatches and bad code exchanges.
     #[test]

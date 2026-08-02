@@ -21,7 +21,7 @@ use thiserror::Error;
 pub enum FomodError {
     /// A persistence-layer failure surfaced from `store`. Declared as part of the
     /// stable error contract; the headless engine itself never writes, but the apply
-    /// path (Plan 02) that consumes a resolved plan records provenance through `store`.
+    /// path that consumes a resolved plan records provenance through `store`.
     #[error("store error: {0}")]
     Store(#[from] StoreError),
 
@@ -63,7 +63,7 @@ pub enum FomodError {
     /// A submitted selection violates a group's declared selection cardinality
     /// (`SelectExactlyOne`/`SelectAtLeastOne`/`SelectAtMostOne`). Enforced server-side so a
     /// crafted IPC selection (the webview is NOT a trust boundary) cannot stage a selection
-    /// the FOMOD author declared invalid (WR-02). Carries a human-readable description of the
+    /// the FOMOD author declared invalid. Carries a human-readable description of the
     /// offending group.
     #[error("invalid FOMOD selection: {0}")]
     InvalidSelection(String),

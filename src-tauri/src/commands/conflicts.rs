@@ -5,7 +5,7 @@
 //! The resolver is a pure fold (`deploy::conflict::resolve`); the winner-set deploy goes
 //! through `deploy::deploy_winners`, which reuses the same journaled per-file primitive
 //! as Phase-1 `deploy` (the safe engine is never bypassed). `set_mod_rank` only persists
-//! the new priority — it does NOT deploy (D-04: rank changes are pending until Deploy).
+//! the new priority — it does NOT deploy (rank changes are pending until Deploy).
 
 use deploy::{DeployReport, ModInput, conflict};
 use nextwist_core::{FileConflict, ManagedMod};
@@ -40,7 +40,7 @@ async fn enabled_mod_inputs(
 }
 
 /// List a game's managed mods in priority (rank-ascending) order — the data source for
-/// the Conflict view's priority list (UI-SPEC §A.1) and for mapping winner/provider mod
+/// the Conflict view's priority list and for mapping winner/provider mod
 /// ids to names in the conflict table. A single `list_mods` read.
 #[tauri::command]
 pub async fn list_mods(
@@ -70,7 +70,7 @@ pub async fn list_conflicts(
 }
 
 /// Set a mod's deployment rank (CONF-02). Persists only — the change is PENDING until
-/// the user explicitly deploys (D-04); this command never touches disk.
+/// the user explicitly deploys; this command never touches disk.
 #[tauri::command]
 pub async fn set_mod_rank(
     state: State<'_, Mutex<AppState>>,
@@ -97,7 +97,7 @@ pub async fn set_mod_rank(
 /// would orphan the now-dropped files on disk and corrupt the `pre_existing` vanilla-backup
 /// flag — defeating byte-for-byte pristine restore. Routing through `redeploy_winners`
 /// mirrors `switch_profile`'s purge-then-deploy reconcile, so repeated deploys stay fully
-/// reversible (Pitfall 4). The purge half of the report is discarded; the UI consumes the
+/// reversible. The purge half of the report is discarded; the UI consumes the
 /// fresh deploy report.
 #[tauri::command]
 pub async fn deploy_winner_set(

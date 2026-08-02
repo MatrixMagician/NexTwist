@@ -10,7 +10,7 @@ use nexus::{build_authorize_url, exchange_code, validate_api_key};
 const CLIENT_ID: &str = "nextwist-public-test-client";
 const REDIRECT: &str = "nxm://oauth/callback";
 
-/// NEXUS-01: the authorize URL must carry a PKCE S256 challenge and a CSRF state, and
+/// The authorize URL must carry a PKCE S256 challenge and a CSRF state, and
 /// the returned verifier must be non-empty (kept in memory for the exchange).
 #[test]
 fn authorize_url_carries_pkce_s256_and_state() {
@@ -43,7 +43,7 @@ fn authorize_url_carries_pkce_s256_and_state() {
     assert!(!req.csrf_state.is_empty(), "CSRF state must be non-empty");
 }
 
-/// NEXUS-01: the code exchange POSTs to the token endpoint with grant_type, the code,
+/// The code exchange POSTs to the token endpoint with grant_type, the code,
 /// and the code_verifier present; a stubbed token JSON parses into OAuthTokens.
 #[tokio::test]
 async fn exchange_code_posts_pkce_and_returns_tokens() {
@@ -84,7 +84,7 @@ async fn exchange_code_posts_pkce_and_returns_tokens() {
     assert_eq!(tokens.refresh.as_deref(), Some("ref-456"));
 }
 
-/// NEXUS-01: a CSRF mismatch is rejected as an auth error (not a panic), before any
+/// A CSRF mismatch is rejected as an auth error (not a panic), before any
 /// network call.
 #[tokio::test]
 async fn exchange_code_rejects_csrf_mismatch() {

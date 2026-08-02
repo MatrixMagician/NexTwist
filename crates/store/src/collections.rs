@@ -20,7 +20,7 @@ impl Store {
     ///
     /// Idempotent on `(appid, slug, revision)` (UNIQUE): re-resolving the same revision
     /// UPDATEs the existing row (name/profile_id refreshed) and returns the SAME id rather
-    /// than erroring or duplicating. The single-statement `RETURNING id` form (WR-05) yields
+    /// than erroring or duplicating. The single-statement `RETURNING id` form yields
     /// the affected row's id for BOTH the INSERT and the DO UPDATE branch atomically.
     pub fn add_collection(&self, c: &Collection) -> Result<i64, StoreError> {
         let id: i64 = self

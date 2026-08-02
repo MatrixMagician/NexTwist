@@ -1,7 +1,7 @@
 //! OS Secret-Service storage for the NexusMods long-lived credential (refresh token
 //! or API key). Shell-only — the headless `crates/nexus` never sees a keyring handle.
 //!
-//! HARD INVARIANT (NEXUS-02): when no Secret Service / keyring backend exists, every
+//! HARD INVARIANT: when no Secret Service / keyring backend exists, every
 //! store/load/clear operation returns [`KeyringError::NoKeyringBackend`] and NEVER
 //! writes the credential to a file. There is deliberately no plaintext fallback path in
 //! this module — the only write path is the backend's `set_password`. The shell maps
@@ -170,7 +170,7 @@ mod tests {
             backend.attempted.get(),
             "the backend op should have been attempted"
         );
-        // NEXUS-02: nothing was written anywhere (this module has no file path at all).
+        // Nothing was written anywhere (this module has no file path at all).
         let after: Vec<_> = std::fs::read_dir(tmp.path()).unwrap().collect();
         assert_eq!(
             before.len(),

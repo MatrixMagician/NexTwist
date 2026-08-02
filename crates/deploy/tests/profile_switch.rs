@@ -4,14 +4,14 @@
 //! deployment THROUGH the existing journaled safe engine — `switch_profile` does
 //! `purge(old) -> resolve+deploy_winners(new profile's enabled set) -> apply_load_order
 //! (new profile's plugins.txt) -> set_active(new)`. There is NO diff-deploy shortcut
-//! (Pitfall 4): every switch is a full purge-to-pristine then a fresh deploy of the
+//!: every switch is a full purge-to-pristine then a fresh deploy of the
 //! target profile's winner set, so a profile's unique files can never leak into another
-//! profile (T-02-15).
+//! profile.
 //!
 //! The NON-NEGOTIABLE assertion is byte-for-byte pristine ACROSS switches: after a
 //! sequence of switches A->B->A, a final purge returns the install **byte-for-byte
 //! pristine** (testkit DIR_SENTINEL harness, empty-dir shape included) — the game stays
-//! restorable to vanilla no matter how many times the user switches (T-02-14).
+//! restorable to vanilla no matter how many times the user switches.
 //!
 //! PROF-03 is proven by asserting A->B->A reproduces profile A's EXACT deployed set
 //! (each profile preserves its own membership + per-profile ranks).
@@ -177,7 +177,7 @@ fn profile_switch_round_trips_pristine_across_switches() {
         let store = fx.open_store();
         switch_profile(&store, &game, prof_b).unwrap()
     };
-    // The purge half restored A's 3 files (T-02-15: A's files do not leak into B).
+    // The purge half restored A's 3 files (A's files do not leak into B).
     assert_eq!(
         report_b.purged.removed, 3,
         "switching to B purges A's 3 deployed files"
@@ -279,7 +279,7 @@ fn switch_writes_target_profile_plugins_txt_at_prefix() {
     );
 }
 
-/// WR-02 (failure-injection): if a profile switch fails AFTER the purge step, no profile is
+/// If a profile switch fails AFTER the purge step, no profile is
 /// left falsely marked active — the stale active flag is cleared so state/disk stay
 /// consistent (02-UAT.md item 3). The happy path is covered above; this exercises the
 /// error path the code-fixer flagged as reasoned-through but not directly tested.
@@ -324,7 +324,7 @@ fn failed_switch_after_purge_clears_stale_active_flag() {
         "switch must fail at the unsupported-game plugins step"
     );
 
-    // WR-02: no profile is left marked active — neither the stale OLD nor the half-applied
+    // No profile is left marked active — neither the stale OLD nor the half-applied
     // TARGET. Without the fix, OLD would still be flagged active while its set is gone.
     assert!(
         store.active_profile(game.appid).unwrap().is_none(),

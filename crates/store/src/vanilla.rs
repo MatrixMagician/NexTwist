@@ -1,10 +1,10 @@
 //! Content-addressed vanilla backup ledger (DEPLOY-04): the `vanilla_backup` facade.
 //!
 //! Backup-before-overwrite is the single most important safety mechanism. Before a
-//! deploy overwrites any pre-existing game file, the deploy engine (Plan 04) copies
+//! deploy overwrites any pre-existing game file, the deploy engine copies
 //! the original into a per-game original store (`<app_data>/originals/<appid>/<hash>`),
 //! content-hashes it with blake3, and records the (appid, target_rel, hash) here.
-//! Purge (Plan 05) restores from that store. The hash both keys the on-disk blob
+//! Purge restores from that store. The hash both keys the on-disk blob
 //! and lets multiple targets sharing identical original content dedupe to one blob.
 
 use std::path::Path;

@@ -15,7 +15,7 @@
 //! list). For each contested path the providers are sorted by rank ascending and the
 //! winner is `providers[0]`. Changing a mod's rank above another flips the winner.
 //!
-//! ## The contract it produces (Pitfall 3 — no duplicate `target_rel`)
+//! ## The contract it produces (no duplicate `target_rel`)
 //!
 //! [`resolve`] is a **pure in-memory fold** over the enabled mods' staged trees (its
 //! only I/O is reading those staged directory listings). It emits:
@@ -61,7 +61,7 @@ pub struct ModInput {
 }
 
 /// A single resolved winner: the deploy engine deploys this file from `staging_root`
-/// to `<deploy_root>/<rel-without-Data>`, recording `mod_id` as its owner (D-03).
+/// to `<deploy_root>/<rel-without-Data>`, recording `mod_id` as its owner.
 ///
 /// This is the per-file (root, rel) pair the **multi-root contract** (Plan 02-03
 /// decision: Option A) introduces — `StagedFiles` carries ONE `staging_root`, but
@@ -69,7 +69,7 @@ pub struct ModInput {
 /// instead. `engine::deploy`/`StagedFiles` are left UNCHANGED for Phase-1 callers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WinnerFile {
-    /// The winning mod's row id — recorded as `FileEntry.source_mod` (D-03).
+    /// The winning mod's row id — recorded as `FileEntry.source_mod`.
     pub mod_id: i64,
     /// The winning mod's staging root.
     pub staging_root: PathBuf,
@@ -83,7 +83,7 @@ pub struct WinnerFile {
 /// Pure fold (the only I/O is walking each mod's staged tree). For each
 /// deploy-root-relative path provided by 1+ mods, the winner is the lowest-rank (=
 /// highest-priority) provider; the output `Vec<WinnerFile>` has exactly one entry per
-/// path (Pitfall 3 — UNIQUE-safe), and a [`FileConflict`] is emitted only for paths
+/// path (UNIQUE-safe), and a [`FileConflict`] is emitted only for paths
 /// with more than one provider (CONF-01).
 ///
 /// Iteration/output order is deterministic (a `BTreeMap` keyed by `target_rel`), so a
@@ -92,7 +92,7 @@ pub struct WinnerFile {
 /// # Errors
 ///
 /// [`DeployError::PathEscape`] if any winner's relpath lexically escapes its mod's
-/// staging root (T-02-06); [`DeployError::Io`] if a staged tree cannot be walked.
+/// staging root; [`DeployError::Io`] if a staged tree cannot be walked.
 pub fn resolve(mods: &[ModInput]) -> Result<(Vec<WinnerFile>, Vec<FileConflict>), DeployError> {
     // target_rel -> providers, each (rank, mod_id, staging_root). The OUTER map is a
     // BTreeMap so winners/conflicts come out in a stable, path-sorted order.
@@ -116,7 +116,7 @@ pub fn resolve(mods: &[ModInput]) -> Result<(Vec<WinnerFile>, Vec<FileConflict>)
         providers.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
         let (_rank, winner_mod, winner_root) = providers[0].clone();
 
-        // T-02-06: the winning relpath must resolve inside its own staging root.
+        // The winning relpath must resolve inside its own staging root.
         let abs = winner_root.join(&target_rel);
         guard_within_root(&winner_root, &abs)?;
 
@@ -326,7 +326,7 @@ mod tests {
         );
     }
 
-    /// Pitfall 3 (mandatory): resolve NEVER emits two entries for the same target_rel,
+    /// Resolve NEVER emits two entries for the same target_rel,
     /// even with three mods all contending for the same path plus overlaps.
     #[test]
     fn never_emits_duplicate_target_rel() {

@@ -84,7 +84,7 @@ where
     let total = resp.content_length();
     tracing::info!(total = ?total, "starting streaming download"); // no uri logged
 
-    // CR-01: the partial file must be removed on EVERY error exit, not only on cancel.
+    // The partial file must be removed on EVERY error exit, not only on cancel.
     // Run the create→stream→write→flush window in an inner block; on ANY `Err` (transport
     // chunk error, write/flush I/O error, or a cancel) unlink `dest` before returning so a
     // partially-written, untrusted archive never lingers in the deploy-trusted staging dir.
@@ -99,7 +99,7 @@ where
 
 /// Create `dest`, stream the response body into it chunk-by-chunk, and flush. Returns the
 /// total bytes written. The caller ([`download_to`]) unlinks `dest` if this returns `Err`
-/// (CR-01) — this helper does not, so the cleanup lives in exactly one place.
+/// — this helper does not, so the cleanup lives in exactly one place.
 async fn stream_to_file<F>(
     resp: reqwest::Response,
     dest: &Path,

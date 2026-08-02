@@ -50,7 +50,7 @@ pub enum DeployError {
     Profile(String),
 
     /// A pre-existing NON-EMPTY user `sResourceDataDirsFinal` value blocks automatic
-    /// StarfieldCustom.ini activation (SFINI-03). Carries the user's current value so the
+    /// StarfieldCustom.ini activation. Carries the user's current value so the
     /// UI can offer keep-mine vs use-NexTwist. NexTwist never clobbers it silently — the
     /// engine surfaces this rather than overwriting (auto-write only an empty/absent value).
     #[error("StarfieldCustom.ini conflict: user set sResourceDataDirsFinal to {current_value:?}")]

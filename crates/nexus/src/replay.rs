@@ -1,21 +1,21 @@
-//! Headless FOMOD-choice replay + Collection rule→rank mapping (COLL-03).
+//! Headless FOMOD-choice replay + Collection rule→rank mapping.
 //!
 //! A Collection pins each scripted-installer mod's wizard answers as an `IChoices`
 //! manifest (`{type:"fomod", options:[step{name,groups[group{name,choices[option]}]}]}`).
 //! [`replay_choices`] converts that manifest into the SAME [`fomod::Selection`] the
 //! interactive wizard would build, by NAME-matching every step → group → option against
-//! the parsed [`FomodModule`] (RESEARCH Pattern 6). The caller then feeds the `Selection`
+//! the parsed [`FomodModule`]. The caller then feeds the `Selection`
 //! to the **same** [`fomod::resolve`] — there is no separate Collection install engine and
 //! no per-mod wizard pops during a Collection install.
 //!
-//! HARD SAFETY RULE (RESEARCH A3 / Pitfall 4): if a manifest step/group/option name no
+//! HARD SAFETY RULE: if a manifest step/group/option name no
 //! longer matches the mod's `ModuleConfig.xml` (the mod was updated since the Collection
 //! pinned it), [`replay_choices`] returns a SPECIFIC [`NexusError`] — it NEVER silently
 //! drops the choice and mis-installs. The caller surfaces this for a manual wizard pass.
 //!
 //! [`map_rules_to_ranks`] translates the Collection's `modRules[]` (`after`/`before`/
 //! `conflicts`) plus per-mod `fileOverrides` onto the EXISTING Phase-2 conflict-rank model
-//! (RESEARCH Pattern 7) — no new rules engine. `after` ⇒ the source gets a HIGHER rank
+//! — no new rules engine. `after` ⇒ the source gets a HIGHER rank
 //! number (lower priority, loses file conflicts) than the reference; `before` ⇒ the
 //! inverse. A rule whose `reference` matches no resolved mod is skipped, never fatal
 //! (Pitfall 4 / T-04-09).
@@ -138,7 +138,7 @@ pub struct RankAdjustment {
 }
 
 /// Map the Collection's `modRules[]` + per-mod `fileOverrides` onto the Phase-2 rank model
-/// (RESEARCH Pattern 7) — NO new rules engine.
+/// — NO new rules engine.
 ///
 /// `key_for` resolves a [`ModReference`] (or a mod identity) to a stable key (e.g. the
 /// resolved `modId`); callers key their mods the same way. The returned map carries one
@@ -154,7 +154,7 @@ pub struct RankAdjustment {
 /// * `file_overrides` (per mod) ⇒ recorded as force-win `dest_rel` paths.
 ///
 /// A rule whose `source` or `reference` matches no resolved mod (per `key_for`) is SKIPPED
-/// — never fatal (Pitfall 4 / T-04-09).
+/// — never fatal.
 pub fn map_rules_to_ranks<F>(
     rules: &[CollectionModRule],
     file_overrides: &HashMap<String, Vec<String>>,
@@ -166,7 +166,7 @@ where
     let mut adjustments: HashMap<String, RankAdjustment> = HashMap::new();
 
     for rule in rules {
-        // Skip a rule whose endpoints don't both resolve to a known mod (Pitfall 4).
+        // Skip a rule whose endpoints don't both resolve to a known mod.
         let (Some(source_key), Some(_reference_key)) =
             (key_for(&rule.source), key_for(&rule.reference))
         else {
@@ -209,17 +209,17 @@ where
 
 /// Whether a Collection mod's `source.type` is one NexTwist may auto-download (`nexus` or
 /// `bundle`). Off-Nexus (`direct`/`browse`/`manual`) is surfaced as a manual step and NEVER
-/// fetched (T-04-12). A small helper so the orchestrator's download loop reads clearly.
+/// fetched. A small helper so the orchestrator's download loop reads clearly.
 pub fn is_auto_fetchable(source: SourceType) -> bool {
     matches!(source, SourceType::Nexus | SourceType::Bundle)
 }
 
 /// Resolve a [`ModReference`] (from a `modRule`) to the manifest index of the mod it
-/// identifies, if any (Pattern 7 / RESEARCH A5). A reference matches a mod by — in order —
+/// identifies, if any. A reference matches a mod by — in order —
 /// `tag`, `repo` `(modId/fileId)`, exact `fileMD5`, or `logicalFileName` against either the
 /// mod's `source.logical_filename` OR (the manifest authors are loose about this) its
 /// display `name`. An unmatched reference returns `None` so the rule is skipped, never fatal
-/// (Pitfall 4 / T-04-09). The manifest INDEX is the stable mod key the rank map is keyed by.
+///. The manifest INDEX is the stable mod key the rank map is keyed by.
 fn reference_to_index(reference: &ModReference, mods: &[CollectionMod]) -> Option<usize> {
     mods.iter().position(|m| {
         // `tag` match (the most reliable authored key).
@@ -245,7 +245,7 @@ fn reference_to_index(reference: &ModReference, mods: &[CollectionMod]) -> Optio
 }
 
 /// Compute each Collection mod's concrete deploy rank from the manifest `modRules` +
-/// per-mod `fileOverrides` — the PRODUCTION wiring for COLL-04 (RESEARCH A5 / Pattern 7).
+/// per-mod `fileOverrides` — the PRODUCTION wiring for COLL-04.
 ///
 /// This is the single entry point the adapter calls so the author-intended conflict order
 /// actually reaches the deploy engine (rather than every mod being hardcoded to one rank).

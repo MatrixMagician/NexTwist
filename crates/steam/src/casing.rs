@@ -3,7 +3,7 @@
 //! Wine/Proton does NOT abstract the filesystem: a Windows `open("Data\\Textures\\x")`
 //! becomes a case-sensitive Linux `open()`, so mixed-case mod paths (authored on
 //! case-insensitive NTFS) silently fail to load (RESEARCH.md Pitfall 4). The deploy
-//! engine's `casefold.rs` (Plan 05) rewrites incoming mod paths to the game's REAL
+//! engine's `casefold.rs` rewrites incoming mod paths to the game's REAL
 //! casing — and the knowledge of that real casing lives HERE.
 //!
 //! This module ONLY produces the canonical-casing knowledge; it performs NO rewriting

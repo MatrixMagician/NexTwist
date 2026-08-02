@@ -1,6 +1,6 @@
 //! Domain error enums.
 //!
-//! Per the locked error-design decision (CONTEXT.md): libraries use `thiserror`
+//! Per the locked error-design decision: libraries use `thiserror`
 //! enums; `anyhow` is reserved for the app/Tauri boundary only. Each crate that
 //! grows its own failure modes adds a variant here or its own `thiserror` type;
 //! the shared ones live here so callers can match across crate boundaries.

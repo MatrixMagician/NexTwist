@@ -10,7 +10,7 @@
 //! * `hardlink_ok` — whether a real throwaway `hard_link` between the two dirs
 //!   succeeds (the authoritative btrfs-subvolume EXDEV backstop — A5: st_dev alone
 //!   is insufficient).
-//! * `casefold`    — best-effort ext4 `+F` casefold flag (A6: a warning, not a gate).
+//! * `casefold`    — best-effort ext4 `+F` casefold flag (a warning, not a gate).
 //!
 //! ## Why empirical reflink, not `check_reflink_support`
 //!
@@ -49,7 +49,7 @@ pub enum Casefold {
     On,
     /// The directory does not have the casefold flag set.
     Off,
-    /// Could not determine (ioctl unsupported / errored) — treated as a warning (A6).
+    /// Could not determine (ioctl unsupported / errored) — treated as a warning.
     Unknown,
 }
 
@@ -134,7 +134,7 @@ fn probe_name(tag: &str) -> String {
 
 /// Best-effort read of the ext4 casefold flag via `FS_IOC_GETFLAGS`.
 ///
-/// `FS_CASEFOLD_FL = 0x40000000` (A6 — confirmed value used widely; the ioctl path
+/// `FS_CASEFOLD_FL = 0x40000000` (confirmed value used widely; the ioctl path
 /// is wrapped so any failure degrades to [`Casefold::Unknown`] rather than erroring).
 fn read_casefold(dir: &Path) -> Casefold {
     const FS_CASEFOLD_FL: i64 = 0x4000_0000;

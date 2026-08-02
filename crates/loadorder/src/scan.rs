@@ -15,7 +15,7 @@
 //! per-profile enable/order state is owned by the store's `plugin_state` and merged in by
 //! the Tauri command layer, not here.
 //!
-//! Path safety (T-02-12): scan collects only files physically present under the supplied
+//! Path safety: scan collects only files physically present under the supplied
 //! roots; plugin names are treated as opaque filenames and never joined as paths outside a
 //! root. Header parsing that fails (a corrupt/non-plugin file with a plugin extension) is
 //! a NON-fatal classification fallback to [`PluginKind::Esp`] with the parse error logged
@@ -250,7 +250,7 @@ pub fn scan_plugins_for(
     )
 }
 
-/// The medium-aware scan (SFLO-03): identical walk/de-dup to [`scan_plugins_for`] but returns
+/// The medium-aware scan: identical walk/de-dup to [`scan_plugins_for`] but returns
 /// the richer [`PluginView`] carrying the `medium` boolean (and a `protected: false` default
 /// the caller fills after a live libloot probe). [`scan_plugins_for`] is a thin wrapper that
 /// maps each view down to `core::Plugin`, so the apply/sort callers stay unchanged and the
@@ -278,7 +278,7 @@ pub fn esplugin_game_id(appid: u32) -> Option<GameId> {
     game_id_for(appid)
 }
 
-/// Merge a profile's persisted enable/order onto a scan (D-07/D-13), returning the list in
+/// Merge a profile's persisted enable/order onto a scan, returning the list in
 /// display order (`order`, then name for stability).
 ///
 /// The scan owns which plugins exist and their `kind`/`medium` badges; the store owns

@@ -1,11 +1,11 @@
-//! Collection availability resolver — the resolve-before-download HARD GATE (COLL-02).
+//! Collection availability resolver — the resolve-before-download HARD GATE.
 //!
 //! Given a parsed [`crate::collection::Collection`], classify EVERY pinned mod's
 //! availability into a [`ResolveReport`] **before any download or disk write** (success
 //! criterion #2; the STATE Phase-4 blocker mitigation). The gate is structural: this module
 //! only ever calls [`NexusClient::file_availability`] (a single metadata read per `nexus`
 //! mod, gated through the shared `governor` limiter via `until_ready()` first) — it has NO
-//! download path, so it cannot issue a download (T-04-10).
+//! download path, so it cannot issue a download.
 //!
 //! Classification follows the Source-type table (RESEARCH Collection Manifest Reference):
 //! * `nexus`  → the file-info read decides Available / Archived / Unavailable;
@@ -71,7 +71,7 @@ impl ResolveReport {
 }
 
 /// Resolve every pinned mod's availability into a [`ResolveReport`] — the hard
-/// resolve-before-download gate (COLL-02). Issues only metadata reads (zero downloads).
+/// resolve-before-download gate. Issues only metadata reads (zero downloads).
 ///
 /// For each mod:
 /// * `nexus` with a `(mod_id, file_id)` pair → [`NexusClient::file_availability`] (a single

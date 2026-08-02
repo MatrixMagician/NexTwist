@@ -8,7 +8,7 @@
 //! * `foreign_keys = ON` — enforce referential intent where declared.
 //!
 //! SQLite WAL alone cannot make a `link()` syscall and its recording row atomic — that
-//! gap is closed by the op_journal protocol (Plan 04). This module only guarantees the
+//! gap is closed by the op_journal protocol. This module only guarantees the
 //! DB side is durable.
 
 use std::path::Path;
@@ -148,7 +148,7 @@ mod tests {
         assert_eq!(store.journal_mode().unwrap(), "wal");
     }
 
-    /// BLOCKING (T-02-01, D-16): the V2 migration must apply cleanly OVER a real
+    /// BLOCKING: the V2 migration must apply cleanly OVER a real
     /// Phase-1 (V1-only) DB and auto-create one active 'Default' profile per
     /// pre-existing managed_game — proving the data migration runs over existing rows
     /// and that V2 is additive (V1 tables + data survive).

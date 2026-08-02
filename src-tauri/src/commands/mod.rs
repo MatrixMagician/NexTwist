@@ -1,7 +1,7 @@
 //! Thin Tauri command adapters — the ONLY job of this layer is to cross the IPC
 //! boundary and delegate to the headless safety core.
 //!
-//! Anti-Pattern 4 (RESEARCH.md / ARCHITECTURE.md): no business logic, no file loops,
+//! No business logic, no file loops,
 //! no path resolution lives here. Every `#[tauri::command]` below: locks the shared
 //! state, calls exactly one headless-crate function, maps the typed error to a
 //! `String` at the boundary (the webview only speaks JSON/strings), and returns. All

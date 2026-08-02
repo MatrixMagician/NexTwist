@@ -1,4 +1,4 @@
-//! Strict `nxm://` parser tests (NXM-01 / NEXUS-04).
+//! Strict `nxm://` parser tests.
 //!
 //! The parser is a **security boundary**: the input is an untrusted URL handed to the app
 //! by the OS deep-link handler. These tests pin the four contract behaviours from the plan

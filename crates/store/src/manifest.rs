@@ -3,7 +3,7 @@
 //! Each [`core::FileEntry`] row records one file NexTwist placed into a game's
 //! deploy tree — what it is, how it was placed, its content hash, and whether it
 //! overwrote a pre-existing vanilla file (which would then have a `vanilla_backup`
-//! row). Purge (Plan 05) reads this manifest to remove exactly what was deployed.
+//! row). Purge reads this manifest to remove exactly what was deployed.
 
 use std::path::{Path, PathBuf};
 

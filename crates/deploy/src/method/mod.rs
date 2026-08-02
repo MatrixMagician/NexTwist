@@ -11,7 +11,7 @@
 //! [`apply_idempotent`] is remove-if-present-then-create, so re-applying an already
 //! completed op is a no-op — which is exactly what makes journal replay after a crash
 //! safe. Every method deploys / removes a SINGLE FILE; we never symlink a directory
-//! (Pitfall 2: a Steam update could write *through* a directory symlink into staging).
+//! (a Steam update could write *through* a directory symlink into staging).
 
 mod copy;
 mod hardlink;

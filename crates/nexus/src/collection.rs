@@ -1,4 +1,4 @@
-//! Pure `collection.json` parser (COLL-01).
+//! Pure `collection.json` parser.
 //!
 //! Deserialises a NexusMods **Collection revision manifest** (Vortex's `ICollection`
 //! shape, authored by `extensions/collections/src/types/ICollection.ts`) into a typed
@@ -167,7 +167,7 @@ impl SourceType {
 
 /// The FOMOD-replay encoding (`IChoices`): an ordered list of steps by name, each with
 /// groups by name, each with the chosen options by name + index. Driven directly by
-/// `crates/fomod::resolve` in the headless Collection-install path (Plan 04 / COLL-03).
+/// `crates/fomod::resolve` in the headless Collection-install path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Choices {
     /// The choice encoding type — always `"fomod"` for a scripted-installer replay.
@@ -242,7 +242,7 @@ pub enum ModRuleType {
 ///
 /// A reference matches a resolved mod by `tag`, `md5`, `logicalFileName` (+ `versionMatch`),
 /// `fileExpression`, or `repo` (modId/fileId). All fields are optional; an empty reference
-/// (or one matching no resolved mod) is skipped, not fatal (Pitfall 4 / T-04-09).
+/// (or one matching no resolved mod) is skipped, not fatal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ModReference {
     /// Opaque tag matcher.
@@ -273,7 +273,7 @@ impl Collection {
     ///
     /// Pure (no I/O). A malformed or schema-invalid manifest flattens the serde error into a
     /// [`NexusError::Http`] string at the crate boundary (the crate's String-flattening
-    /// convention) — never a panic on this untrusted input (T-04-08 / T-04-11).
+    /// convention) — never a panic on this untrusted input.
     pub fn parse(json: &str) -> Result<Collection, NexusError> {
         serde_json::from_str(json)
             .map_err(|e| NexusError::Http(format!("malformed collection.json: {e}")))

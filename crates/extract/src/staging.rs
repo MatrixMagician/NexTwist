@@ -16,7 +16,7 @@ use crate::{ArchiveFormat, list_files_rel, mark_tree_readonly, rar, sevenz, zip}
 
 /// A validated, read-only per-mod staging tree produced by [`install_archive`].
 ///
-/// Derives serde so the Tauri command layer (Plan 06) can return it to the webview and
+/// Derives serde so the Tauri command layer can return it to the webview and
 /// receive it back for the deploy call — it maps 1:1 onto `deploy::StagedFiles`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StagedMod {
@@ -167,7 +167,7 @@ pub(crate) enum MoveSource {
 /// directory and, if so, plan to stage only that directory's GAME content. Otherwise
 /// plan to stage the whole tree unchanged.
 ///
-/// Heuristic (RESEARCH Pitfall 1): the tree is "wrapped" iff its top level is EXACTLY one
+/// Heuristic: the tree is "wrapped" iff its top level is EXACTLY one
 /// directory (no sibling files or dirs) AND that directory directly contains a recognizable
 /// game root — a child named `Data` (case-insensitively) or one of
 /// [`RECOGNIZED_ROOT_ITEMS`]. A real multi-folder mod (more than one top-level entry) or a

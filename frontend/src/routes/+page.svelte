@@ -1,6 +1,6 @@
 <script lang="ts">
   // Functional-minimal Svelte 5 UI driving the full detect -> install -> deploy ->
-  // purge round-trip. Visual polish is deferred (CONTEXT.md); every action goes
+  // purge round-trip. Visual polish is deferred; every action goes
   // through lib/api.ts and the UI holds NO business logic / path resolution.
   import * as api from "$lib/api";
   import { fmtBytes, pct } from "$lib/format";
@@ -54,27 +54,27 @@
   let purgeReport = $state<PurgeReport | null>(null);
   let verifyReport = $state<VerifyReport | null>(null);
 
-  // Conflict view state (UI-SPEC §A). `mods` is the priority list (rank-ascending);
+  // Conflict view state. `mods` is the priority list (rank-ascending);
   // `conflicts` is the file-level conflict table. `deployedSig` captures the winner/
   // priority signature that was last deployed, so we can show the pending-vs-deployed
-  // banner (D-04) when the current set differs.
+  // banner when the current set differs.
   let mods = $state<ManagedMod[]>([]);
   let conflicts = $state<FileConflict[]>([]);
   let deployedSig = $state<string | null>(null);
 
-  // Plugin manager state (UI-SPEC §B/§C). `plugins` is the editable, ordered list (the
+  // Plugin manager state. `plugins` is the editable, ordered list (the
   // backend returns it merged scan + per-profile state). `sortProposal` holds a LOOT
-  // proposal awaiting review; it is applied into `plugins` only on explicit confirm (D-12).
+  // proposal awaiting review; it is applied into `plugins` only on explicit confirm.
   let plugins = $state<PluginInfo[]>([]);
   let sortProposal = $state<SortProposal | null>(null);
   let mastersFirstError = $state<string | null>(null);
-  // SFLO-04: engine-classified on-launch reconciliation verdict (Starfield only). The UI
+  // Engine-classified on-launch reconciliation verdict (Starfield only). The UI
   // renders this verdict; it never derives InSync/Drift from a raw plugins.txt diff.
   let reconcileState = $state<ReconcileState | null>(null);
 
-  // Profile state (UI-SPEC §D). `profiles` is the per-game selector source; the active
+  // Profile state. `profiles` is the per-game selector source; the active
   // profile is marked with the Accent indicator. Switching and deleting are disk-mutating
-  // and confirmation-gated (D-15): selecting a target opens a modal, and ONLY on confirm
+  // and confirmation-gated: selecting a target opens a modal, and ONLY on confirm
   // does the safe engine run (purge old → deploy new → write plugins.txt → mark active).
   let profiles = $state<Profile[]>([]);
   let newProfileName = $state("");
@@ -82,7 +82,7 @@
   let deleteTarget = $state<Profile | null>(null); // pending confirm-to-delete
   let switchReport = $state<SwitchReport | null>(null);
 
-  // Account panel state (UI-SPEC §A). `userInfo` drives logged-in vs logged-out; the
+  // Account panel state. `userInfo` drives logged-in vs logged-out; the
   // refresh token / API key NEVER reaches the UI (only UserInfo does). `noKeyring` is
   // set when a login attempt hits the NEXUS-02 no-Secret-Service hard-fail — it blocks
   // login behind the destructive banner. `apiKeyReveal` toggles the key-paste fallback.
@@ -93,7 +93,7 @@
   let confirmLogout = $state(false);
   const loggedIn = $derived(userInfo !== null);
 
-  // Downloads list state (UI-SPEC §B). `downloads` is the per-item list, driven entirely
+  // Downloads list state. `downloads` is the per-item list, driven entirely
   // by async `download://progress` events so the UI never freezes (criterion #4).
   // `rateLimited` toggles the Warning notice above the list when the client backs off.
   // `expiredLink` carries the §C.3 "link expired" Warning (not a Failed download row).
@@ -105,7 +105,7 @@
   let nxmToast = $state<string | null>(null);
   let nxmToastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // --- FOMOD guided installer state (UI-SPEC §A). The wizard opens in the existing
+  // --- FOMOD guided installer state. The wizard opens in the existing
   //     .overlay/.modal pattern when an archive contains fomod/ModuleConfig.xml. ALL FOMOD
   //     logic lives in crates/fomod (via api.ts); the UI only renders the projection,
   //     accumulates the user's choices/flags, and drives the dry-run gate before apply. ---
@@ -190,7 +190,7 @@
   const enabledMods = $derived(mods.filter((m) => m.enabled));
 
   // The current winner/priority signature: enabled mod ids in rank order. When this
-  // differs from what was last deployed, priority changes are PENDING on disk (D-04).
+  // differs from what was last deployed, priority changes are PENDING on disk.
   const currentSig = $derived(enabledMods.map((m) => m.id).join(","));
   const pending = $derived(deployedSig !== null && deployedSig !== currentSig);
   // Before any deploy this session we cannot prove the on-disk state, so treat an
@@ -245,7 +245,7 @@
     if (p) iniPreview = p;
   }
 
-  // The "Enable" button ONLY opens the preview modal — it never writes (SFINI-01).
+  // The "Enable" button ONLY opens the preview modal — it never writes.
   function openIniModal() {
     iniModalOpen = true;
   }
@@ -269,9 +269,9 @@
     if (outcome !== undefined) await loadIniPreview();
   }
 
-  // --- NexusMods account (UI-SPEC §A) ---
+  // --- NexusMods account ---
 
-  // The backend surfaces the no-keyring hard-fail (NEXUS-02) as a distinct error string
+  // The backend surfaces the no-keyring hard-fail as a distinct error string
   // containing "no keyring backend"; the UI keys its destructive banner on that.
   function isNoKeyring(e: unknown): boolean {
     return String(e).toLowerCase().includes("no keyring backend");
@@ -323,7 +323,7 @@
     }
   }
 
-  // --- NexusMods downloads (UI-SPEC §B). Everything is event-driven. ---
+  // --- NexusMods downloads. Everything is event-driven. ---
 
   /** Apply a `download://progress` event to the matching row (UI-SPEC §B states). */
   function applyProgress(p: DownloadProgress) {
@@ -339,7 +339,7 @@
       return;
     }
     if (p.state === "ratelimited") {
-      // WR-01/WR-02 (NEXUS-05): a transient, auto-recoverable rate-limit pause. Show the
+      // A transient, auto-recoverable rate-limit pause. Show the
       // backoff notice and mark the row paused — NOT a terminal failure.
       rateLimited = true;
       row.state = "ratelimited";
@@ -416,7 +416,7 @@
   }
 
   /**
-   * An nxm:// link arrived (NXM-01): the shell already started the download server-side and
+   * An nxm:// link arrived: the shell already started the download server-side and
    * emits `download://progress` for the new row. Here we just confirm with the Success toast
    * and ensure a row exists so the user sees it appear even before the first progress tick.
    */
@@ -451,7 +451,7 @@
     if (selectedAppid !== null) loadConflicts();
   }
 
-  /** An expired/invalid nxm:// link (UI-SPEC §C.3): show the Warning, never a Failed row. */
+  /** An expired/invalid nxm:// link: show the Warning, never a Failed row. */
   function applyNxmExpired(x: api.NxmExpired) {
     expiredLink = x.reason;
   }
@@ -489,7 +489,7 @@
       error = "Enter an archive path (.zip/.7z/.rar) first.";
       return;
     }
-    // FOMOD-01: probe for a guided installer first. A successful parse opens the wizard;
+    // Probe for a guided installer first. A successful parse opens the wizard;
     // a "no fomod/ModuleConfig.xml" archive (or any parse error) falls back to the plain
     // install path — the UI never half-opens a broken wizard (§A.8).
     await tryOpenFomodWizard(selectedAppid!, archivePath);
@@ -505,7 +505,7 @@
     if (result) staged = result;
   }
 
-  // --- FOMOD guided installer (UI-SPEC §A). Everything routes through api.ts; the engine
+  // --- FOMOD guided installer. Everything routes through api.ts; the engine
   //     owns parse/condition/resolve. The wizard only renders + gates. ---
 
   /** The steps currently VISIBLE. A step with a `<visible>` condition is re-evaluated by
@@ -628,7 +628,7 @@
     if (selectedAppid === null) return;
     const result = await run("Verify", () => api.verify(selectedAppid!));
     if (result) verifyReport = result;
-    // SFLO-04: alongside the Data/-hash verify, classify the prefix-AppData plugins.txt
+    // Alongside the Data/-hash verify, classify the prefix-AppData plugins.txt
     // against recorded intent (Starfield only). The engine returns the InSync/Drift verdict.
     if (isStarfield) {
       const rec = await run("Reconcile plugins", () =>
@@ -638,7 +638,7 @@
     }
   }
 
-  // --- Conflict view (UI-SPEC §A) ---
+  // --- Conflict view ---
 
   async function loadConflicts() {
     if (selectedAppid === null) return;
@@ -649,7 +649,7 @@
   }
 
   // Reorder by swapping ranks with the neighbor (▲▼). Keyboard/click reorder is the
-  // baseline path (no DnD-only) per UI-SPEC §A.1. Pending until Deploy (D-04).
+  // baseline path (no DnD-only) per UI-SPEC §A.1. Pending until Deploy.
   async function onReorder(index: number, dir: -1 | 1) {
     if (selectedAppid === null) return;
     const other = index + dir;
@@ -671,12 +671,12 @@
     );
     if (result) {
       deployReport = result;
-      // Record the deployed signature so the pending banner clears (D-04).
+      // Record the deployed signature so the pending banner clears.
       deployedSig = currentSig;
     }
   }
 
-  // --- Plugin manager (UI-SPEC §B/§C) ---
+  // --- Plugin manager ---
 
   // Masters-first / protected-master rules live in $lib/plugins (pure + unit-tested).
   const isMaster = order.isMaster;
@@ -696,7 +696,7 @@
   // violate masters-first is refused with the §B.2 inline warning (controls are also
   // disabled for these, this is the defense-in-depth path).
   async function onPluginReorder(i: number, dir: -1 | 1) {
-    // Protected masters are engine-locked (SFLO-03); the UI is the courtesy layer, the engine
+    // Protected masters are engine-locked; the UI is the courtesy layer, the engine
     // rejects a protected reorder authoritatively.
     const other = i + dir;
     if (other < 0 || other >= plugins.length) return;
@@ -713,7 +713,7 @@
 
   async function onPluginToggle(name: string, enabled: boolean) {
     if (selectedAppid === null) return;
-    // Protected masters are always active and engine-locked (SFLO-03) — never toggle.
+    // Protected masters are always active and engine-locked — never toggle.
     if (plugins.find((p) => p.name === name)?.protected) return;
     const ok = await run("Set plugin enabled", () =>
       api.setPluginEnabled(selectedAppid!, name, enabled),
@@ -741,7 +741,7 @@
     if (proposal) sortProposal = proposal;
   }
 
-  // Apply a LOOT proposal into the editable list (D-12: only on explicit confirm). The
+  // Apply a LOOT proposal into the editable list (only on explicit confirm). The
   // proposed name order is materialized into `plugins`, preserving each plugin's
   // kind/enabled; unknown names (shouldn't happen) are dropped, missing ones appended.
   function onApplySortedOrder() {
@@ -766,7 +766,7 @@
     sortProposal = null;
   }
 
-  // --- Profiles (UI-SPEC §D) ---
+  // --- Profiles ---
 
   async function loadProfiles() {
     if (selectedAppid === null) return;
@@ -791,7 +791,7 @@
   }
 
   // Selecting a different profile does NOT mutate disk — it opens the confirmation modal
-  // (UI-SPEC §D.2 / D-15). The actual switch runs only on confirm.
+  //. The actual switch runs only on confirm.
   function onSelectProfile(p: Profile) {
     if (p.active) return; // already the deployed profile
     switchTarget = p;
@@ -853,7 +853,7 @@
     return moved;
   });
 
-  // --- Collections (UI-SPEC §B/§C). Every action routes through api.ts; the resolve
+  // --- Collections. Every action routes through api.ts; the resolve
   //     report and the destructive uninstall are the two consequence gates. ---
 
   /** §B.3: resolve the pasted manifest into the report BEFORE any download/disk write. */
@@ -995,10 +995,10 @@
   refreshManaged();
   loadAccount();
 
-  // Subscribe to download progress events (UI-SPEC §B): the list is updated entirely off
+  // Subscribe to download progress events: the list is updated entirely off
   // these async events so the UI never freezes during a multi-GB download.
   api.onDownloadProgress(applyProgress);
-  // Subscribe to nxm:// deep-link events (UI-SPEC §C): the arrival toast + the
+  // Subscribe to nxm:// deep-link events: the arrival toast + the
   // expired/invalid-link Warning. The new download row arrives via the progress stream.
   api.onNxmArrival(applyNxmArrival);
   api.onNxmExpired(applyNxmExpired);
@@ -1011,7 +1011,7 @@
   {#if status}<p class="ok">{status}</p>{/if}
   {#if error}<p class="err">{error}</p>{/if}
 
-  <!-- Account panel (UI-SPEC §A): logged-out / logged-in / no-keyring. A token or key
+  <!-- Account panel: logged-out / logged-in / no-keyring. A token or key
        is never rendered. -->
   <section class="account">
     <h2>Account</h2>
@@ -1070,7 +1070,7 @@
     {/if}
   </section>
 
-  <!-- Downloads list (UI-SPEC §B): per-item progress, five row states, rate-limit notice,
+  <!-- Downloads list: per-item progress, five row states, rate-limit notice,
        empty state. Driven entirely by async download://progress events. -->
   <section class="downloads">
     <h2>Downloads</h2>
@@ -1141,7 +1141,7 @@
               {:else if d.state === "extracting"}
                 <span class="muted">Extracting…</span>
               {:else if d.state === "ratelimited"}
-                <!-- WR-01/WR-02: a transient rate-limit pause, not a failure. -->
+                <!-- A transient rate-limit pause, not a failure. -->
                 <span class="muted">Paused — respecting NexusMods rate limits…</span>
               {:else if d.state === "done"}
                 <span class="done">✓ Done — added to staging, ready to deploy</span>
@@ -1481,7 +1481,7 @@
          component or CSS. The state line is read off the read-only preview. -->
     {#if isStarfield && !starfieldPending && iniPreview}
       {#if iniConflict !== null}
-        <!-- Surface 3 (SFINI-03): a pre-existing non-empty user value blocks auto-activation.
+        <!-- Surface 3: a pre-existing non-empty user value blocks auto-activation.
              Amber caution (reversible), never a silent clobber — explicit keep/replace. -->
         <div class="warn">
           <strong>StarfieldCustom.ini already sets a loose-file path.</strong>
@@ -1632,7 +1632,7 @@
     <section>
       <h2>4. Conflicts &amp; priority — {selectedGame.name}</h2>
 
-      <!-- Pending-vs-deployed banner (UI-SPEC §A.4 / D-04) -->
+      <!-- Pending-vs-deployed banner -->
       {#if showPending}
         <div class="warn pending">
           <strong>Changes pending</strong>
@@ -1649,7 +1649,7 @@
         {/if}
       </div>
 
-      <!-- Mod priority list (UI-SPEC §A.1): top = highest priority = wins -->
+      <!-- Mod priority list: top = highest priority = wins -->
       <h3>Mod priority <span class="muted">(top = highest priority = wins)</span></h3>
       {#if mods.length === 0}
         <p class="muted">No mods for this game yet. Install a mod above to set priority.</p>
@@ -1679,7 +1679,7 @@
         </ol>
       {/if}
 
-      <!-- File-level conflict table (UI-SPEC §A.2) -->
+      <!-- File-level conflict table -->
       <h3>File conflicts</h3>
       {#if conflicts.length === 0}
         <div class="empty">
@@ -1747,14 +1747,14 @@
         </button>
       </div>
 
-      <!-- Masterlist-age note (SFLO-02): informational, muted grey — NOT a caution (Starfield). -->
+      <!-- Masterlist-age note: informational, muted grey — NOT a caution (Starfield). -->
       {#if isStarfield && sortProposal?.masterlist_date}
         <p class="muted masterlist-age">
           Masterlist from {sortProposal.masterlist_date} — may be stale
         </p>
       {/if}
 
-      <!-- LOOT proposal review (UI-SPEC §C): no silent apply (D-12) -->
+      <!-- LOOT proposal review: no silent apply -->
       {#if sortProposal}
         <div class="loot-proposal">
           {#if sortProposal.warnings.length > 0}
@@ -1788,7 +1788,7 @@
         <div class="warn"><strong>⚠</strong> {mastersFirstError}</div>
       {/if}
 
-      <!-- Plugin list, masters-first grouped (UI-SPEC §B.1/§B.2) -->
+      <!-- Plugin list, masters-first grouped -->
       {#if plugins.length === 0}
         <div class="empty">
           <strong>No plugins found</strong>
@@ -1851,7 +1851,7 @@
           {/each}
         </ol>
 
-        <!-- plugins.txt preview (UI-SPEC §B.3): read-only asterisk output -->
+        <!-- plugins.txt preview: read-only asterisk output -->
         <h3>plugins.txt preview <span class="muted">(asterisk = enabled)</span></h3>
         <pre class="txt-preview">{plugins
             .filter((p) => p.kind !== "esm")
@@ -1861,7 +1861,7 @@
       {/if}
     </section>
 
-    <!-- Profiles (UI-SPEC §D): selector + confirmation-gated switch/delete (D-15) -->
+    <!-- Profiles: selector + confirmation-gated switch/delete -->
     <section>
       <h2>6. Profiles — {selectedGame.name}</h2>
 
@@ -1927,7 +1927,7 @@
     </section>
   {/if}
 
-  <!-- No-silent-edit preview + confirm (SFINI-01). Shows the exact lines + provenance
+  <!-- No-silent-edit preview + confirm. Shows the exact lines + provenance
        BEFORE any write; ONLY this confirm authorizes the write. Same .overlay/.modal gate
        discipline as the profile-switch / FOMOD dry-run below. -->
   {#if iniModalOpen && iniPreview}
@@ -2012,7 +2012,7 @@
     </div>
   {/if}
 
-  <!-- FOMOD guided install wizard (UI-SPEC §A). Opens in the existing .overlay/.modal when
+  <!-- FOMOD guided install wizard. Opens in the existing.overlay/.modal when
        an archive contains fomod/ModuleConfig.xml. One install step per screen; Back/Next
        (Install on the last step); a hard dry-run conflict-preview gate before any write. -->
   {#if fomodProj && fomodStep}
@@ -2189,7 +2189,7 @@
   .first-launch { background: #f3f3f3; border-radius: 6px; padding: 0.75rem; }
   .first-launch p { margin: 0.3rem 0 0.6rem; }
 
-  /* --- Account panel (UI-SPEC §A) --- */
+  /* --- Account panel --- */
   .account-line { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0 0.75rem; }
   .account-line .dot { color: #1a7f37; }            /* Success green status dot */
   .account-line .username { font-weight: 600; }
@@ -2217,7 +2217,7 @@
   }
   .keyring-banner p { color: #333; margin: 0.4rem 0 0; }
 
-  /* --- Downloads list (UI-SPEC §B) --- */
+  /* --- Downloads list --- */
   .downloads .free-hint { margin: 0 0 0.5rem; }
   .rate-notice {
     color: #9a6700;
@@ -2272,7 +2272,7 @@
   .dl-meta { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; }
   .dl-meta .done { color: #1a7f37; }
 
-  /* --- Conflict view (UI-SPEC §A) --- */
+  /* --- Conflict view --- */
   .pending p { margin: 0.25rem 0 0; }
   .conflict-toolbar { margin: 0.75rem 0; display: flex; gap: 0.5rem; align-items: center; }
   /* Accent (10%) reserved for the single primary Deploy CTA when changes are pending. */
@@ -2327,7 +2327,7 @@
   td.winner .dot { color: #0a66c2; }
   td.winner .winner-name { font-weight: 600; }
 
-  /* --- Plugin manager (UI-SPEC §B/§C) --- */
+  /* --- Plugin manager --- */
   .mono { font-family: ui-monospace, monospace; }
   ol.priority.plugins li.group-divider {
     display: block;
@@ -2354,9 +2354,9 @@
   .badge-esm { background: #eef3fb; border-color: #b8cdec; color: #0a4a8a; }
   .badge-esl { background: #f0eefb; border-color: #c8bce8; color: #5a3a8a; }
   .badge-esp { background: #f3f3f3; }
-  /* SFLO-03: MEDIUM tier — teal-neutral, deliberately NOT the esm-blue (accent). */
+  /* MEDIUM tier — teal-neutral, deliberately NOT the esm-blue (accent). */
   .badge-medium { background: #eaf3f0; border-color: #9cccb9; color: #1a6b52; }
-  /* SFLO-03: PROTECTED — neutral muted reuse of li.disabled tones (no new hue). */
+  /* PROTECTED — neutral muted reuse of li.disabled tones (no new hue). */
   .badge-protected { background: #f3f3f3; color: #777; }
   /* Protected masters render as locked rows — muted, with a subtle neutral fill. */
   li.protected { background: #f3f3f3; color: #777; }
@@ -2394,7 +2394,7 @@
     margin: 0.3rem 0;
   }
 
-  /* --- Profiles (UI-SPEC §D) --- */
+  /* --- Profiles --- */
   ul.priority.profiles { list-style: none; padding: 0; margin: 0.4rem 0; }
   ul.priority.profiles li.active { border-color: #0a66c2; background: #f5f9ff; }
   /* Accent indicator marks the active (deployed) profile (§D.1). */
@@ -2464,7 +2464,7 @@
   .modal h3 { margin-top: 0; }
   .modal .actions { margin-bottom: 0; }
 
-  /* --- FOMOD wizard (UI-SPEC §A) --- */
+  /* --- FOMOD wizard --- */
   .fomod-modal { max-width: 40rem; max-height: 80vh; overflow-y: auto; }
   .fomod-modal h3 .muted { display: block; font-size: 0.875rem; margin-top: 0.2rem; }
   .fomod-body { margin: 0.75rem 0; }
@@ -2520,7 +2520,7 @@
   }
   ul.fomod-plan li { padding: 0.15rem 0; word-break: break-all; }
 
-  /* Collections (UI-SPEC §B/§C). Reuses the report/warn/bar/tag visual language. */
+  /* Collections. Reuses the report/warn/bar/tag visual language. */
   .coll-pick .coll-rev { max-width: 6rem; }
   .coll-manifest-label { display: block; margin: 0.5rem 0; }
   .coll-manifest-label textarea {

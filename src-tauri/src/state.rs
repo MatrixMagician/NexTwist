@@ -2,7 +2,7 @@
 //!
 //! The only mutable resource the command layer touches is the persistence [`Store`]
 //! (the headless safety core owns everything else). Keeping the state this thin is the
-//! point: business logic lives in the headless crates, never here (Anti-Pattern 4).
+//! point: business logic lives in the headless crates, never here.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -23,7 +23,7 @@ pub const OAUTH_REDIRECT: &str = "nxm://oauth/callback";
 /// The NexusMods auth spine adds in-memory-only auth state: the short-lived OAuth
 /// access token, a pending OAuth round-trip (CSRF + PKCE verifier between browser-open
 /// and callback), and a cached `UserInfo`. The long-lived refresh token / API key is
-/// NEVER held here — it lives only in the OS keyring (NEXUS-02).
+/// NEVER held here — it lives only in the OS keyring.
 pub struct AppState {
     /// The persistence store (registry / manifest / journal / vanilla ledger).
     pub store: Store,
@@ -31,16 +31,16 @@ pub struct AppState {
     pub data_dir: PathBuf,
     /// The public OAuth client id shipped with the app (PKCE → no secret). Empty until
     /// a client is registered under the Nexus Acceptable Use Policy; the API-key paste
-    /// fallback works regardless (NEXUS-01 / RESEARCH Pitfall 3).
+    /// fallback works regardless.
     pub oauth_client_id: String,
-    /// Short-lived OAuth access token — in memory only, never persisted (NEXUS-02).
+    /// Short-lived OAuth access token — in memory only, never persisted.
     pub access_token: Option<String>,
-    /// A pending OAuth round-trip awaiting the `nxm://oauth/callback` code (Plan 03).
+    /// A pending OAuth round-trip awaiting the `nxm://oauth/callback` code.
     pub pending_oauth: Option<PendingOAuth>,
     /// The currently logged-in user, cached for the account panel.
     pub user: Option<nexus::UserInfo>,
     /// Whether we have already tried to restore a session from the keyring this run
-    /// (WR-07). Set the first time `account_info` runs the keyring → API-key re-validate
+    ///. Set the first time `account_info` runs the keyring → API-key re-validate
     /// so a persisted credential survives a restart, without re-hitting the network (or
     /// re-tripping a no-backend banner) on every subsequent `account_info` poll.
     pub session_restore_attempted: bool,
@@ -48,7 +48,7 @@ pub struct AppState {
     /// `cancel_download` command trips the matching flag; the streaming loop in
     /// `crates/nexus` checks it once per chunk and aborts (NEXUS-03 Cancel affordance).
     pub downloads: HashMap<String, CancelFlag>,
-    /// The ONE process-wide NexusMods rate limiter (WR-03). Every per-download
+    /// The ONE process-wide NexusMods rate limiter. Every per-download
     /// `NexusClient` is built with a clone of this `Arc` so the proactive token bucket and
     /// the reactive `X-RL-*` backoff deadline are shared across ALL parallel requests — N
     /// concurrent downloads can no longer each carve out a fresh hourly budget or clobber
@@ -77,7 +77,7 @@ impl AppState {
     }
 
     /// Build a `NexusClient` for the current session against the ONE process-wide rate
-    /// limiter (WR-03).
+    /// limiter.
     ///
     /// Cloning the shared limiter `Arc` (rather than letting a client build its own) is what
     /// makes N parallel requests honour a single hourly budget and a single reactive `X-RL-*`
@@ -107,7 +107,7 @@ impl AppState {
             user: None,
             session_restore_attempted: false,
             downloads: HashMap::new(),
-            // One shared limiter for the whole process (WR-03).
+            // One shared limiter for the whole process.
             rate_limiter: Arc::new(RateLimiter::new()),
         })
     }
@@ -138,7 +138,7 @@ mod tests {
         }
     }
 
-    /// Every client this state builds carries the ONE process-wide limiter (WR-03), so
+    /// Every client this state builds carries the ONE process-wide limiter, so
     /// parallel requests share a budget instead of each carving out a fresh one.
     #[test]
     fn nexus_client_shares_the_one_process_wide_limiter() {

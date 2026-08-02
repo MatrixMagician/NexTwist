@@ -1,9 +1,9 @@
 //! Locate and deserialize `fomod/ModuleConfig.xml` into the [`crate::model`] AST.
 //!
 //! The `fomod` folder and the `ModuleConfig.xml` filename are matched
-//! case-insensitively (Pitfall 3 — the spec documents the fomod folder as
+//! case-insensitively (the spec documents the fomod folder as
 //! case-insensitive, and Wine/authoring produce inconsistent casing). A leading UTF-8
-//! BOM is stripped before deserialization (Pitfall 5). Deserialization is
+//! BOM is stripped before deserialization. Deserialization is
 //! namespace-ignorant: quick-xml's serde matches LOCAL element names, so the
 //! `xsi:noNamespaceSchemaLocation` attribute on real-world files is ignored.
 

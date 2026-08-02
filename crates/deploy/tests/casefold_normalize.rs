@@ -7,7 +7,7 @@
 //! carry `TEXTURES/Foo.DDS`; if we deploy it verbatim onto a case-sensitive Linux tree
 //! whose real dir is `Textures/`, the game's `open()` fails and the mod silently does
 //! nothing. We rewrite each directory component to the game's real casing using the
-//! canonical map produced by `steam::canonical_data_casing` (Plan 02).
+//! canonical map produced by `steam::canonical_data_casing`.
 
 use std::path::{Path, PathBuf};
 

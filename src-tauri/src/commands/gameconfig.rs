@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 use crate::commands::{boundary_err, require_game};
 use crate::state::AppState;
 
-/// Read-only preview of what loose-file activation WOULD do — writes nothing (SFINI-01).
+/// Read-only preview of what loose-file activation WOULD do — writes nothing.
 #[tauri::command]
 pub async fn preview_ini_activation(
     state: State<'_, Mutex<AppState>>,
@@ -23,7 +23,7 @@ pub async fn preview_ini_activation(
     deploy::preview_ini_activation(&game).map_err(boundary_err)
 }
 
-/// Activate loose-file loading, resolving a pre-existing user value per `resolution` (SFINI-03).
+/// Activate loose-file loading, resolving a pre-existing user value per `resolution`.
 #[tauri::command]
 pub async fn apply_ini_activation(
     state: State<'_, Mutex<AppState>>,

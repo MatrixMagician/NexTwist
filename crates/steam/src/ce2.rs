@@ -59,7 +59,7 @@ pub struct DriftNotice {
     pub is_newer: bool,
 }
 
-/// The aggregate Starfield detection status the Tauri adapter (Plan 03) forwards verbatim.
+/// The aggregate Starfield detection status the Tauri adapter forwards verbatim.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StarfieldStatus {
     /// CE2 `My Games` config-dir state (ready / first-launch-pending).
@@ -84,7 +84,7 @@ pub fn my_games_path(prefix: &Path) -> PathBuf {
     components.push("My Games".to_string());
     components.push(STARFIELD_FOLDER.to_string());
     let resolved = resolve_cased(prefix, &components);
-    // Load-bearing last-line invariant (T-06-01): whatever the redirect
+    // Load-bearing last-line invariant: whatever the redirect
     // produced, the final My Games path MUST stay under <prefix>/drive_c. This
     // is a lexical, canonicalize-free containment check — safe because the
     // component guard already rejects `..`, so no `..` can appear in the

@@ -137,7 +137,7 @@ async fn rate_limit_429_maps_to_rate_limited_and_arms_backoff() {
     }
 }
 
-/// WR-03: a 429 on a client built from a SHARED `Arc<RateLimiter>` arms a backoff that a
+/// A 429 on a client built from a SHARED `Arc<RateLimiter>` arms a backoff that a
 /// SECOND client built from the same `Arc` observes — proving the limiter is process-wide
 /// and parallel downloads coordinate one budget + one backoff (not a fresh one each).
 #[tokio::test]
@@ -353,7 +353,7 @@ async fn download_to_cancel_removes_partial_file() {
     assert!(!dest.exists(), "the partial file must be removed on cancel");
 }
 
-/// CR-01: a mid-stream transport error (the server promises more bytes via Content-Length
+/// A mid-stream transport error (the server promises more bytes via Content-Length
 /// than it sends, so reqwest yields an `Err` chunk) must ALSO unlink the partial file —
 /// not just the cancel path. Before the fix, only the cancel branch cleaned up, so a
 /// truncated/aborted body orphaned a `.archive` partial in the staging dir.

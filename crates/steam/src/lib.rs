@@ -9,7 +9,7 @@
 //! per-game canonical `Data/` casing map the deploy engine uses to normalize
 //! mixed-case mod paths under Wine (DEPLOY-08).
 //!
-//! It depends only on `core` types and `store` (from Plan 01); it returns resolved
+//! It depends only on `core` types and `store`; it returns resolved
 //! [`core::Game`] structs. Persisting them via `store::add_managed_game` is the
 //! caller's (Tauri command, Plan 06) job — this crate does pure resolution.
 

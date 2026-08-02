@@ -51,12 +51,12 @@ const VAL_RESOURCE_DIRS: &str = "";
 
 /// The bare relative path used as BOTH the on-disk INI filename and the journal /
 /// vanilla-ledger sentinel key. Deliberately has NO `Data/` prefix so it can never
-/// collide with a `Data/`-rooted deploy-manifest relpath (Pitfall 2).
+/// collide with a `Data/`-rooted deploy-manifest relpath.
 pub const INI_FILENAME: &str = "StarfieldCustom.ini";
 
 /// Reserved `vanilla_backup.hash` value meaning "NexTwist CREATED this INI — it did not
 /// pre-exist". Not a 64-char blake3 hex, so provenance is three-valued and never inferred
-/// from disk (SFINI-02, T-08-05):
+/// from disk:
 ///   * NO row              → NexTwist never activated → restore is a safe no-op.
 ///   * this ABSENCE_MARKER → CreatedByNexTwist        → restore deletes + prunes.
 ///   * a real blake3 hash  → PreExisting               → restore copies original bytes back.
@@ -75,7 +75,7 @@ pub enum IniConflictResolution {
     UseNexTwist,
 }
 
-/// A read-only preview of what activation WOULD do, without writing (SFINI-01).
+/// A read-only preview of what activation WOULD do, without writing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IniActivationPreview {
     /// The INI does not exist yet — activation would create it (CRLF, no BOM).
@@ -106,13 +106,13 @@ pub enum IniOutcome {
     /// The INI was never activated by NexTwist — restore was a safe no-op.
     NotActive,
     /// The on-disk INI carries a UTF-16/UTF-32 BOM the byte-oriented editor refuses to edit
-    /// (SFINI-03 / WR-02). Nothing was written — the user's file is left byte-for-byte
+    ///. Nothing was written — the user's file is left byte-for-byte
     /// intact rather than corrupted with a mixed-encoding UTF-8 block appended.
     UnsupportedEncoding,
 }
 
 /// How the on-disk StarfieldCustom.ini has drifted from its recorded-active state while
-/// loose files are deployed (SFINI-05) — the INI analogue of `verify`'s Data/ drift
+/// loose files are deployed — the INI analogue of `verify`'s Data/ drift
 /// buckets. `Missing` = the INI should be active but is absent; `Changed` = present but no
 /// longer carrying NexTwist's exact activation. A user-blocked conflict is NOT drift.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -142,7 +142,7 @@ pub(crate) mod editor {
         /// A non-empty user `sResourceDataDirsFinal` blocked the merge under `Block`.
         Conflict(String),
         /// A UTF-16/UTF-32 BOM was detected: this byte-oriented editor cannot safely parse
-        /// or edit a multi-byte-encoded INI, so it refuses to touch it (WR-02).
+        /// or edit a multi-byte-encoded INI, so it refuses to touch it.
         Unsupported,
     }
 
@@ -163,7 +163,7 @@ pub(crate) mod editor {
     /// cannot safely parse or edit — every ASCII char is interleaved with NUL, so
     /// `[Archive]` / `sResourceDataDirsFinal=` never match and a UTF-8 block would corrupt
     /// the file. The only encodings we own are UTF-8 and BOM-less ANSI/UTF-8; refuse the
-    /// rest (WR-02). (UTF-32 LE `FF FE 00 00` shares the UTF-16 LE `FF FE` prefix.)
+    /// rest. (UTF-32 LE `FF FE 00 00` shares the UTF-16 LE `FF FE` prefix.)
     pub(crate) fn is_unsupported_bom(bytes: &[u8]) -> bool {
         bytes.starts_with(&[0xFF, 0xFE]) // UTF-16 LE / UTF-32 LE
             || bytes.starts_with(&[0xFE, 0xFF]) // UTF-16 BE
@@ -313,7 +313,7 @@ pub(crate) mod editor {
         // Refuse a UTF-16/UTF-32-encoded INI: the byte-oriented merge below would fail to
         // match `[Archive]` / `sResourceDataDirsFinal=` (they are NUL-interleaved) and would
         // append a UTF-8 block, corrupting the file and silently overriding the user's real
-        // value. Never edit what we cannot safely parse (WR-02).
+        // value. Never edit what we cannot safely parse.
         if is_unsupported_bom(bytes) {
             return MergePlan::Unsupported;
         }
@@ -447,7 +447,7 @@ pub fn ensure_ini_active(
             return Ok(IniOutcome::Blocked { current_value });
         }
         // A UTF-16/UTF-32 INI we refuse to edit: write nothing, take no provenance row, and
-        // leave the user's file byte-for-byte intact (WR-02).
+        // leave the user's file byte-for-byte intact.
         editor::MergePlan::Unsupported => {
             return Ok(IniOutcome::UnsupportedEncoding);
         }
@@ -468,19 +468,19 @@ pub fn ensure_ini_active(
     //    (PreExisting) row is authoritative and must never be downgraded to ABSENCE_MARKER —
     //    e.g. a PreExisting INI deleted on disk then re-activated (repair/deploy) still has
     //    its row; downgrading it would make a later purge DELETE a user file whose original
-    //    bytes we still hold, instead of restoring them (CR-01).
+    //    bytes we still hold, instead of restoring them.
     let pre_existing = backup::backup_vanilla_if_absent(store, game, &target, sentinel)?;
     if !pre_existing && store.vanilla_for(game.appid, sentinel)?.is_none() {
         store.record_vanilla(game.appid, sentinel, ABSENCE_MARKER)?;
     }
-    // 3. Atomic write (temp + rename) — never a half-written INI (T-08-04).
+    // 3. Atomic write (temp + rename) — never a half-written INI.
     atomic_write(&target, &bytes)?;
     // 4. Flip the intent to done.
     store.mark_done(jid)?;
     Ok(IniOutcome::Activated)
 }
 
-/// Restore the INI to its recorded provenance (SFINI-02): original bytes for a
+/// Restore the INI to its recorded provenance: original bytes for a
 /// PreExisting file, or delete + prune NexTwist-created empty dirs for a CreatedByNexTwist
 /// file. A safe no-op when NexTwist never activated the INI (never touches a user file).
 pub fn restore_ini(store: &Store, game: &Game) -> Result<IniOutcome, DeployError> {
@@ -498,7 +498,7 @@ pub fn restore_ini(store: &Store, game: &Game) -> Result<IniOutcome, DeployError
     Ok(IniOutcome::Restored)
 }
 
-/// Read-only preview of what activation would do (SFINI-01) — writes nothing, touches no
+/// Read-only preview of what activation would do — writes nothing, touches no
 /// store. Reports will-create vs will-edit, the exact two lines, and any conflict.
 pub fn preview_ini_activation(game: &Game) -> Result<IniActivationPreview, DeployError> {
     let target = resolve_ini_target(game)?;
@@ -517,8 +517,8 @@ pub fn preview_ini_activation(game: &Game) -> Result<IniActivationPreview, Deplo
 }
 
 /// Detect whether the StarfieldCustom.ini has drifted from its recorded-active state, for
-/// `verify`/`repair` participation (SFINI-05). The caller gates on Starfield; ALL INI/path
-/// logic stays here (T-08-03) so `verify.rs` never touches `my_games_path` /
+/// `verify`/`repair` participation. The caller gates on Starfield; ALL INI/path
+/// logic stays here so `verify.rs` never touches `my_games_path` /
 /// `resolve_target` / `guard_within_root`.
 ///
 /// The INI should be active exactly when loose files are deployed (`list_deployed_files`
@@ -540,7 +540,7 @@ pub fn ini_drift(store: &Store, game: &Game) -> Result<Option<IniDrift>, DeployE
         // A pre-existing non-empty user value is a recorded/blocked state, not repairable drift.
         editor::MergePlan::Conflict(_) => Ok(None),
         // A UTF-16/UTF-32 INI we refuse to edit is likewise not repairable drift — surface as
-        // clear so repair never appends a UTF-8 block into it (WR-02).
+        // clear so repair never appends a UTF-8 block into it.
         editor::MergePlan::Unsupported => Ok(None),
         // Planning is a no-op against the current bytes → already exactly active.
         editor::MergePlan::Write(bytes) if bytes == current => Ok(None),
@@ -573,7 +573,7 @@ pub(crate) fn restore_ini_at(store: &Store, game: &Game, target: &Path) -> Resul
 }
 
 /// Resolve the INI target via the Phase-6 hardened resolver and RE-VERIFY `drive_c`
-/// containment at the write site (T-08-01) — never trust a cached path. NEVER touches the
+/// containment at the write site — never trust a cached path. NEVER touches the
 /// `Data/`-root guard (`resolve_target`/`guard_within_root`).
 pub(crate) fn resolve_ini_target(game: &Game) -> Result<PathBuf, DeployError> {
     let target = steam::my_games_path(&game.prefix).join(INI_FILENAME);
@@ -591,7 +591,7 @@ fn verify_contained(target: &Path, prefix: &Path) -> Result<(), DeployError> {
     }
 }
 
-/// Refuse to write through a symlink at the INI target that we do not own (T-08-02),
+/// Refuse to write through a symlink at the INI target that we do not own,
 /// mirroring `backup.rs`'s `symlink_metadata` discipline. We only ever place a regular
 /// file (via temp + rename), so any symlink here is foreign.
 fn refuse_symlink(target: &Path) -> Result<(), DeployError> {
@@ -605,7 +605,7 @@ fn refuse_symlink(target: &Path) -> Result<(), DeployError> {
 }
 
 /// Write `bytes` to `target` atomically (sibling temp + `rename`) so a crash mid-write
-/// never leaves a half-written INI (T-08-04). Creates the parent dir chain if absent
+/// never leaves a half-written INI. Creates the parent dir chain if absent
 /// (the first-launch CreatedByNexTwist case restore later prunes).
 fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), DeployError> {
     let parent = target
@@ -623,7 +623,7 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), DeployError> {
 /// Bottom-up prune the `My Games/<game>` dir chain NexTwist may have created for a
 /// first-launch prefix, bounded STRICTLY below the resolved Documents dir (never removes
 /// Documents or above). `remove_dir` refuses a non-empty (game-populated) dir, so a dir the
-/// game created is never removed (Pitfall 4). Prune failures are benign — never fail a
+/// game created is never removed. Prune failures are benign — never fail a
 /// restore because a dir could not be cleaned up.
 fn prune_created_dirs(target: &Path) {
     // target = <Documents>/My Games/<game>/StarfieldCustom.ini
@@ -770,7 +770,7 @@ mod editor_tests {
     #[test]
     fn utf16_and_utf32_bom_are_refused_utf8_is_editable() {
         // A UTF-16 LE INI with a REAL user value (properly NUL-interleaved) must be refused,
-        // not parsed as ASCII and appended-to (WR-02).
+        // not parsed as ASCII and appended-to.
         let mut le = vec![0xFF, 0xFE];
         for u in "[Archive]\r\nsResourceDataDirsFinal=Mods\r\n".encode_utf16() {
             le.extend_from_slice(&u.to_le_bytes());

@@ -2,7 +2,7 @@
 //!
 //! Switching the active profile changes WHICH mods, plugins, and order are deployed for
 //! a game. NexTwist does this WITHOUT ever bypassing the safe engine and WITHOUT a
-//! diff-deploy shortcut (Pitfall 4 / RESEARCH Pattern 4): a switch is always a full
+//! diff-deploy shortcut: a switch is always a full
 //! **purge-to-pristine** of the current deployment followed by a **fresh deploy** of the
 //! target profile's winner set, then the target profile's `plugins.txt` is written.
 //!
@@ -10,7 +10,7 @@
 //!
 //! 1. **`purge(old)`** — manifest-driven, crash-safe restore to byte-for-byte pristine
 //!    (the existing Phase-1 primitive). Because purge is total, profile A's unique files
-//!    can never survive into profile B (T-02-15).
+//!    can never survive into profile B.
 //! 2. **resolve + `deploy_winners(new)`** — read the target profile's enabled membership
 //!    (mod set + per-profile ranks via the Plan-01 store), build [`ModInput`]s, run the
 //!    Plan-03 conflict resolver, and deploy the deduped winner set through the SAME
@@ -19,11 +19,11 @@
 //!    the Proton-prefix AppData location via libloot (Plan-04 primitive; PROF-02 carries
 //!    the plugin order, D-13).
 //! 4. **`set_active_profile(new)`** — only AFTER a successful deploy, so exactly one
-//!    profile is active and the active flag never points at a half-applied state (T-02-16).
+//!    profile is active and the active flag never points at a half-applied state.
 //!
-//! Order matters: purge BEFORE deploy (Pitfall 4); `set_active` only after deploy succeeds.
+//! Order matters: purge BEFORE deploy; `set_active` only after deploy succeeds.
 //!
-//! ## Why this is crash-safe across switches (T-02-14)
+//! ## Why this is crash-safe across switches
 //!
 //! Both `purge` and `deploy_winners` are the existing journaled, intent-before-act,
 //! idempotent primitives; a crash mid-switch is replayed by `recover_on_launch` to a
@@ -41,7 +41,7 @@ use std::path::PathBuf;
 
 /// What [`switch_profile`] did: the purge of the previous deployment, the deploy of the
 /// target profile's winner set, and the path of the `plugins.txt` written for the new
-/// profile. Serializable so it crosses the Tauri IPC boundary to the UI (UI-SPEC §D).
+/// profile. Serializable so it crosses the Tauri IPC boundary to the UI.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SwitchReport {
     /// The purge of the OLD deployment (restored to pristine before the new deploy).
@@ -59,7 +59,7 @@ pub struct SwitchReport {
 /// profile's `plugins.txt`, and mark the target active.
 ///
 /// This NEVER bypasses the engine and NEVER does a diff-deploy: it is a full
-/// purge-to-pristine then a fresh deploy of the target set (Pitfall 4). Each profile
+/// purge-to-pristine then a fresh deploy of the target set. Each profile
 /// preserves its own enabled set + per-profile ranks + plugin order (PROF-03), read from
 /// the Plan-01 `profile_mod` / `plugin_state` store tables.
 ///
@@ -71,7 +71,7 @@ pub struct SwitchReport {
 ///
 /// On any error after the purge, the deployment is already pristine (purge succeeded) or
 /// the journal will recover it on next launch — the game is never left unreversible.
-/// Additionally (WR-02), on any failure AFTER the purge but BEFORE the target is marked
+/// Additionally, on any failure AFTER the purge but BEFORE the target is marked
 /// active, the active flag is CLEARED, so the store never reports an OLD profile as active
 /// while its deployment has already been purged off disk (a stale-active-flag drift the
 /// UI would otherwise act on, e.g. a subsequent conflict deploy against a phantom set).
@@ -80,14 +80,14 @@ pub fn switch_profile(
     game: &Game,
     target_profile_id: i64,
 ) -> Result<SwitchReport, DeployError> {
-    // 1. Purge the CURRENT deployment back to byte-for-byte pristine (Pitfall 4: always a
+    // 1. Purge the CURRENT deployment back to byte-for-byte pristine (always a
     //    full purge between profiles, never a diff-deploy). Manifest-driven + crash-safe.
     //    (If this fails, nothing has changed and the OLD active flag is still correct.)
     let purged = purge(store, game)?;
 
     // From here on the on-disk deployment is pristine — the OLD active profile no longer
     // describes any deployed files. Any failure before we mark the TARGET active must
-    // clear the stale active flag so the persisted state stays honest (WR-02).
+    // clear the stale active flag so the persisted state stays honest.
     switch_after_purge(store, game, target_profile_id, purged).inspect_err(|_| {
         // Best-effort: drop the stale active flag. If this cleanup itself fails we keep
         // the original error (the deployment is still pristine / journal-recoverable).
@@ -97,7 +97,7 @@ pub fn switch_profile(
 
 /// The post-purge half of [`switch_profile`] (deploy → plugins → mark active), factored
 /// out so [`switch_profile`] can run a single stale-active-flag cleanup on any error from
-/// these steps (WR-02). `purged` is threaded through to build the final report.
+/// these steps. `purged` is threaded through to build the final report.
 fn switch_after_purge(
     store: &Store,
     game: &Game,
@@ -113,7 +113,7 @@ fn switch_after_purge(
 
     // 3. Write the target profile's plugins.txt at the Proton-prefix AppData location via
     //    libloot (Plan-04 apply_load_order; masters-first enforced internally). PROF-02
-    //    carries plugin order across the switch (D-13). deploy -> loadorder is acyclic.
+    //    carries plugin order across the switch. deploy -> loadorder is acyclic.
     let plugins_txt = apply_profile_plugins(store, game, target_profile_id)?;
 
     // 4. Mark the target active ONLY after a successful deploy (exactly one active; the

@@ -10,10 +10,10 @@
 //!
 //! This module rewrites every DIRECTORY component of an incoming mod relpath to the
 //! game's REAL casing using the [`CasingMap`](steam::CasingMap) produced by
-//! `steam::canonical_data_casing` (Plan 02). Leaf filenames are preserved verbatim
+//! `steam::canonical_data_casing`. Leaf filenames are preserved verbatim
 //! (the casing map records directories only); a mod-introduced directory that the game
 //! does not have keeps the mod's own casing (there is no canonical answer to defer to).
-//! Normalization ALWAYS runs regardless of the best-effort `Casefold` probe (A6) so the
+//! Normalization ALWAYS runs regardless of the best-effort `Casefold` probe so the
 //! result is portable across filesystems.
 
 use std::path::{Component, Path, PathBuf};

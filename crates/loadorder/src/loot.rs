@@ -6,7 +6,7 @@
 //! `dirs::data_local_dir()`, meaningless inside a Proton prefix, and returns
 //! `NoLocalAppData`). NexTwist therefore ALWAYS constructs the game with
 //! [`libloot::Game::with_local_path`], supplying the Proton-prefix AppData path built
-//! by [`appdata_local_path`] — NEVER `Game::new` (Pitfall 1).
+//! by [`appdata_local_path`] — NEVER `Game::new`.
 //!
 //! ## Verified libloot 0.29.5 API used here (Plan 04 builds on this)
 //!
@@ -23,7 +23,7 @@
 //!   `loadorder-active-write`, RC1).
 //! * `Game::set_load_order(&mut self, &[&str]) -> Result<(), LoadOrderError>` — sets
 //!   AND persists the order (it calls `save()` internally; there is NO separate
-//!   `Game::save`). Masters-first is enforced INTERNALLY by libloot (D-08), BUT the order
+//!   `Game::save`). Masters-first is enforced INTERNALLY by libloot, BUT the order
 //!   passed MUST keep libloot's fixed early-loader prefix or it rejects with
 //!   `"load order interaction failed"`.
 //! * `Game::active_plugins_file_path(&self) -> &PathBuf` — the exact Plugins.txt path
@@ -64,7 +64,7 @@ const STARFIELD: u32 = 1716740;
 ///
 /// `prefix` is the resolved Proton prefix root (the `steam` crate supplies it; the
 /// spike supplies a fixture via `testkit::fake_proton_prefix`). `game_name` is the
-/// Steam AppData folder name — `"Skyrim Special Edition"` / `"Fallout4"` (A3), matching
+/// Steam AppData folder name — `"Skyrim Special Edition"` / `"Fallout4"`, matching
 /// libloadorder's `skyrim_se_appdata_folder_name` / `fallout4_appdata_folder_name`.
 /// This whole path is passed straight to `with_local_path` as the local path.
 pub fn appdata_local_path(prefix: &Path, game_name: &str) -> PathBuf {
@@ -110,7 +110,7 @@ pub fn game_type_for(appid: u32) -> Option<GameType> {
 }
 
 /// The Steam AppData/Local folder name for a supported AppID — the `<game_name>` segment
-/// [`appdata_local_path`] joins (A3). `"Skyrim Special Edition"` / `"Fallout4"`, matching
+/// [`appdata_local_path`] joins. `"Skyrim Special Edition"` / `"Fallout4"`, matching
 /// libloadorder's `skyrim_se_appdata_folder_name` / `fallout4_appdata_folder_name`. `None`
 /// for an unsupported game (the command layer maps `None` to a clear boundary error).
 pub fn appdata_folder_name(appid: u32) -> Option<&'static str> {
@@ -125,8 +125,8 @@ pub fn appdata_folder_name(appid: u32) -> Option<&'static str> {
 /// Open a libloot [`Game`] for a supported AppID using the Proton-prefix AppData path.
 ///
 /// ALWAYS uses `Game::with_local_path` (never `Game::new`) so the Linux seam works
-/// (Pitfall 1). The `appdata_local` parent dirs are created first, because a game that
-/// has never been launched has no `AppData/Local/<Game>` folder yet (Pitfall 2) and
+///. The `appdata_local` parent dirs are created first, because a game that
+/// has never been launched has no `AppData/Local/<Game>` folder yet and
 /// libloot will write Plugins.txt there on save.
 ///
 /// # Errors
@@ -147,7 +147,7 @@ pub fn open_game(
         return Err(LoadOrderError::NoLocalAppData(appdata_local.to_path_buf()));
     }
 
-    // Pitfall 2: a never-launched game has no AppData/Local/<Game> yet; create it so
+    // A never-launched game has no AppData/Local/<Game> yet; create it so
     // libloot can write Plugins.txt there.
     std::fs::create_dir_all(appdata_local)
         .map_err(|source| LoadOrderError::io(appdata_local, source))?;
@@ -192,7 +192,7 @@ fn implicit_protected_set(game: &Game, enabled_names: &HashSet<String>) -> HashS
         .collect()
 }
 
-/// The protected / implicitly-active master set for a game (SFLO-03), derived purely from
+/// The protected / implicitly-active master set for a game, derived purely from
 /// libloot — never a hard-coded name list.
 ///
 /// Opens the game via the existing [`open_game`] seam, loads the current load-order state,
@@ -219,7 +219,7 @@ pub fn protected_plugins(
 
 /// Set the given order and persist it (libloot saves internally — no separate `save`).
 ///
-/// Masters-first is enforced INSIDE libloot (D-08). The `order` MUST keep libloot's
+/// Masters-first is enforced INSIDE libloot. The `order` MUST keep libloot's
 /// own fixed early-loader prefix (see [`load_canonical_order`]); only the trailing
 /// non-early-loader plugins may be reordered, or libloot rejects the order.
 ///
@@ -282,7 +282,7 @@ fn is_master_group(kind: PluginKind) -> bool {
 
 /// Order a desired plugin set masters-first (`.esm`/ESL before `.esp`), preserving each
 /// plugin's relative `order` within its group. libloot ALSO enforces masters-first
-/// internally on `set_load_order` (D-08), so this is belt-and-suspenders that also gives a
+/// internally on `set_load_order`, so this is belt-and-suspenders that also gives a
 /// deterministic, masters-first order argument; we never rely on this as the sole guard.
 ///
 /// Returns the plugin NAMES in the masters-first order.
@@ -397,7 +397,7 @@ pub fn apply_load_order(
     // NEVER hand-roll the early-loader order (RC1).
     let canonical = load_canonical_order(&mut game)?;
 
-    // NO NexTwist-side protected-master guard here (SFLO-03). A protected / implicitly-active
+    // NO NexTwist-side protected-master guard here. A protected / implicitly-active
     // master's RESTING state in NexTwist's model is `enabled == false` (it is active WITHOUT a
     // `*` line — masters are never asterisk-written, libloot owns their activation), so any
     // `!enabled`-based "disable" check fires on the normal state, not tampering. And the master
@@ -406,7 +406,7 @@ pub fn apply_load_order(
     // Protection is delivered by libloot itself: `reconcile_order` below forces every master into
     // libloot's `canonical` position unconditionally (a swapped/disabled master in the request
     // cannot survive), libloot pins its early-loader prefix and rejects a genuine reorder, and it
-    // never asterisk-writes masters. The UI lock is the user-facing half. (CR-01)
+    // never asterisk-writes masters. The UI lock is the user-facing half.
 
     let user_movable: Vec<String> = on_disk
         .iter()
@@ -420,7 +420,7 @@ pub fn apply_load_order(
     Ok(game.active_plugins_file_path().clone())
 }
 
-/// A LOOT sort proposal: the suggested order plus any critical warnings (PLUGIN-03, D-12).
+/// A LOOT sort proposal: the suggested order plus any critical warnings.
 ///
 /// `proposed` is the order libloot's `sort_plugins` returns — it is a SUGGESTION the UI
 /// shows for review; NOTHING is written until the user confirms (then [`apply_load_order`]
@@ -440,12 +440,12 @@ pub struct SortProposal {
     pub masterlist_date: String,
 }
 
-/// Propose a LOOT-sorted order WITHOUT writing anything (D-12: propose-then-apply).
+/// Propose a LOOT-sorted order WITHOUT writing anything (propose-then-apply).
 ///
 /// Ensures the masterlist is available (fetch/cache/bundled fallback), loads it into
 /// libloot's `Database`, header-loads the on-disk plugins, and runs `sort_plugins`. The
 /// returned [`SortProposal`] also carries the masterlist's critical (Warn/Error) general
-/// messages (A2). Applying the proposal is a SEPARATE, user-confirmed call to
+/// messages. Applying the proposal is a SEPARATE, user-confirmed call to
 /// [`apply_load_order`] — this function never persists.
 ///
 /// Only plugins whose files exist under the game `Data/` are sorted (libloot header-parses
@@ -503,7 +503,7 @@ pub fn propose_sort(
     })
 }
 
-/// Extract the masterlist's critical (Warn/Error) general messages for the review (A2).
+/// Extract the masterlist's critical (Warn/Error) general messages for the review.
 ///
 /// Reads `Database::general_messages` (masterlist only, conditions evaluated) and keeps
 /// only Warn/Error severities, rendered to plain text. If the database lock is poisoned or

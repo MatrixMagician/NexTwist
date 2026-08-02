@@ -28,7 +28,7 @@ export function violatesMastersFirst(
   return isMaster(plugins[i]) !== isMaster(plugins[other]);
 }
 
-/** True when either endpoint of the swap is an engine-protected master (SFLO-03). */
+/** True when either endpoint of the swap is an engine-protected master. */
 export function touchesProtected(
   plugins: readonly PluginInfo[],
   i: number,

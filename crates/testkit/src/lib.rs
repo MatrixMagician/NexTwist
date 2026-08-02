@@ -2,7 +2,7 @@
 //!
 //! This crate exists to make the **byte-for-byte pristine assertion** a single,
 //! well-tested primitive. The DEPLOY-01/02/03 `round_trip_pristine` test and the
-//! DEPLOY-06 `crash_recovery` centerpiece (Plan 04) both build on the
+//! DEPLOY-06 `crash_recovery` centerpiece both build on the
 //! [`snapshot_tree`] and [`assert_trees_identical`] pair: deploy a mod, purge it,
 //! then assert the game tree's snapshot equals the pre-deploy vanilla snapshot. The
 //! diff output is intentionally explicit (which paths differ / are orphaned / are
