@@ -10,8 +10,10 @@
 //!
 //! This module owns the *protocol* (the store provides only durable row primitives):
 //!
-//! * [`begin`] — record a `pending` intent (durable before the syscall).
-//! * [`finish`] — flip to `done` + write the manifest row (after the syscall).
+//! * [`begin_deploy`] / [`begin_ini`] / [`begin_purge`] — record a `pending` intent
+//!   (durable BEFORE the syscall).
+//! * [`finish_deploy`] / [`finish_purge`] — flip to `done` + write the manifest row
+//!   (AFTER the syscall).
 //! * [`replay`] — on launch, roll every non-`done` row forward (finish a deploy) or
 //!   back (undo a purge + restore vanilla), idempotently, to a consistent state.
 

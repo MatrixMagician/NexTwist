@@ -11,7 +11,8 @@
 //! operation journal, and the bottom-up empty-dir prune discipline. Only *where the
 //! target resolves* changes.
 //!
-//! The one genuinely new piece is a std-only surgical INI byte editor ([`editor`]) that
+//! The one genuinely new piece is a std-only surgical INI byte editor (the `editor`
+//! submodule) that
 //! merges NexTwist's two owned `[Archive]` keys into an existing file while preserving
 //! its BOM, EOL style, comments, key order, and every untouched section byte-for-byte —
 //! something no INI *parser* crate round-trips, which is why `rust-ini` was rejected.

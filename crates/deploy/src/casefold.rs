@@ -8,7 +8,7 @@
 //! `open()` would miss the file and the mod would silently do nothing.
 //!
 //! This module rewrites every DIRECTORY component of an incoming mod relpath to the
-//! game's REAL casing using the [`CasingMap`](steam::CasingMap) produced by
+//! game's REAL casing using the [`CasingMap`] produced by
 //! `steam::canonical_data_casing`. Leaf filenames are preserved verbatim
 //! (the casing map records directories only); a mod-introduced directory that the game
 //! does not have keeps the mod's own casing (there is no canonical answer to defer to).

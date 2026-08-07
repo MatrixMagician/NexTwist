@@ -233,7 +233,7 @@ fn deploy_inner(
 /// winning mod's id (recorded as `FileEntry.source_mod`).
 ///
 /// This reuses the EXACT same journaled, backup-before-overwrite, method-laddered
-/// per-file primitive as [`deploy`] ([`deploy_one_file`]) — the safe engine is never
+/// per-file primitive as [`deploy`] (`deploy_one_file`) — the safe engine is never
 /// bypassed. The only differences from the single-root path are: (1) each file is
 /// probed against its own staging root, and (2) the winning mod id is recorded.
 ///

@@ -16,7 +16,7 @@
 //!
 //! ## Module map
 //!
-//! * [`probe`]  — per-target fs-capability probe (st_dev, reflink, throwaway
+//! * [`mod@probe`]  — per-target fs-capability probe (st_dev, reflink, throwaway
 //!   hardlink, casefold) — `FsCaps`.
 //! * [`method`] — the per-file deploy primitives + reflink → hardlink → symlink → copy
 //!   ladder, chosen per-target with EXDEV/`CrossesDevices` fallback.

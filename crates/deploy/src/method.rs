@@ -2,7 +2,7 @@
 //!
 //! A method places one staged file into the game tree and can remove it again. The
 //! ladder is reflink → hardlink → symlink → copy, chosen per-target from the
-//! [`FsCaps`](crate::probe::FsCaps) probe, and downgrades on `EXDEV` /
+//! [`FsCaps`] probe, and downgrades on `EXDEV` /
 //! `io::ErrorKind::CrossesDevices` at apply time (the st_dev probe can miss a btrfs
 //! subvolume boundary, so the apply path catches it as a backstop).
 //!
