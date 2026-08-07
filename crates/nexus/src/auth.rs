@@ -79,13 +79,10 @@ pub fn build_authorize_url(
 
 /// The relevant fields of an OAuth2 token-endpoint JSON response.
 ///
-/// We parse this directly (rather than via oauth2's `request_async`) because oauth2
-/// 5.0.0 wires its `AsyncHttpClient` to **reqwest 0.12**, while the NexTwist workspace
-/// is on reqwest 0.13 — the two `reqwest::Client` types are distinct, so oauth2's
-/// async executor cannot accept our client. oauth2 still owns the security-sensitive
-/// half (S256 PKCE challenge/verifier + CSRF state); the token POST itself is a plain,
-/// well-specified form request we issue with the workspace's hardened reqwest 0.13
-/// client (rustls, redirects disabled). Note the reqwest 0.12/0.13 split.
+/// We parse this directly rather than via oauth2's `request_async`: oauth2 is used for
+/// PKCE only, so its HTTP executor is not enabled. The token POST is a plain,
+/// well-specified form request issued with the workspace's own hardened reqwest client
+/// (rustls, redirects disabled).
 #[derive(Debug, Deserialize)]
 struct TokenJson {
     access_token: String,
