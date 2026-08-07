@@ -133,9 +133,11 @@ pub fn verify(store: &Store, game: &Game) -> Result<VerifyReport, DeployError> {
 /// Re-deploy `missing` files from staging and restore `changed` files to the recorded
 /// state; surface (never delete) any orphans.
 ///
-/// Sources are reconstructed from the per-game staging tree as
-/// `game.staging_dir.join(target_rel)` — the same contract `journal::replay` uses (Plan
-/// 04). A missing/changed file whose staged source is no longer locatable is skipped
+/// The staged source is located through the manifest: each entry records the
+/// `source_mod` that owns it, and that mod's `staging_root` is where its files live.
+/// Reconstructing it as `game.staging_dir.join(target_rel)` instead would find nothing,
+/// because production stages every mod under a per-mod subdirectory of the staging dir.
+/// A missing/changed file whose staged source is no longer locatable is skipped
 /// (reported via the unchanged verify pass on the next call) rather than guessed at.
 pub fn repair(store: &Store, game: &Game) -> Result<RepairReport, DeployError> {
     // Start from a fresh verify so we only act on real, current drift.
@@ -158,7 +160,7 @@ pub fn repair(store: &Store, game: &Game) -> Result<RepairReport, DeployError> {
         if !is_missing && !is_changed {
             continue;
         }
-        if redeploy_from_staging(game, entry, &target)? {
+        if redeploy_from_staging(store, game, entry, &target)? {
             if is_missing {
                 out.restored_missing += 1;
             } else {
@@ -228,11 +230,20 @@ pub fn repair(store: &Store, game: &Game) -> Result<RepairReport, DeployError> {
 /// Re-place a single recorded file from its staged source idempotently. Returns whether
 /// the file was actually restored (false if its staged source is no longer present).
 fn redeploy_from_staging(
+    store: &Store,
     game: &Game,
     entry: &FileEntry,
     target: &Path,
 ) -> Result<bool, DeployError> {
-    let staged_src = game.staging_dir.join(&entry.target_rel);
+    // The owning mod's staging root is the only reliable source location: production
+    // stages each mod under its own subdir, so `game.staging_dir` alone finds nothing.
+    // `source_mod` is 0 for the legacy single-root deploy path, which did stage at the
+    // game's staging dir, so that case keeps the old reconstruction.
+    let staging_root = match store.get_mod(entry.source_mod)? {
+        Some(m) => m.staging_root,
+        None => game.staging_dir.clone(),
+    };
+    let staged_src = staging_root.join(&entry.target_rel);
     if !staged_src.is_file() {
         // The staged source is gone; cannot re-deploy. Leave the file as-is (verify will
         // continue to report it) rather than fabricate content.
