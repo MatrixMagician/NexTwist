@@ -86,6 +86,7 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     #[test]
@@ -302,5 +303,64 @@ mod tests {
                 .collect()
         };
         assert_eq!(cols_v3, cols_v4, "V4 must not alter managed_mod's columns");
+    }
+
+    /// BLOCKING: V6 must add `op_journal.staging_root` over a real pre-V6 database
+    /// WITHOUT disturbing a journal row already written there.
+    ///
+    /// This is the upgrade a user actually experiences: they may be mid-recovery, with a
+    /// `pending` intent from the previous version sitting in the table. That row has no
+    /// staging root and must survive the migration with a NULL in the new column, so
+    /// `replay_deploy` can recognise it and fall back to the old reconstruction rather
+    /// than mistaking a rewritten value for something the op really knew.
+    #[test]
+    fn v6_adds_staging_root_without_disturbing_pre_v6_journal_rows() {
+        use refinery::Target;
+        use rusqlite::params;
+
+        let dir = TempDir::new().unwrap();
+        let db = dir.path().join("pre_v6.db");
+
+        // --- Reach a genuine V5 state and seed a pending journal row. ---
+        {
+            let mut conn = Connection::open(&db).unwrap();
+            let _: String = conn
+                .query_row("PRAGMA journal_mode=WAL;", [], |r| r.get(0))
+                .unwrap();
+            migrations::runner()
+                .set_target(Target::Version(5))
+                .run(&mut conn)
+                .unwrap();
+
+            let has_col: i64 = conn
+                .query_row(
+                    "SELECT count(*) FROM pragma_table_info('op_journal')
+                     WHERE name = 'staging_root'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(has_col, 0, "staging_root must be absent before V6");
+
+            conn.execute(
+                "INSERT INTO op_journal (appid, target_rel, method, source_hash, kind, state)
+                 VALUES (?1, ?2, ?3, ?4, 'deploy', 'pending')",
+                params![489830, "Data/Skyrim.esm", "reflink", "abc123"],
+            )
+            .unwrap();
+        }
+
+        // Open via Store::open → refinery applies ONLY V6 over the V5 state.
+        let store = Store::open(&db).unwrap();
+
+        let pending = store.pending_ops().unwrap();
+        assert_eq!(pending.len(), 1, "the pre-V6 pending row must survive");
+        let row = &pending[0];
+        assert_eq!(row.target_rel, PathBuf::from("Data/Skyrim.esm"));
+        assert_eq!(row.source_hash.as_deref(), Some("abc123"));
+        assert_eq!(
+            row.staging_root, None,
+            "a row written before V6 knew no staging root, and must read back as NULL"
+        );
     }
 }
