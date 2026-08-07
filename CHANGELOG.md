@@ -84,6 +84,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `svelte-check` and the frontend unit tests are now gated in CI; the definition of done
   listed them but no workflow step ran them.
+- **The reflink rung of the deploy ladder is now genuinely tested, and its CI blind spot
+  is documented.** CI runners are ext4 and `TempDir` defaults to `/tmp`, so `caps.reflink`
+  is false there and every reflink assertion in the suite was vacuous — copy-on-write
+  deployment, the strongest and safest rung, could break with a green tick.
+  `crates/deploy/tests/reflink_rung.rs` now asserts (only on a CoW filesystem, skipping
+  cleanly elsewhere) that reflink is chosen and succeeds without falling back, that the
+  result is an independent inode rather than a hardlink's shared inode, that the recorded
+  method is the one that truly ran, and that writing through a deployed file cannot
+  corrupt read-only staging. `AGENTS.md` documents the `TMPDIR`-on-btrfs run and adds it
+  to the definition of done for changes touching the method ladder.
 
 ## [1.0.0] - 2026-06-23
 
