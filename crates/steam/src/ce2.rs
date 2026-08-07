@@ -11,7 +11,7 @@
 //! match the canonical Bethesda casing) and defensively redirection-aware (a `user.reg`
 //! `"Personal"` shell-folder repoint is honored, with the default steamuser/Documents
 //! path as the load-bearing fallback). First launch is a typed SUCCESS state, never an
-//! error — the game must stay addable even before its config dir exists (SFDET-02).
+//! error — the game must stay addable even before its config dir exists.
 
 use std::path::{Path, PathBuf};
 
@@ -25,7 +25,7 @@ const STARFIELD_FOLDER: &str = "Starfield";
 /// The typed first-launch state of the CE2 `Documents/My Games/Starfield` config dir.
 ///
 /// A SUCCESS enum, NOT a `thiserror` arm: an unresolved/first-launch config dir must not
-/// abort the add-game flow (SFDET-02). Diverges deliberately from
+/// abort the add-game flow. Diverges deliberately from
 /// `loadorder::LoadOrderError::NoLocalAppData` (which is an `Err`) — both carry the path,
 /// but this one keeps the game addable while load-order / INI ops stay blocked upstream.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -44,7 +44,7 @@ pub enum Ce2ConfigState {
 /// `steam`, below `loadorder`) co-locates the constant with the compare that uses it.
 pub const VALIDATED_BUILD: u64 = 0;
 
-/// An advisory, non-blocking version-drift signal (SFDET-03).
+/// An advisory, non-blocking version-drift signal.
 ///
 /// Produced only when the installed build is strictly newer than a non-zero validated
 /// build. It never gates management — reversibility is build-independent (this writes
@@ -223,7 +223,7 @@ pub fn resolve_ce2_config(prefix: &Path) -> Ce2ConfigState {
     }
 }
 
-/// Advisory drift compare (SFDET-03). `Some` only when `installed > validated > 0`.
+/// Advisory drift compare. `Some` only when `installed > validated > 0`.
 pub fn drift_notice(installed: Option<u64>, validated: u64) -> Option<DriftNotice> {
     let installed = installed?;
     (validated > 0 && installed > validated).then_some(DriftNotice {
@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn my_games_case_mismatch_resolves_real_on_disk_casing() {
-        // MANDATORY (SFDET-02 crit 2): prefix built mis-cased must resolve to the real path.
+        // MANDATORY: prefix built mis-cased must resolve to the real path.
         let dir = tempfile::TempDir::new().unwrap();
         let root = fake_my_games_prefix(
             dir.path(),

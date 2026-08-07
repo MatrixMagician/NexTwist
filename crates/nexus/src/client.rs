@@ -34,7 +34,7 @@ pub const NEXUS_API_BASE: &str = "https://api.nexusmods.com";
 /// How the client authenticates to NexusMods.
 ///
 /// Centralised so the request builders attach the right header in one place — an
-/// API-key session uses the `apikey` header (matching Plan 01's `validate_api_key`),
+/// API-key session uses the `apikey` header (matching `auth::validate_api_key`),
 /// an OAuth session uses `Authorization: Bearer`.
 #[derive(Debug, Clone)]
 pub enum NexusAuth {

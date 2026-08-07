@@ -69,7 +69,7 @@ against the built artifact (the AppImage is produced by `release.yml`, so there 
 artifact to enumerate at planning/commit time — output is **not** fabricated here). The
 expected findings, which the audit must confirm, are:
 
-### 2.1 TLS path — `ldd usr/bin/nextwist` (V6, threat T-05-06)
+### 2.1 TLS path — `ldd usr/bin/nextwist`
 
 **Expected:** the shipped `nextwist` binary links **no application-path `libssl` / `libcrypto`**.
 `reqwest` is configured **rustls-only** (project convention; never native-tls/OpenSSL), so TLS
@@ -82,7 +82,7 @@ path inside `squashfs-root/usr/lib`.
 **Expected:** the AppImage's `usr/lib` `.so*` inventory. Recorded verbatim from the release-time
 run as the bundled-library manifest.
 
-### 2.3 UnRAR / non-free RAR absence (DIST-02, threat T-05-04)
+### 2.3 UnRAR / non-free RAR absence
 
 ```bash
 find squashfs-root \( -iname '*unrar*' -o -iname '*libunrar*' \)   # expect: no output
@@ -142,7 +142,7 @@ cleanly and yields the smaller, compatibility-floored binary. `NO_STRIP` therefo
 
 ## Accepted v1 limitation
 
-**No code-signing / provenance** ships in v1 (threat T-05-07, accepted). The AppImage is
+**No code-signing / provenance** ships in v1 (accepted). The AppImage is
 distributed over the HTTPS GitHub Release channel; signing/notarization is deferred to a later
 milestone.
 

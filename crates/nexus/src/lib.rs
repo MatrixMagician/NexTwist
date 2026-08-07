@@ -15,11 +15,11 @@
 //! `crates/loadorder`'s masterlist fetch, converted from blocking to async (the two
 //! clients never share a call path; this crate runs on the shell's tokio runtime).
 //!
-//! Plan 01 landed `error`, `model`, and `auth` (OAuth2-PKCE + API-key). Plan 02 (this
-//! slice) layers the download flow on top of that auth spine: `client` (hybrid REST v1
-//! download-link + GraphQL v2 metadata), `ratelimit` (the `governor` limiter + reactive
-//! `X-RL-*` backoff), and `download` (streaming download with a Tauri-free progress
-//! callback).
+//! The modules layer up from an auth spine: `error` / `model` / `auth` (OAuth2-PKCE +
+//! API-key) underneath, then `client` (hybrid REST v1 download-link + GraphQL v2
+//! metadata), `ratelimit` (the `governor` limiter + reactive `X-RL-*` backoff), and
+//! `download` (streaming download with a Tauri-free progress callback). `collection`,
+//! `replay`, and `resolve` build the Collection install flow on top of those.
 
 pub mod auth;
 pub mod client;

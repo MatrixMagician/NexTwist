@@ -1,4 +1,4 @@
-//! Per-target filesystem-capability probe (ENV-04).
+//! Per-target filesystem-capability probe.
 //!
 //! The deploy engine NEVER decides a method globally — btrfs returns `EXDEV`
 //! (`io::ErrorKind::CrossesDevices`, errno 18) across subvolumes even on the same

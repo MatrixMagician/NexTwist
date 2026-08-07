@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "NexTwist headless plugin / load-order management via libloot: Proton-prefix AppData resolution, with_local_path Game construction (the Linux seam), and asterisk-format plugins.txt round-trips. Tauri-free; the full plugin manager (scan/sort/masterlist) builds on this wrapper in Plan 04"
+description = "NexTwist headless plugin / load-order management via libloot: Proton-prefix AppData resolution, with_local_path Game construction (the Linux seam), and asterisk-format plugins.txt round-trips. Tauri-free; the plugin manager (scan/sort/masterlist) builds on this wrapper"
 
 [lib]
 name = "loadorder"

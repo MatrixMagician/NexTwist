@@ -124,7 +124,7 @@ pub struct MyGamesOpts<'a> {
 /// Shapes (via [`MyGamesOpts`]):
 /// * canonical `Documents/My Games/<folder>` (default),
 /// * `case_variant` → mis-cased `documents/my games/<folder lowercased>` (the MANDATORY
-///   SFDET-02 case-mismatch fixture),
+///   case-mismatch fixture),
 /// * `marker` → a seeded file inside the folder (flips `FirstLaunchPending` → `Ready`),
 /// * `personal` → a `user.reg` carrying a `"Personal"` shell-folder redirect.
 pub fn fake_my_games_prefix(

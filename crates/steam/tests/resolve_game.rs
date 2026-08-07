@@ -1,4 +1,4 @@
-//! Integration test (ENV-01/02/03): resolve Skyrim SE / Fallout 4 from a SYNTHETIC
+//! Integration test: resolve Skyrim SE / Fallout 4 from a SYNTHETIC
 //! Steam-layout fixture built under a tempdir. No real Steam install is needed, so
 //! this runs deterministically in CI.
 //!

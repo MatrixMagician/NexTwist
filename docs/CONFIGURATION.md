@@ -65,7 +65,7 @@ crate (`src-tauri/src/keyring.rs`):
 - **Backend:** the Linux Secret Service (GNOME Keyring / KWallet) via
   `keyring` 3.6 with the `sync-secret-service` + `crypto-rust` features.
 
-Hard invariant (NEXUS-02): if no Secret Service backend is available, store/load
+Hard invariant: if no Secret Service backend is available, store/load
 operations return `NoKeyringBackend` and **nothing is written to disk**. There is
 deliberately no plaintext fallback — login is blocked rather than persisting the
 credential insecurely.
@@ -86,7 +86,7 @@ capabilities through the UI rather than failing at startup.
 **Optional capabilities (each degrades gracefully if absent):**
 
 - **OS Secret Service** — required only for NexusMods login. Absent → login is
-  disabled (NEXUS-02 hard-fail banner), but local mod management still works.
+  disabled (hard-fail banner), but local mod management still works.
 - **`unrar` or `7z` on `PATH`** — required only to extract `.rar` archives.
   Absent → `.rar` mods cannot be installed; `.zip` / `.7z` (handled in-process)
   are unaffected.

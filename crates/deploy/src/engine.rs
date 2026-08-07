@@ -34,7 +34,7 @@ use crate::path_guard::{guard_within_root, lexical_normalize};
 use crate::probe::{Casefold, FsCaps, probe};
 
 /// An unsafe-filesystem warning surfaced through [`DeployReport`] so the UI
-/// can warn the user before/at deploy (ENV-04 "warn about unsafe configurations").
+/// can warn the user before/at deploy ("warn about unsafe configurations").
 ///
 /// These are WARNINGS, not gates: deploy still proceeds (the method ladder safely
 /// downgrades cross-device links, and casing normalization always runs), but the user
@@ -51,7 +51,7 @@ pub enum FsWarning {
     NotCasefolded,
 }
 
-/// Derive the [`FsWarning`]s implied by a probe result (ENV-04 warning half).
+/// Derive the [`FsWarning`]s implied by a probe result (the warning half of the capability probe).
 ///
 /// `CrossDevice` when staging and game data are not on the same device; `NotCasefolded`
 /// when the casefold flag is `Off` or `Unknown` (best-effort — A6: absence of a
@@ -78,7 +78,7 @@ pub struct DeployReport {
     /// The method actually used per target (after any EXDEV downgrade).
     pub methods: Vec<(PathBuf, DeployMethod)>,
     /// Unsafe-filesystem warnings (cross-device / non-casefolded) surfaced for the UI
-    /// to show the user before relying on this deployment (ENV-04 warning half).
+    /// to show the user before relying on this deployment (the warning half of the capability probe).
     pub fs_warnings: Vec<FsWarning>,
     /// Resolved targets whose source file was missing at deploy time and were therefore
     /// NOT deployed. The resolver walked these moments earlier, so a miss is
@@ -149,7 +149,7 @@ pub fn deploy_with_abort(
 /// The deploy worklist: a staging root plus `Data/`-rooted relpaths to deploy.
 ///
 /// This mirrors `extract::StagedMod` without taking a dependency on the extract crate
-/// (the engine is consumed by Plan 06 which already holds a `StagedMod`); callers map
+/// (the Tauri shell that consumes this engine already holds a `StagedMod`); callers map
 /// `StagedMod { staging_root, files }` into this directly.
 #[derive(Debug, Clone)]
 pub struct StagedFiles {
@@ -188,7 +188,7 @@ fn deploy_inner(
         .map_err(|e| DeployError::io(&staged.staging_root, e))?;
     let chosen = choose_method(&caps);
 
-    // ENV-04 (warning half): surface unsafe-fs warnings (cross-device / non-casefolded)
+    // Warning half: surface unsafe-fs warnings (cross-device / non-casefolded)
     // for the UI before the user relies on this deployment.
     report.fs_warnings = fs_warnings_from_caps(&caps);
 

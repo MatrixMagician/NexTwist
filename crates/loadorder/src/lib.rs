@@ -8,10 +8,10 @@
 //! with `Game::with_local_path`, supplying
 //! `<prefix>/drive_c/users/steamuser/AppData/Local/<GameName>` — never `Game::new`.
 //!
-//! Tauri-free and headless: it compiles and unit/spike-tests in CI without a webview.
-//! The full plugin manager (plugin scan, masterlist fetch, "Sort with LOOT", profile
-//! apply) builds on this wrapper in Plan 04 — this plan (02-02) only de-risks the
-//! `with_local_path → load → set_load_order → save` round-trip.
+//! Tauri-free and headless: it compiles and tests in CI without a webview. This module
+//! owns the `with_local_path → load → set_load_order → save` round-trip; the plugin
+//! manager built on it (plugin scan, masterlist fetch, "Sort with LOOT", profile apply)
+//! lives in the sibling `scan`, `masterlist`, and `reconcile` modules.
 
 pub mod error;
 pub mod loot;

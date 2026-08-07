@@ -5,7 +5,7 @@
 #      enter the dependency graph. Its license forbids using it to recreate the RAR
 #      algorithm, making it non-free and GPL-incompatible — a licensing liability in
 #      a redistributed AppImage. `.rar` support is handled by shelling out to a system
-#      `unrar`/`7z` binary instead (Plan 03). This pre-positions DIST-02.
+#      `unrar`/`7z` binary instead.
 #   2. LICENSES: only permissive / project-compatible licenses are allowed in the
 #      shipped binary.
 #
@@ -52,7 +52,7 @@ allow = [
     "MPL-2.0",
     "CC0-1.0",
     # CA root-certificate bundle (webpki-root-certs, via reqwest's rustls-platform-verifier,
-    # added Plan 04 for the masterlist HTTPS fetch). CDLA-Permissive-2.0 is a permissive
+    # added for the masterlist HTTPS fetch). CDLA-Permissive-2.0 is a permissive
     # data license (Mozilla's CA certs, the same root set browsers ship) — GPL-compatible
     # and fine to ship in the AppImage.
     "CDLA-Permissive-2.0",
@@ -60,8 +60,7 @@ allow = [
     # permissive BSD-style, GPL-compatible, free license — fine to ship in the AppImage.
     "bzip2-1.0.6",
     # NexTwist itself is GPL-3.0-or-later; allow it so the workspace crates pass.
-    # The libloot family is the LOOT project's plugin/load-order stack (added in Plan
-    # 02 for the libloot Linux seam, fully consumed in Plan 04). Its members declare
+    # The libloot family is the LOOT project's plugin/load-order stack. Its members declare
     # TWO distinct GPL SPDX identifiers as published on crates.io (verified against the
     # installed crate sources, 2026-06-21):
     #   * libloot 0.29.5                  -> GPL-3.0-or-later
@@ -70,17 +69,15 @@ allow = [
     #   * loot-condition-interpreter 6.0.0 -> MIT (already allowed above)
     # Both GPL identifiers are allowed here. NexTwist being GPL-3.0-or-later can
     # incorporate GPL-3.0-only components (a GPL-3.0-or-later work may be conveyed under
-    # GPLv3), so the shipped AppImage stays license-compatible. (Plan 01's allowance
-    # assumed the whole family was GPL-3.0-or-later; the published libloadorder/esplugin
-    # crates actually carry bare GPL-3.0, so GPL-3.0 is added here in Plan 02.) Both are
-    # carried forward to the Phase-5 DIST-02 license audit (RESEARCH LICENSE FLAG).
+    # GPLv3), so the shipped AppImage stays license-compatible. Both identifiers are needed:
+    # the published libloadorder/esplugin crates carry bare GPL-3.0, not the -or-later form.
     "GPL-3.0-or-later",
     "GPL-3.0",
 ]
 confidence-threshold = 0.9
 
 [advisories]
-# Advisory DB check wired into CI in Plan 06 (`cargo deny check advisories`).
+# Advisory DB check wired into CI (`cargo deny check advisories`).
 #
 # SECURITY VULNERABILITIES and YANKED crates still FAIL the build (the signal we care
 # about). But "unmaintained"/"notice" advisories are downgraded to warnings: Tauri 2.11

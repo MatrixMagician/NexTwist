@@ -446,7 +446,7 @@ export const addGameByFolder = (path: string, appid: number): Promise<Game> =>
 
 export const listGames = (): Promise<Game[]> => invoke("list_games");
 
-/** Starfield CE2 first-launch state + advisory version-drift (SFDET-02/03). Re-invoked on
+/** Starfield CE2 first-launch state + advisory version-drift. Re-invoked on
  *  the UI's explicit "Re-check"; reads only, writes nothing. */
 export const starfieldStatus = (appid: number): Promise<StarfieldStatus> =>
   invoke("starfield_status", { appid });

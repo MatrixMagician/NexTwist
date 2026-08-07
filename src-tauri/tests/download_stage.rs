@@ -1,4 +1,4 @@
-//! NEXUS-06 end-to-end terminus test (no webview).
+//! Download end-to-end terminus test (no webview).
 //!
 //! Proves the download flow's terminus reuses the SAME `extract::install_archive`
 //! pipeline a local-archive install uses, and that the staged result becomes an ordinary
@@ -76,7 +76,7 @@ async fn download_streams_extracts_stages_and_persists_provenance() {
     assert_eq!(written, zip_bytes.len() as u64);
     assert!(progress_calls > 0, "progress callback must fire");
 
-    // --- 2. Reuse the extract->staging pipeline VERBATIM (the NEXUS-06 terminus). ---
+    // --- 2. Reuse the extract->staging pipeline VERBATIM (the download terminus). ---
     let staging_root = staging_dir.join("SKSE64");
     let staged = extract::install_archive(&downloaded_archive, &staging_root)
         .expect("the downloaded archive must stage through the same extract path");

@@ -1,4 +1,4 @@
-//! Game registry (ENV-03): the managed-game table facade.
+//! Game registry: the managed-game table facade.
 //!
 //! No `rusqlite` type appears in this module's public surface — callers work in
 //! terms of [`core::Game`] only.

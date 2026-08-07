@@ -1,11 +1,11 @@
-//! Install-dir resolution + Proton-prefix derivation (ENV-02, ENV-03).
+//! Install-dir resolution + Proton-prefix derivation.
 //!
 //! steamlocate returns the `(App, Library)` pair but exposes NO compatdata API, so
 //! the Proton prefix `compatdata/<appid>/pfx` is derived MANUALLY here from the
 //! library root. Resolution honors `$STEAM_COMPAT_DATA_PATH`
 //! when set and re-resolves on every call (paths can move — never cached to disk).
 //!
-//! Only the two supported Bethesda AppIDs are accepted (allow-list, ENV-03).
+//! Only the two supported Bethesda AppIDs are accepted (allow-list).
 
 use std::path::{Path, PathBuf};
 
@@ -19,10 +19,10 @@ pub const SKYRIM_SE: u32 = 489830;
 /// Fallout 4 AppID.
 pub const FALLOUT4: u32 = 377160;
 /// Starfield AppID (Creation Engine 2). Behaves as "just another allow-listed
-/// Bethesda AppID" across every `match appid` site (SFDET-01).
+/// Bethesda AppID" across every `match appid` site.
 pub const STARFIELD: u32 = 1716740;
 
-/// The complete allow-list of supported games (ENV-03, SFDET-01).
+/// The complete allow-list of supported games.
 pub const SUPPORTED_APPIDS: &[u32] = &[SKYRIM_SE, FALLOUT4, STARFIELD];
 
 /// Display name for a supported AppID (used when the manifest omits one).
@@ -61,8 +61,9 @@ pub struct ResolvedGame {
 }
 
 impl ResolvedGame {
-    /// Convert into a [`nextwist_core::Game`]. `staging_dir` is chosen by the caller (Plan 06
-    /// suggests a same-filesystem path); here we default it to a `.nextwist-staging`
+    /// Convert into a [`nextwist_core::Game`]. `staging_dir` is chosen by the caller (a
+    /// same-filesystem path keeps the deploy ladder's reflink/hardlink rungs reachable);
+    /// here we default it to a `.nextwist-staging`
     /// sibling of the install dir so the struct is complete and on the same FS.
     pub fn into_game(self) -> Game {
         let staging_dir = self
@@ -171,11 +172,11 @@ struct AppManifest {
     installdir: String,
     name: Option<String>,
     /// Steam's installed build number, stored as a quoted integer. Present for a
-    /// fully-installed app; read for the SFDET-03 version-drift compare.
+    /// fully-installed app; read for the version-drift compare.
     buildid: Option<String>,
 }
 
-/// Read the installed Steam `buildid` from `appmanifest_<appid>.acf` (SFDET-03).
+/// Read the installed Steam `buildid` from `appmanifest_<appid>.acf`.
 ///
 /// FAIL-SAFE and NON-BLOCKING: any missing file, unreadable manifest, parse error, or
 /// absent/unparseable `buildid` returns `None` — never an error, never a panic. The
@@ -196,7 +197,7 @@ fn library_root_of(install_dir: &Path) -> Option<&Path> {
     install_dir.ancestors().nth(3)
 }
 
-/// Resolve the full Starfield detection status for a supported appid (SFDET-01/02/03).
+/// Resolve the full Starfield detection status for a supported appid.
 ///
 /// The Tauri adapter forwards this VERBATIM. Re-resolves the Steam library +
 /// Proton prefix on every call (never cached — paths move) and keeps ALL path construction
@@ -252,7 +253,7 @@ fn proton_prefix(library_root: &Path, appid: u32) -> PathBuf {
         .join("pfx")
 }
 
-/// Manual "add game by folder" fallback (ENV-03) for non-standard / Snap installs.
+/// Manual "add game by folder" fallback for non-standard / Snap installs.
 ///
 /// Validates the supplied folder contains the expected Bethesda markers (a `Data/`
 /// directory and the game executable) BEFORE accepting it (untrusted
@@ -530,7 +531,7 @@ mod tests {
         let root = dir.path();
         unsafe { std::env::remove_var("STEAM_COMPAT_DATA_PATH") };
 
-        // SFDET-01: 1716740 resolves an install dir + Proton prefix, not NotInstalled.
+        // 1716740 resolves an install dir + Proton prefix, not NotInstalled.
         let resolved = resolve_from_root(root, STARFIELD).unwrap();
         assert_eq!(resolved.appid, STARFIELD);
         assert_eq!(

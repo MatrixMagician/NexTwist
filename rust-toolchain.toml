@@ -1,6 +1,6 @@
 # Pinned toolchain for NexTwist.
 #
-# Rust >= 1.89 is the workspace floor (Phase 2): libloot (Plan 04) requires 1.89.
+# Rust >= 1.89 is the workspace floor: libloot requires 1.89.
 # This subsumes the original >= 1.85 requirement, which is still load-bearing:
 # `io::ErrorKind::CrossesDevices` (EXDEV detection for the per-target deploy-method
 # ladder) was stabilized in 1.85, and the workspace targets the 2024 edition. The
