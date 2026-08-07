@@ -97,6 +97,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The built app refused to start.** A docs sweep rewrote comments inside the shipped
+  `V1`/`V2`/`V3`/`V5` migrations. refinery checksums the whole file, comments included, so
+  every existing install panicked on launch with `applied migration V1__init is different
+  than filesystem one V1__init` — the window never opened, leaving no route to a purge or
+  an uninstall. Every gate stayed green because every test opens an *empty* database and so
+  never compares against a stored checksum. The migrations are restored byte-for-byte,
+  `shipped_migration_checksums_are_frozen` now pins each shipped checksum (verified to fail
+  on a comment-only edit), and the definition of done requires actually launching the app
+  for any change to startup, `store`, or a migration.
+
 - **Crash recovery could destroy a vanilla game file and then report the game pristine.**
   The engine writes a durable `pending` intent *before* taking the vanilla backup, so a
   crash — or an ordinary I/O failure such as a full or read-only disk — in that window

@@ -2,7 +2,7 @@
 --
 -- This schema is a CONTRACT consumed by Plans 04/05 (deploy/purge engine). The
 -- four tables below are the substrate for the core safety guarantees:
---   * managed_game   — game registry (resolved install/prefix/staging paths)
+--   * managed_game   — ENV-03 game registry (resolved install/prefix/staging paths)
 --   * deployed_file  — DEPLOY-02 per-file manifest (what we placed, how, and its hash)
 --   * op_journal     — DEPLOY-06 write-ahead operation journal (intent-before-act,
 --                      'pending' before the syscall, flipped 'done' after; crash
@@ -10,7 +10,7 @@
 --   * vanilla_backup — DEPLOY-04 content-addressed backup-before-overwrite ledger
 --                      (keyed by blake3 hash so the original is restorable on purge)
 
--- the games NexTwist manages and their resolved paths.
+-- ENV-03: the games NexTwist manages and their resolved paths.
 CREATE TABLE managed_game (
     appid       INTEGER PRIMARY KEY,
     name        TEXT NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE deployed_file (
 CREATE INDEX idx_deployed_file_appid ON deployed_file (appid);
 
 -- DEPLOY-06: write-ahead operation journal.
--- `state` defaults to 'pending'; the deploy engine flips it to 'done'
+-- `state` defaults to 'pending'; the deploy engine (Plan 04) flips it to 'done'
 -- after the idempotent syscall succeeds. On launch, any row not 'done' is replayed.
 CREATE TABLE op_journal (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

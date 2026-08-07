@@ -1,4 +1,4 @@
--- V3: enforce referential integrity on per-profile membership / plugin state.
+-- V3: enforce referential integrity on per-profile membership / plugin state (WR-06).
 --
 -- V2 created `profile_mod` and `plugin_state` WITHOUT foreign keys, so
 -- `set_profile_mod` / `set_plugin_state` could INSERT membership rows for non-existent
@@ -9,8 +9,8 @@
 --
 -- SQLite cannot add a foreign key to an existing table with `ALTER TABLE`; the supported
 -- path is a table REBUILD (create new with the FKs, copy data, drop old, rename, recreate
--- indexes). This is done here in V3 — a shipped migration is never edited, so V2 is left
--- untouched and any already-migrated user DB upgrades cleanly.
+-- indexes). This is done here in V3 — V2 is left untouched (T-02-01 additive) so any
+-- already-migrated user DB upgrades cleanly.
 --
 -- Both `profile_mod` and `plugin_state` are LEAF tables (nothing references them), so the
 -- drop+rename is safe under the foreign_keys pragma. The migration runs inside refinery's

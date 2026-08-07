@@ -89,6 +89,60 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
 
+    /// BLOCKING: the checksum of every SHIPPED migration is frozen.
+    ///
+    /// refinery records a checksum per applied migration and refuses to open a database
+    /// whose stored checksum disagrees with the file on disk, failing with
+    /// "applied migration V1__init is different than filesystem one V1__init". That check
+    /// is a feature — it catches a migration edited after release — but it means editing a
+    /// shipped migration **bricks every existing install**, and the app cannot start at all.
+    ///
+    /// The checksum covers the whole file, comments included, so a "harmless" comment
+    /// rewrite is just as fatal as changing the SQL. It happened: a docs sweep retouched
+    /// comments in V1/V2/V3/V5 and the built app died on launch for anyone with a database.
+    /// Nothing in the test suite caught it, because every test starts from an empty DB and
+    /// so never compares against a stored checksum.
+    ///
+    /// These numbers are the contract with released versions. A failure here means a
+    /// shipped migration was modified: restore it byte-for-byte and put the change in a
+    /// NEW migration. Only ever append to this list.
+    #[test]
+    fn shipped_migration_checksums_are_frozen() {
+        // (version, name, checksum) as shipped. NEVER edit an existing row.
+        const FROZEN: &[(i32, &str, u64)] = &[
+            (1, "init", 9627684604068990691),
+            (2, "multi_mod", 698025480747494774),
+            (3, "profile_fks", 6159033846896841634),
+            (4, "nexus_provenance", 8301976723757022270),
+            (5, "collections", 14661994468275883410),
+            (6, "journal_staging_root", 4475010628737059627),
+        ];
+
+        let migrations = migrations::runner().get_migrations().clone();
+        for (version, name, checksum) in FROZEN {
+            let found = migrations
+                .iter()
+                .find(|m| m.version() == *version)
+                .unwrap_or_else(|| panic!("shipped migration V{version}__{name} is missing"));
+            assert_eq!(
+                found.name(),
+                *name,
+                "V{version} was renamed; refinery keys on the name, so every existing install breaks"
+            );
+            assert_eq!(
+                found.checksum(),
+                *checksum,
+                "V{version}__{name} was modified after release. refinery will refuse to open \
+                 every database that already applied it, and the app will not start. Restore \
+                 the file byte-for-byte and add a NEW migration instead."
+            );
+        }
+        assert!(
+            migrations.len() >= FROZEN.len(),
+            "a shipped migration disappeared"
+        );
+    }
+
     #[test]
     fn open_creates_db_in_wal_mode_with_tables() {
         let dir = TempDir::new().unwrap();

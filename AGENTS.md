@@ -160,6 +160,10 @@ Before claiming a change is complete:
    crash-recovery property still holds.
 8. If you touched the deploy **method ladder**, re-run `crates/deploy` with `TMPDIR` on a
    CoW filesystem (see the reflink blind spot below).
+9. If you touched **startup, `store`, or a migration**, build and actually launch the app
+   against your real app-data database — `cargo tauri build --bundles appimage` is not
+   enough, it must start. The whole suite runs on empty databases, so an entire class of
+   failure is invisible to it (see the migration-checksum blind spot below).
 
 All gates were run green on `main` as of 2026-08-02, so a failure you see is
 something you introduced, not pre-existing noise. Three caveats worth knowing:
@@ -179,6 +183,16 @@ something you introduced, not pre-existing noise. Three caveats worth knowing:
   inode and that writing through a deployed file cannot corrupt read-only staging. It
   skips cleanly (printing why) when the filesystem has no CoW support, so a silent skip
   in CI is expected and a silent skip locally means you proved nothing.
+- **A green suite does not mean the app starts.** Every test opens a fresh database, so
+  nothing in CI ever compares a migration against a *stored* checksum. refinery records one
+  per applied migration and refuses to open a database that disagrees, which means editing
+  a shipped migration — including **only its comments**, since the checksum covers the whole
+  file — bricks every existing install with `applied migration V1__init is different than
+  filesystem one V1__init`, and the window never opens. This happened: a docs sweep
+  retouched comments in V1/V2/V3/V5, all 48 test binaries and both CI runs stayed green, and
+  the built app died on launch. `shipped_migration_checksums_are_frozen` in
+  `crates/store/src/db.rs` now pins every shipped checksum, but the durable habit is to
+  launch the thing.
 - `cargo deny` carries two documented `ignore`d advisories (RUSTSEC-2026-0194/0195) for
   the vulnerable `quick-xml <0.41` that Tauri pulls in transitively via `plist` at build
   time. A `[[bans.deny]]` rule with `wrappers = ["plist"]` keeps that exception pinned to

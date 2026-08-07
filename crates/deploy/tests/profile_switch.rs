@@ -3,10 +3,9 @@
 //! The profile slice's safety gate: switching the active profile must reconcile the
 //! deployment THROUGH the existing journaled safe engine — `switch_profile` does
 //! `purge(old) -> resolve+deploy_winners(new profile's enabled set) -> apply_load_order
-//! (new profile's plugins.txt) -> set_active(new)`. There is NO diff-deploy shortcut
-//!: every switch is a full purge-to-pristine then a fresh deploy of the
-//! target profile's winner set, so a profile's unique files can never leak into another
-//! profile.
+//! (new profile's plugins.txt) -> set_active(new)`. There is NO diff-deploy shortcut:
+//! every switch is a full purge-to-pristine then a fresh deploy of the target profile's
+//! winner set, so a profile's unique files can never leak into another profile.
 //!
 //! The NON-NEGOTIABLE assertion is byte-for-byte pristine ACROSS switches: after a
 //! sequence of switches A->B->A, a final purge returns the install **byte-for-byte
