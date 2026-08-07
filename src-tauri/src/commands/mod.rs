@@ -77,7 +77,8 @@ mod tests {
     }
 
     /// An unmanaged/unknown domain returns `None` — the Retry path turns this into a
-    /// clear error rather than guessing an AppID (and the router emits the §C.3 Warning).
+    /// clear error rather than guessing an AppID (and the router emits the expired-link
+    /// Warning).
     #[test]
     fn appid_for_domain_rejects_unknown_domain() {
         assert_eq!(appid_for_domain("morrowind"), None);

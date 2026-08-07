@@ -15,7 +15,7 @@ export const kindBadge = (k: PluginInfo["kind"]): string => k.toUpperCase();
 
 /**
  * True if swapping `plugins[i]` with its neighbour in `dir` would put a regular plugin
- * before a master (or vice-versa) — a masters-first violation we must prevent (§B.2).
+ * before a master (or vice-versa) — a masters-first violation we must prevent.
  * Out-of-range moves report `true` because those controls are disabled anyway.
  */
 export function violatesMastersFirst(

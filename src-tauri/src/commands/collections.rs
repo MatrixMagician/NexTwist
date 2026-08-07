@@ -548,7 +548,7 @@ mod tests {
     use nexus::is_auto_fetchable;
 
     /// The Premium gate decision. A Premium session passes; a free session gets the
-    /// exact §B.1 Premium-required notice and (in the command) NO download starts.
+    /// exact Premium-required notice and (in the command) NO download starts.
     #[test]
     fn premium_gate_blocks_free_account() {
         assert!(premium_gate(true).is_ok(), "a Premium session may download");
