@@ -97,7 +97,6 @@ pub fn deploy_root(install_dir: &Path) -> PathBuf {
 /// leading `Data` segment and re-root under the resolved [`deploy_root`] so casing of
 /// the top-level `Data` directory is honored. A relpath without a leading `Data`
 /// segment is treated as already deploy-root-relative.
-#[allow(dead_code)] // wired into the engine in Task 2
 pub(crate) fn resolve_target(install_dir: &Path, staged_rel: &Path) -> PathBuf {
     let root = deploy_root(install_dir);
     let comps = staged_rel.components();

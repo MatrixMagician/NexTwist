@@ -42,11 +42,6 @@ impl CasingMap {
         self.dirs.get(lower_rel).map(String::as_str)
     }
 
-    /// Number of directories recorded (excluding the `Data/` root itself).
-    pub fn len(&self) -> usize {
-        self.dirs.len()
-    }
-
     /// True if no subdirectories were recorded.
     pub fn is_empty(&self) -> bool {
         self.dirs.is_empty()
