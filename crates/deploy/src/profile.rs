@@ -166,7 +166,7 @@ fn enabled_inputs_for_profile(
 }
 
 /// Write the target profile's `plugins.txt` at the Proton-prefix AppData location via the
-/// The `loadorder::apply_load_order` primitive, returning the written path.
+/// `loadorder::apply_load_order` primitive, returning the written path.
 ///
 /// Reads the profile's persisted plugin enable/order (`list_plugin_state`) and hands it to
 /// libloot, which writes the canonical asterisk-format masters-first active-plugins file.
