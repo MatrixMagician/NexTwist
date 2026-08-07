@@ -15,7 +15,7 @@ path = "src/lib.rs"
 # shadows the std `::core` crate, which breaks `thiserror`'s derive (it expands to
 # `::core::fmt`). `fomod` derives `thiserror` locally, so it must not shadow it.
 #
-# HARD INVARIANT (FOMOD-01/02): this crate has NO tauri, reqwest, keyring, or
+# HARD INVARIANT: this crate has NO tauri, reqwest, keyring, or
 # tauri-plugin-* dependency. It is the pure FOMOD parse→condition→resolve engine.
 # The wizard UI lives in the src-tauri shell; the dry-run safety gate (resolve never
 # writes to disk) lives entirely in this crate. quick-xml is the ONLY new dep this

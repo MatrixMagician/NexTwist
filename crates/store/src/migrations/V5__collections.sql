@@ -12,7 +12,7 @@
 --   * collection      — COLL-01 a NexusMods Collection revision pinned for a game:
 --                        (appid, slug, revision) identify the revision; name is the
 --                        display label; profile_id optionally links the dedicated
---                        Phase-2 profile a deployed Collection lives in (Plan 04).
+--                        profile a deployed Collection lives in.
 --                        UNIQUE(appid, slug, revision) makes the row idempotent on
 --                        re-resolve (the store upserts on that key).
 --   * collection_mod  — COLL-02 one pinned mod inside a collection, carrying its Nexus
@@ -29,7 +29,7 @@
 -- those CASCADE-removes its fomod_choice row.
 
 -- COLL-01: a pinned Collection revision for a game. profile_id is NULLable: it is set
--- only once the Collection is materialised into its dedicated profile (Plan 04). The
+-- only once the Collection is materialised into its dedicated profile. The
 -- FK to profile(id) is ON DELETE SET NULL so dropping that profile does not delete the
 -- collection record (the resolve report + pinned-mod list survive a profile teardown).
 CREATE TABLE collection (

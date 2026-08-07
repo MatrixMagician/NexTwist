@@ -155,12 +155,12 @@
 
   const selectedGame = $derived(managed.find((g) => g.appid === selectedAppid) ?? null);
 
-  // Starfield CE2 detection status (SFDET-02/03). Fetched only when the selected game is
+  // Starfield CE2 detection status. Fetched only when the selected game is
   // Starfield; the backend forwards the headless aggregate verbatim. `null` = not loaded /
   // not Starfield. All logic is in the engine — the UI only presents the typed state.
   let starfield = $state<StarfieldStatus | null>(null);
   const isStarfield = $derived(selectedGame?.appid === STARFIELD_APPID);
-  // FirstLaunchPending gates load-order/INI management (SFDET-02). Ready enables it.
+  // FirstLaunchPending gates load-order/INI management. Ready enables it.
   const starfieldPending = $derived(
     starfield !== null && "FirstLaunchPending" in starfield.ce2_state,
   );
@@ -221,7 +221,7 @@
     if (games) managed = games;
   }
 
-  // Fetch Starfield's CE2 status (SFDET-02/03). Called on selecting Starfield and on the
+  // Fetch Starfield's CE2 status. Called on selecting Starfield and on the
   // explicit "Re-check" button — never on focus/mount, so there are no surprise reads.
   async function loadStarfieldStatus() {
     if (selectedAppid !== STARFIELD_APPID) return;
@@ -1458,7 +1458,7 @@
   </section>
 
   {#if selectedGame}
-    <!-- Starfield version-drift notice (SFDET-03): persistent + advisory. It NEVER blocks
+    <!-- Starfield version-drift notice: persistent + advisory. It NEVER blocks
          management; it only appears when the installed build is newer than the validated
          baseline (dormant until a non-zero baseline is seeded). Build numbers render as
          plain text — Svelte escapes them, no {@html}. -->
@@ -1722,7 +1722,7 @@
       <h2>5. Plugins &amp; load order — {selectedGame.name}</h2>
 
       {#if isStarfield && starfieldPending}
-        <!-- First-launch gate (SFDET-02): Starfield hasn't created its CE2 config folder
+        <!-- First-launch gate: Starfield hasn't created its CE2 config folder
              yet, so load-order/INI management is blocked. Guide the user to launch once via
              Steam (we do NOT auto-launch the Proton game), then Re-check on explicit click. -->
         <div class="first-launch">
@@ -2170,10 +2170,10 @@
   .ok { color: #1a7f37; font-weight: 600; }
   .err { color: #cf222e; font-weight: 600; }
   .warn { color: #9a6700; background: #fff8e5; border: 1px solid #e6c200; border-radius: 6px; padding: 0.5rem 0.75rem; margin-top: 0.5rem; }
-  /* Persistent advisory drift notice (SFDET-03): amber, non-blocking. */
+  /* Persistent advisory drift notice: amber, non-blocking. */
   .drift-notice { color: #9a6700; background: #fff8e5; border: 1px solid #e6c200; border-radius: 6px; padding: 0.5rem 0.75rem; margin: 0.5rem 0; }
   .drift-notice p { margin: 0.3rem 0 0; }
-  /* First-launch gate (SFDET-02): neutral info box with the Re-check action. */
+  /* First-launch gate: neutral info box with the Re-check action. */
   .first-launch { background: #f3f3f3; border-radius: 6px; padding: 0.75rem; }
   .first-launch p { margin: 0.3rem 0 0.6rem; }
 

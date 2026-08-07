@@ -34,7 +34,7 @@ BIN="squashfs-root/usr/bin/nextwist"
 # guarantees the audit only ever reads THIS artifact: a stale `squashfs-root/` from a
 # prior run or a different AppImage cannot be merged into (and silently corrupt the
 # evidence of) this one. The trap removes the whole tree on exit so the script never
-# litters the caller's CWD with a multi-hundred-MB extraction (WR-02).
+# litters the caller's CWD with a multi-hundred-MB extraction.
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 cd "$WORK"
@@ -52,12 +52,12 @@ echo "== 2. Bundled shared libraries (usr/lib) =="
 find squashfs-root/usr/lib -name '*.so*' | sort
 echo
 
-echo "== 3. UnRAR / non-free RAR absence (expect NO output below — DIST-02 / T-05-04) =="
+echo "== 3. UnRAR / non-free RAR absence (expect NO output below) =="
 find squashfs-root \( -iname '*unrar*' -o -iname '*libunrar*' \) -print
 # Scan ALL shipped native code, not just the main binary: if the UnRAR algorithm were
 # ever pulled in statically through a transitive dep, it could land in a bundled shared
 # object under usr/lib/*.so* rather than in the nextwist binary. Grepping both the binary
-# and the bundled libraries closes that gap (WR-03).
+# and the bundled libraries closes that gap.
 grep -rIl --binary-files=text -e 'UnRAR' \
   "$BIN" squashfs-root/usr/lib \
   || echo "no UnRAR string in shipped native code (binary + bundled libraries)"

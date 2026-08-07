@@ -4,7 +4,7 @@
 //! tables are the reversible-deployment safety core; the V2 tables add the
 //! multi-mod / profile / plugin substrate:
 //!
-//!   * **game registry**  (ENV-03)    — [`Store::add_managed_game`] / [`Store::list_managed_games`]
+//!   * **game registry**     — [`Store::add_managed_game`] / [`Store::list_managed_games`]
 //!   * **deploy manifest** — [`Store::record_deployed_file`] / [`Store::list_deployed_files`]
 //!   * **operation journal** — [`Store::begin_op`] / [`Store::mark_done`] / [`Store::pending_ops`]
 //!   * **vanilla backup ledger** — [`Store::record_vanilla`] / [`Store::vanilla_for`]

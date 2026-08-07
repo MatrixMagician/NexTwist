@@ -1,8 +1,8 @@
 //! NexusMods client DTOs.
 //!
 //! Pure serde data types the headless client speaks. These mirror the relevant
-//! fields of the NexusMods REST v1 / OAuth responses; richer mod/file metadata DTOs
-//! land in Plan 02. Naming follows the `core::model` round-trip convention.
+//! fields of the NexusMods REST v1 / OAuth responses. Naming follows the `core::model`
+//! round-trip convention.
 //!
 //! SECURITY: [`OAuthTokens`] is an **in-memory** carrier. The short-lived
 //! `access` token never touches disk; only the long-lived `refresh` string is handed

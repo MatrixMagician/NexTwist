@@ -17,7 +17,7 @@ path = "src/lib.rs"
 # `store` is safe under its workspace alias because we only call its methods (its
 # StoreError is re-exported through nextwist_core).
 #
-# HARD INVARIANT (NEXUS-01/02): this crate has NO tauri, keyring, or tauri-plugin-*
+# HARD INVARIANT: this crate has NO tauri, keyring, or tauri-plugin-*
 # dependency. Keyring + deep-link + OAuth-redirect capture live in the src-tauri shell.
 # reqwest stays default-features = false + rustls (never native-tls/default-tls).
 [dependencies]

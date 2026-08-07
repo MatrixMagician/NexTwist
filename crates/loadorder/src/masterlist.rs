@@ -292,7 +292,7 @@ mod tests {
 
     #[test]
     fn starfield_bundled_snapshot_is_present_and_nonempty() {
-        // The Starfield allow-list arms + bundled CC0 snapshot (SFDET-01): game_slug maps
+        // The Starfield allow-list arms + bundled CC0 snapshot: game_slug maps
         // 1716740 -> "starfield", and the offline fallback seeds the cache from the bundled
         // snapshot (non-empty). Mirrors `falls_back_to_bundled_snapshot_when_offline`.
         assert_eq!(game_slug(STARFIELD), Some("starfield"));

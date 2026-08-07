@@ -43,7 +43,7 @@ fn deploy_two_file_mod() -> Harness {
 
     // Stage the mod tree at the game's staging_dir itself, so the staged source for a
     // `Data/`-rooted relpath is `staging_dir/Data/...` — the recover/repair contract
-    // documented in Plan 04 (journal::replay reconstructs the source the same way).
+    // (journal::replay reconstructs the source the same way).
     for (rel, bytes) in [(REL_A, b"mod-a-bytes".as_slice()), (REL_B, b"mod-b-bytes")] {
         let p = staging.join(rel);
         fs::create_dir_all(p.parent().unwrap()).unwrap();

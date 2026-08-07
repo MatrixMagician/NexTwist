@@ -1,11 +1,11 @@
-//! DIST-01 self-test wiring: prove the `nxm://` handler self-test is non-fatal.
+//! Self-test wiring: prove the `nxm://` handler self-test is non-fatal.
 //!
 //! True end-to-end `nxm://` registration needs a real OS desktop session + a built
 //! AppImage, so it is a manual UAT item. What this headless test pins is the *contract*
 //! the startup `setup` hook depends on: the extracted `nxm_self_test(..)` helper that
 //! wraps the plugin's `is_registered("nxm")` `Result` MUST consume every arm — PASS,
 //! "not the default handler", and a query error — and return `()` WITHOUT panicking or
-//! propagating. That is the locked "warn-and-continue" decision (T-05-02): a minimal
+//! propagating. That is the locked "warn-and-continue" decision: a minimal
 //! distro lacking `xdg-mime` must still let the app open.
 //!
 //! The helper is generic over the error type, so this test needs neither a live OS

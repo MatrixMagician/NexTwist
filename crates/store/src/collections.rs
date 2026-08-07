@@ -403,7 +403,7 @@ mod tests {
     }
 
     /// Dropping the linked profile NULLs collection.profile_id (ON DELETE SET NULL) —
-    /// the collection record survives a profile teardown (Plan 04 uninstall keeps the
+    /// the collection record survives a profile teardown (uninstall keeps the
     /// resolve history).
     #[test]
     fn dropping_profile_nulls_collection_link_not_the_collection() {

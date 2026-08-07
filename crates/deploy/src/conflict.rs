@@ -63,10 +63,10 @@ pub struct ModInput {
 /// A single resolved winner: the deploy engine deploys this file from `staging_root`
 /// to `<deploy_root>/<rel-without-Data>`, recording `mod_id` as its owner.
 ///
-/// This is the per-file (root, rel) pair the **multi-root contract** (Plan 02-03
-/// decision: Option A) introduces — `StagedFiles` carries ONE `staging_root`, but
-/// multi-mod winners come from DIFFERENT roots, so the winner set is a `Vec` of these
-/// instead. `engine::deploy`/`StagedFiles` are left UNCHANGED for single-root callers.
+/// This is the per-file (root, rel) pair the **multi-root contract** needs: `StagedFiles`
+/// carries ONE `staging_root`, but multi-mod winners come from DIFFERENT roots, so the
+/// winner set is a `Vec` of these instead. `engine::deploy`/`StagedFiles` are left
+/// UNCHANGED for single-root callers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WinnerFile {
     /// The winning mod's row id — recorded as `FileEntry.source_mod`.

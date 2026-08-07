@@ -8,7 +8,7 @@
 //! [`libloot::Game::with_local_path`], supplying the Proton-prefix AppData path built
 //! by [`appdata_local_path`] — NEVER `Game::new`.
 //!
-//! ## Verified libloot 0.29.5 API used here (Plan 04 builds on this)
+//! ## Verified libloot 0.29.5 API used here
 //!
 //! * `Game::with_local_path(GameType, game_path: &Path, game_local_path: &Path)
 //!   -> Result<Game, GameHandleCreationError>` — `game_path` MUST be an existing

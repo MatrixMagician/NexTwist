@@ -25,7 +25,7 @@ store.workspace = true
 steam = { path = "../steam", package = "nextwist-steam" }
 # `loadorder` (aliased to avoid any `core` shadowing concern) provides apply_load_order,
 # which profile::switch_profile calls after deploy to write the new profile's plugins.txt
-# at the Proton-prefix AppData location (PROF-02). No cycle: loadorder depends on store +
+# at the Proton-prefix AppData location. No cycle: loadorder depends on store +
 # core only, NOT on deploy (deploy -> loadorder is the single edge).
 loadorder = { path = "../loadorder", package = "nextwist-loadorder" }
 reflink-copy.workspace = true
@@ -33,7 +33,7 @@ blake3.workspace = true
 walkdir.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
-# serde so the deploy/purge/verify reports can cross the Tauri IPC boundary (Plan 06).
+# serde so the deploy/purge/verify reports can cross the Tauri IPC boundary.
 serde.workspace = true
 
 [dev-dependencies]

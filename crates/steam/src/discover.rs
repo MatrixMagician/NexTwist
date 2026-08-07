@@ -1,4 +1,4 @@
-//! Steam root + app discovery (ENV-01).
+//! Steam root + app discovery.
 //!
 //! Enumerates Steam roots via steamlocate's `locate_all()` (which already covers the
 //! Flatpak-relocated root on most systems) and additionally probes the explicit

@@ -7,8 +7,8 @@
 //! headless `crates/nexus` (`nexus::build_authorize_url` / `nexus::exchange_code`); this
 //! module only does the browser launch and threads the keyring store on success.
 //!
-//! Plan 01 (this slice) lands the browser-open + the `complete_oauth` code path. The
-//! deep-link plugin that delivers the code is wired in Plan 03.
+//! The `nxm://` deep-link plugin that delivers the code is registered in `lib.rs`, after
+//! `tauri-plugin-single-instance` (that order matters on Linux — see the note there).
 
 use crate::keyring;
 

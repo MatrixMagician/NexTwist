@@ -1,4 +1,4 @@
-//! fs_probe (ENV-04): the per-target capability probe reports same_device /
+//! fs_probe: the per-target capability probe reports same_device /
 //! reflink / hardlink_ok / casefold for a `(staging, game_data)` directory pair.
 //!
 //! The authoritative cross-fs assertion also runs on the dev btrfs filesystem at the

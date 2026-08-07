@@ -63,8 +63,9 @@ pub async fn list_games(state: State<'_, Mutex<AppState>>) -> Result<Vec<Game>, 
         .map_err(boundary_err)
 }
 
-/// Resolve Starfield's CE2 first-launch state + advisory version-drift for `appid`
-/// (SFDET-02/03). Thin forwarder: the engine re-resolves the Steam library + Proton prefix
+/// Resolve Starfield's CE2 first-launch state + advisory version-drift for `appid`.
+///
+/// Thin forwarder: the engine re-resolves the Steam library + Proton prefix
 /// (never cached) and does ALL path/case-fold/drift work; this only crosses the IPC
 /// boundary. Re-invoked on the UI's explicit "Re-check" — reads only, writes nothing.
 #[tauri::command]

@@ -21,10 +21,10 @@ path = "src/main.rs"
 tauri-build = { workspace = true }
 
 [dev-dependencies]
-# Headless unit tests for the thin command adapters (no webview): WR-05 plugins.txt
+# Headless unit tests for the thin command adapters (no webview): the plugins.txt
 # write-before-persist ordering uses a temp DB + fake prefix.
 tempfile = { workspace = true }
-# NEXUS-06 end-to-end test (download -> extract -> stage -> provenance) without a webview:
+# End-to-end download test (download -> extract -> stage -> provenance) without a webview:
 # a mockito CDN serves a real .zip fixture that flows through the SAME extract terminus
 # the local-archive install path uses, then the store persists the mod + provenance.
 mockito = { workspace = true }
@@ -43,16 +43,16 @@ extract = { workspace = true }
 deploy = { workspace = true }
 loadorder = { workspace = true }
 nexus = { workspace = true }
-# The headless FOMOD engine (Plan 04-01): parse -> condition -> pure dry-run resolve.
-# The fomod command adapter delegates to this and adds ZERO FOMOD logic (Anti-Pattern-4).
+# The headless FOMOD engine: parse -> condition -> pure dry-run resolve. The fomod
+# command adapter delegates to this and adds ZERO FOMOD logic.
 fomod = { workspace = true }
 # The FOMOD adapter extracts an archive to a temp tree (via the SAME validated extractor
 # the install path uses) to parse/resolve before any staging write. tempfile owns the
 # RAII-cleaned temp dir for that dry-run extraction.
 tempfile = { workspace = true }
-# The Collection bulk-download adapter (Plan 04-04) drives per-mod downloads with a
-# small bounded concurrency (`buffer_unordered`) so the shared governor limiter governs
-# the global rate (WR-03). No new download primitive — each mod reuses
+# The Collection bulk-download adapter drives per-mod downloads with a small bounded
+# concurrency (`buffer_unordered`) so the shared governor limiter governs the global
+# rate. No new download primitive — each mod reuses
 # `run_download_to_window` VERBATIM.
 futures-util = { workspace = true }
 
@@ -64,25 +64,23 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 # anyhow stays the boundary error context; thiserror is used for the two small typed
 # shell error enums (keyring NoKeyringBackend hard-fail + OAuth orchestration) that the
-# UI must distinguish (e.g. the NEXUS-02 no-keyring banner keys on a distinct variant).
+# UI must distinguish (e.g. the no-keyring banner keys on a distinct variant).
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-# OS-integration the shell owns (NEXUS-01/02). These live ONLY in the shell — the
+# OS-integration the shell owns. These live ONLY in the shell — the
 # headless crates/nexus never sees a keyring or deep-link type.
-#   * keyring 3.6 (NOT 4.x — RESEARCH Pitfall 1: 4.0 is a breaking keyring-core rewrite).
+#   * keyring 3.6 (NOT 4.x — 4.0 is a breaking keyring-core rewrite).
 #     `sync-secret-service` targets GNOME Keyring / KWallet; `crypto-rust` is pure-Rust
 #     crypto (no OpenSSL) so the AppImage stays rustls-only.
 #   * tauri-plugin-deep-link / tauri-plugin-single-instance: the `nxm://` MIME handler +
-#     single-instance forwarding. Declared now so the pins are reviewed in one commit;
-#     they are wired into the builder in Plan 03 (single-instance registered FIRST).
+#     single-instance forwarding. Registered in `lib.rs` with single-instance FIRST —
+#     on Linux, registering deep-link first would lose the forwarded URL.
 keyring = { version = "3.6", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
 tauri-plugin-deep-link = "2.4"
 tauri-plugin-single-instance = { version = "2.4", features = ["deep-link"] }
-# Browser launch for the OAuth authorize step. RESEARCH A7 named tauri-plugin-opener
-# as the [ASSUMED] choice but allowed a `webbrowser` swap; `webbrowser` is chosen here
-# because it opens the system browser with a plain function call and needs NO Tauri
-# plugin registration or capability-file change (plugin wiring is deferred to Plan 03).
-# Introduced in this task so it clears the cargo-deny supply-chain gate here, not later.
+# Browser launch for the OAuth authorize step. `webbrowser` is chosen over
+# tauri-plugin-opener because it opens the system browser with a plain function call and
+# needs NO Tauri plugin registration or capability-file change.
 webbrowser = "1"

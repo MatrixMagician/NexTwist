@@ -1,5 +1,5 @@
 //! Game-config (StarfieldCustom.ini activation) adapters — delegate to the `deploy`
-//! engine's reversible INI op wrappers (Plan 08-01).
+//! engine's reversible INI op wrappers.
 //!
 //! Zero safety logic lives here: the engine owns path resolution (via `steam::my_games_path`),
 //! `drive_c` containment, foreign-symlink refusal, the surgical byte-fidelity merge, the

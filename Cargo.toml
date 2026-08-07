@@ -3,7 +3,7 @@
 # The safety-critical engine lives in `crates/*` as pure, headless Rust with ZERO
 # Tauri dependencies, so it is unit/property-testable in CI without a webview.
 #
-# The Tauri shell `src-tauri` (Plan 06) is a thin adapter layer over the headless
+# The Tauri shell `src-tauri` is a thin adapter layer over the headless
 # crates. It is a workspace member so `cargo test --workspace` covers it, but its
 # build needs the WebKitGTK 4.1 dev libs (the headless crates need none of them).
 [workspace]
@@ -12,8 +12,7 @@ members = ["crates/*", "src-tauri"]
 
 [workspace.package]
 edition = "2024"
-# MSRV is 1.89: libloot (added in Plan 04) requires Rust >= 1.89 (D-09 / RESEARCH
-# Environment Availability). 1.89 is a superset of the 1.85 floor that EXDEV/
+# MSRV is 1.89: libloot requires Rust >= 1.89. 1.89 is a superset of the 1.85 floor that EXDEV/
 # `CrossesDevices` deploy detection needs, so the safety-critical engine is unaffected.
 rust-version = "1.89"
 license = "GPL-3.0-or-later"
@@ -40,38 +39,38 @@ zip = "8"
 sevenz-rust2 = "0.21"
 walkdir = "2.5"
 
-# Plugin / load-order management (Phase 2, Plan 02). libloot is the LOOT project's
-# pure-Rust crate (GPL-3.0-or-later — deny.toml allows it; Plan 01 Task 1). Added behind
+# Plugin / load-order management. libloot is the LOOT project's
+# pure-Rust crate (GPL-3.0-or-later — deny.toml allows it). Added behind
 # a blocking package-legitimacy checkpoint (verified crates.io + github.com/loot/libloot).
 libloot = "0.29"
-# esplugin (Phase 2, Plan 04) — the LOOT author's pure-Rust plugin-header parser. It is
+# esplugin — the LOOT author's pure-Rust plugin-header parser. It is
 # ALREADY a transitive dependency of libloot 0.29.5 (esplugin 6.1.4, GPL-3.0, allowed by
 # deny.toml's libloot-family allowance), so taking it as a direct dep adds NO new crate to
 # the graph and needs NO new package-legitimacy checkpoint. Used by scan.rs to classify
 # ESM/ESL/ESP from header flags WITHOUT constructing a full libloot Game/prefix.
 esplugin = "6.1"
 
-# HTTP client (Phase 2, Plan 04 — masterlist fetch; reused for NexusMods in Phase 3).
+# HTTP client (masterlist fetch; reused for the NexusMods client).
 # rustls-tls (NEVER native-tls/OpenSSL) keeps the AppImage self-contained (CLAUDE.md
 # "What NOT to Use"). `blocking` because the loadorder crate is runtime-free (no tokio):
 # the masterlist fetch is a one-shot synchronous call behind a Tauri command, so a
 # blocking client avoids forcing an async runtime into the headless safety crate.
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "blocking", "json", "stream", "form"] }
 
-# NexusMods auth + API client (Phase 3, Plan 01 — crates/nexus). All registry-verified
-# + legitimacy-audited 2026-06-21 (RESEARCH Package Legitimacy Audit: all OK).
+# NexusMods auth + API client (crates/nexus). All registry-verified
+# + legitimacy-audited 2026-06-21 (all OK).
 #   * oauth2 5.0 — S256 PKCE challenge/verifier generation and CSRF state ONLY. No
 #     features: its HTTP executor is unused, so enabling `reqwest`/`rustls-tls` would
 #     pull a second, entirely unused HTTP stack (reqwest 0.12 + webpki-roots) into the
 #     build. The token POST is issued with the workspace's own hardened reqwest 0.13
 #     client (the `form` feature above provides the x-www-form-urlencoded body).
-#   * governor 0.10 — client-side token-bucket rate limiter (NEXUS-05; wired in Plan 02).
-#   * futures-util 0.3 — StreamExt for reqwest::Response::bytes_stream() (Plan 02 streaming).
+#   * governor 0.10 — client-side token-bucket rate limiter.
+#   * futures-util 0.3 — StreamExt for reqwest::Response::bytes_stream() (streaming download).
 oauth2 = { version = "5.0", default-features = false }
 governor = "0.10"
 futures-util = "0.3"
 
-# dev-only HTTP mock server for the headless nexus API tests (Plan 01+). No HTTP mock
+# dev-only HTTP mock server for the headless nexus API tests. No HTTP mock
 # existed in the repo before Phase 3.
 mockito = "1.7"
 
@@ -79,11 +78,11 @@ mockito = "1.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# XML parsing for the FOMOD ModuleConfig.xml engine (Phase 4, Plan 01 — crates/fomod).
+# XML parsing for the FOMOD ModuleConfig.xml engine (crates/fomod).
 # quick-xml is the highest-download pure-Rust XML crate (MIT, no native/C dep,
 # rustls/AppImage-friendly, cargo-deny-clean). The `serialize` feature enables serde
 # `Deserialize` so the FOMOD 5.x XSD maps directly to typed Rust structs/enums.
-# CONTEXT-locked + legitimacy-audited 2026-06-21 (RESEARCH Package Legitimacy Audit: OK).
+# Legitimacy-audited 2026-06-21 (OK).
 # Floor is 0.41: 0.40 carries RUSTSEC-2026-0194 (quadratic duplicate-attribute check)
 # and RUSTSEC-2026-0195 (unbounded namespace-declaration allocation). This crate parses
 # UNTRUSTED archive XML, so both are directly reachable — do not float back below 0.41.
@@ -115,7 +114,7 @@ loadorder = { path = "crates/loadorder", package = "nextwist-loadorder" }
 nexus = { path = "crates/nexus", package = "nextwist-nexus" }
 fomod = { path = "crates/fomod", package = "nextwist-fomod" }
 
-# Tauri shell (Plan 06). Pinned to the 2.11 line per CLAUDE.md. The embedded SvelteKit
+# Tauri shell. Pinned to the 2.11 line per CLAUDE.md. The embedded SvelteKit
 # SPA is served via `frontendDist` (no extra features needed); we keep the default
 # feature set so the allowlist matches tauri.conf.json.
 tauri = { version = "2.11" }

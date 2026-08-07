@@ -56,6 +56,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **155 citations pointing at documents that no longer exist.** Deleting `.planning/` was
+  supposed to take its ~750 source-comment citations with it, but the sweep was
+  incomplete: 93 references to `Plan 0N` / `RESEARCH ...` / `WR-0N` / `D-NN` /
+  `threat T-05-NN` / `UI-SPEC` survived across 28 files, plus a second family of 62
+  requirement labels (`ENV-03`, `NEXUS-02`, `SFDET-02`, `FOMOD-01`, `PROF-02`, ...) that
+  nothing in the repo defines either. This is the rustdoc problem one level up: a dead
+  citation asserts a justification exists somewhere and then fails to deliver it, which
+  is worse than no reference because it looks authoritative. Where the rationale was
+  worth keeping it is now stated inline (`V3__profile_fks.sql`'s referential-integrity
+  rebuild, `deny.toml`'s UnRAR ban, the `release.yml` action pin); where the citation
+  was decoration on prose that already stood alone it is simply gone; and comments frozen
+  in the future tense of a completed plan now describe what is (`crates/nexus`'s module
+  layering, the `nxm://` deep-link plugin that *is* registered, `crates/loadorder`'s
+  sibling modules). Comment-only: the store migrations changed not one SQL statement.
+
 - **Stale `#[allow(dead_code)]` attributes and unreachable helpers** — four allows whose
   "wired up later" plan references had all since come true, plus `CasingMap::len`, which
   had zero callers anywhere.

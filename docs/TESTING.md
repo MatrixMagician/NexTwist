@@ -58,7 +58,7 @@ There is no watch-mode script in this project; use `cargo watch -x test` if you 
 Inline `#[cfg(test)] mod tests` modules live alongside the code they cover. Two representative examples:
 
 - `crates/testkit/src/lib.rs` — the pristine-assertion primitive is itself unit-tested (mutated/missing/orphan detection, empty-directory tracking, fake-tree builders).
-- `src-tauri/src/commands/plugins.rs` — the WR-05 failure-ordering invariant (the `plugins.txt` file write must precede the DB persist so a libloot/IO failure never leaves the on-disk file and the DB disagreeing) is unit-tested in the synchronous core extracted from the Tauri command.
+- `src-tauri/src/commands/plugins.rs` — the failure-ordering invariant (the `plugins.txt` file write must precede the DB persist so a libloot/IO failure never leaves the on-disk file and the DB disagreeing) is unit-tested in the synchronous core extracted from the Tauri command.
 
 ### Integration tests
 
@@ -70,10 +70,10 @@ Each engine crate has a `tests/` directory whose files compile as separate integ
 | `crash_recovery.rs` | **The centerpiece (DEPLOY-06).** Simulates a kill mid-deploy via `deploy_with_abort` (journal `pending` rows + files placed, but intents not flipped to `done`), then opens a fresh store handle and calls `recover_on_launch` to assert the half-finished op replays safely. |
 | `vanilla_restore.rs` | A mod replacing a vanilla file backs the original to the content-addressed store; purge restores the exact original bytes. Also asserts intent-before-act ordering (pending journal row before the manifest row). |
 | `conflict_redeploy.rs` | The conflict slice's safety gate (CONF-03): deploying the user's deterministic conflict-winner set is pristine-reversible. |
-| `profile_switch.rs` | Profile switching (PROF-02/03) reconciles through the journaled engine — full purge-to-pristine then a fresh deploy, so one profile's files never leak into another. Includes the **WR-02 failure-injection** case (a switch that fails after the purge step must leave no profile marked active). |
+| `profile_switch.rs` | Profile switching reconciles through the journaled engine — full purge-to-pristine then a fresh deploy, so one profile's files never leak into another. Includes the **failure-injection** case (a switch that fails after the purge step must leave no profile marked active). |
 | `verify_drift.rs` | The verify/repair pass (DEPLOY-07) hash-diffs the manifest against the on-disk tree and classifies drift as `missing` / `changed` / `orphan`. |
 | `method_ladder.rs` | The per-target method ladder (DEPLOY-05) selects the strongest applicable primitive and downgrades on `CrossesDevices`/EXDEV instead of failing; every method round-trips a deploy + remove. |
-| `fs_probe.rs` | The per-target capability probe (ENV-04) reports same_device / reflink / hardlink_ok / casefold for a `(staging, game_data)` pair. |
+| `fs_probe.rs` | The per-target capability probe reports same_device / reflink / hardlink_ok / casefold for a `(staging, game_data)` pair. |
 | `casefold_normalize.rs` | Mixed-case mod paths are rewritten to match the game's canonical `Data/` casing (DEPLOY-08). |
 | `collection_round_trip.rs` | A NexusMods Collection deploys pristine-reversibly with no network (COLL-04/05). |
 
@@ -92,10 +92,10 @@ Other crates carry their own integration suites:
 
 ### Failure-injection tests
 
-Two named invariants (WR-02, WR-05) are proven by deliberately injecting failures and asserting the system lands in a safe, consistent state:
+Two invariants are proven by deliberately injecting failures and asserting the system lands in a safe, consistent state:
 
-- **WR-02** (`crates/deploy/tests/profile_switch.rs`): a profile switch that fails after the purge step must clear the stale active flag, leaving no profile marked active and the deployment still purgeable to vanilla.
-- **WR-05** (`src-tauri/src/commands/plugins.rs` unit tests): if the `plugins.txt` write fails, the DB `plugins` order is left untouched (the file write precedes the DB persist).
+- **Profile switch** (`crates/deploy/tests/profile_switch.rs`): a profile switch that fails after the purge step must clear the stale active flag, leaving no profile marked active and the deployment still purgeable to vanilla.
+- **Plugin write ordering** (`src-tauri/src/commands/plugins.rs` unit tests): if the `plugins.txt` write fails, the DB `plugins` order is left untouched (the file write precedes the DB persist).
 
 ## The Pristine-Tree Assertion (`nextwist-testkit`)
 

@@ -12,7 +12,7 @@ on:
     tags: ["v*"]
 
 # tauri-action needs write access to create/upload the GitHub Release; the default
-# GITHUB_TOKEN is read-only (RESEARCH Pitfall 5).
+# GITHUB_TOKEN is read-only.
 permissions:
   contents: write
 
@@ -24,8 +24,7 @@ jobs:
   appimage:
     name: build appimage + release (ubuntu-22.04)
     # 22.04 (not ubuntu-latest/24.04) for the glibc / WebKitGTK 4.1 runtime compatibility
-    # floor — building on a newer Ubuntu raises the floor and can break older user systems
-    # (RESEARCH Pitfall 3).
+    # floor — building on a newer Ubuntu raises the floor and can break older user systems.
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +59,7 @@ jobs:
       # any commit — including one CI never ran, or where CI is pending/failed — so the
       # release job re-runs the same test + clippy discipline here. `--locked` makes a stale
       # Cargo.lock a hard failure, guaranteeing the shipped AppImage is built from the exact
-      # dependency graph these checks validated (WR-01 / DIST-02 reproducibility).
+      # dependency graph these checks validated (build reproducibility).
       - name: cargo test --workspace (release gate)
         run: cargo test --workspace --locked
 
@@ -83,8 +82,8 @@ jobs:
 
       - name: Build AppImage + create GitHub Release
         # First-party Tauri-org action, pinned to the current release tag for
-        # reproducibility (RESEARCH Open Q1 / threat T-05-SC). One step bundles the
-        # AppImage and creates/uploads the Release.
+        # reproducibility (a floating tag would let a supply-chain change in). One step
+        # bundles the AppImage and creates/uploads the Release.
         uses: tauri-apps/tauri-action@action-v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -2,12 +2,12 @@
 /target
 **/target
 
-# Node / frontend (Plan 06)
+# Node / frontend
 **/node_modules
 frontend/.svelte-kit
 frontend/build
 
-# Tauri build dirs (Plan 06)
+# Tauri build dirs
 src-tauri/target
 src-tauri/gen
 
