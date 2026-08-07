@@ -88,6 +88,14 @@ jobs:
         uses: tauri-apps/tauri-action@action-v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # linuxdeploy bundles its own ancient binutils, whose `strip` cannot parse the
+          # `.relr.dyn` relocation section a modern glibc emits — it then fails on system
+          # libraries (libzstd, libxml2, libxkbcommon, ...) and the bundle step dies with a
+          # bare `failed to run linuxdeploy`. The ubuntu-22.04 pin above happens to avoid
+          # it today, but that pin exists for the glibc/WebKitGTK floor, not for this, so
+          # the release would break the day the runner moves. Skipping the redundant strip
+          # costs nothing: `[profile.release]` already sets `strip = true`.
+          NO_STRIP: "true"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "NexTwist ${{ github.ref_name }}"

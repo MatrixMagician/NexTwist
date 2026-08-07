@@ -37,7 +37,7 @@ pub enum LoadOrderError {
     Loot(String),
 
     /// No local AppData path could be resolved for the Proton prefix — the Linux
-    /// seam (Pitfall 1). NexTwist must ALWAYS supply the prefix AppData path via
+    /// seam. NexTwist must ALWAYS supply the prefix AppData path via
     /// `with_local_path`; this guards against an empty/unresolved prefix root.
     #[error("no local AppData path resolved for the Proton prefix: {0}")]
     NoLocalAppData(PathBuf),

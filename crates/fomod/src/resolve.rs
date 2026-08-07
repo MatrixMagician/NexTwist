@@ -66,7 +66,7 @@ impl Selection {
 }
 
 /// Validate that `selection` honors every VISIBLE group's declared selection cardinality
-/// (WR-02). Pure — reads only the parsed module + the selection.
+///. Pure — reads only the parsed module + the selection.
 ///
 /// The webview enforces these constraints for UX, but it is NOT a trust boundary: a crafted
 /// IPC selection could submit a `SelectExactlyOne` group with two options, or a
@@ -142,7 +142,7 @@ pub fn resolve(
         for step in &steps.steps {
             // A step with a `<visible>` dependency contributes its files ONLY when that
             // dependency holds against the current flags/files (FOMOD spec step visibility,
-            // WR-01). An invisible step is skipped entirely — its selected/Required options
+            // An invisible step is skipped entirely — its selected/Required options
             // must NOT reach the install plan. A step with no `<visible>` is always visible.
             if let Some(vis) = &step.visible
                 && !eval(vis, &selection.flags, &selection.files)

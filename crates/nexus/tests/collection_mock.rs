@@ -1,4 +1,4 @@
-//! mockito-backed tests for the Collection parser + availability resolver (COLL-01/02).
+//! mockito-backed tests for the Collection parser + availability resolver.
 //!
 //! The resolver is the resolve-before-download HARD GATE: it classifies every pinned mod's
 //! availability from metadata reads ONLY, before any download. These tests drive the REST v1
@@ -19,7 +19,7 @@ use nexus::resolve::{ModStatus, resolve_collection};
 
 const FIXTURE: &str = include_str!("fixtures/collection.json");
 
-/// COLL-01: the real fixture parses into the typed Collection with every Manifest-Reference
+/// The real fixture parses into the typed Collection with every Manifest-Reference
 /// field, including the IChoices FOMOD replay and the source identities.
 #[test]
 fn fixture_parses_into_typed_collection() {
@@ -41,7 +41,7 @@ fn fixture_parses_into_typed_collection() {
     assert_eq!(c.mod_rules[0].kind, ModRuleType::After);
 }
 
-/// COLL-02: resolve classifies nexus (Available/Archived/Unavailable), bundle (Available),
+/// Resolve classifies nexus (Available/Archived/Unavailable), bundle (Available),
 /// and off-Nexus direct/browse (Manual) correctly — driven by mocked v1 file-info responses.
 /// Critically, NO download_link or CDN mock is registered; if the resolver tried to download,
 /// the request would 501 (mockito's default for an unmatched route) and the assertions below
@@ -168,7 +168,7 @@ async fn resolve_classifies_every_source_type_with_zero_downloads() {
     m_download.assert_async().await; // expect(0): the zero-download gate holds.
 }
 
-/// COLL-02 / T-04-10: a metadata read goes through the rate limiter (until_ready FIRST). A 429
+/// A metadata read goes through the rate limiter (until_ready FIRST). A 429
 /// on a SHARED limiter arms a backoff visible to other clients — proving the resolver's
 /// per-mod read is gated by the same proactive limiter the download path uses.
 #[tokio::test]
@@ -219,7 +219,7 @@ async fn resolve_metadata_read_goes_through_shared_limiter() {
     );
 }
 
-/// Pitfall 4 / T-04-09: a stale modRule whose source/reference matches no resolved mod is
+/// A stale modRule whose source/reference matches no resolved mod is
 /// skipped, not fatal. Here we resolve a manifest containing only off-Nexus + bundle mods
 /// (no network calls) plus a phantom rule, and confirm resolve still succeeds with the full
 /// per-mod report — the rule simply has no resolved target.

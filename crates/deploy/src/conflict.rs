@@ -1,4 +1,4 @@
-//! Conflict resolution (CONF-01/02/03) — the pure fold that turns many enabled mods
+//! Conflict resolution — the pure fold that turns many enabled mods
 //! into a single deterministic winner-per-path deploy set.
 //!
 //! ## What this is
@@ -7,15 +7,15 @@
 //! (`target_rel`), exactly one of them must win — the game can only have one file
 //! there, and the manifest enforces `deployed_file UNIQUE(appid, target_rel)`. This
 //! module computes that winner from the user's priority order and reports every
-//! contested path so the UI can show "who wins" (CONF-01).
+//! contested path so the UI can show "who wins".
 //!
-//! ## How it decides (D-01 / CONF-02)
+//! ## How it decides
 //!
 //! Each mod carries a `rank` — **lower rank = higher priority** (1-based, top of the
 //! list). For each contested path the providers are sorted by rank ascending and the
 //! winner is `providers[0]`. Changing a mod's rank above another flips the winner.
 //!
-//! ## The contract it produces (Pitfall 3 — no duplicate `target_rel`)
+//! ## The contract it produces (no duplicate `target_rel`)
 //!
 //! [`resolve`] is a **pure in-memory fold** over the enabled mods' staged trees (its
 //! only I/O is reading those staged directory listings). It emits:
@@ -25,9 +25,9 @@
 //!   engine consumes via [`crate::deploy_winners`]. Because it is deduped to a single
 //!   winner per path, it satisfies the manifest UNIQUE constraint BEFORE any syscall.
 //! * a `Vec<FileConflict>` — one entry per CONTESTED path (providers > 1), naming all
-//!   providers and the winner (drives the CONF-01 conflict table).
+//!   providers and the winner (drives the conflict table).
 //!
-//! ## Safety (T-02-06 / Security §V5/V12)
+//! ## Safety
 //!
 //! Every winner path is asserted to lexically resolve INSIDE its own mod's staging
 //! root (defence in depth — staged trees were already zip-slip/symlink-validated at
@@ -49,7 +49,7 @@ use crate::path_guard::{guard_within_root, lexical_normalize};
 /// its staged (read-only) tree, and its priority rank.
 ///
 /// `rank` is **lower = higher priority** (1-based), matching `managed_mod.rank` and
-/// the UI's top-of-list-wins ordering (CONF-02 / D-01).
+/// the UI's top-of-list-wins ordering.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModInput {
     /// `managed_mod` row id (recorded as the winning file's owner in the manifest).
@@ -61,15 +61,15 @@ pub struct ModInput {
 }
 
 /// A single resolved winner: the deploy engine deploys this file from `staging_root`
-/// to `<deploy_root>/<rel-without-Data>`, recording `mod_id` as its owner (D-03).
+/// to `<deploy_root>/<rel-without-Data>`, recording `mod_id` as its owner.
 ///
 /// This is the per-file (root, rel) pair the **multi-root contract** (Plan 02-03
 /// decision: Option A) introduces — `StagedFiles` carries ONE `staging_root`, but
 /// multi-mod winners come from DIFFERENT roots, so the winner set is a `Vec` of these
-/// instead. `engine::deploy`/`StagedFiles` are left UNCHANGED for Phase-1 callers.
+/// instead. `engine::deploy`/`StagedFiles` are left UNCHANGED for single-root callers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WinnerFile {
-    /// The winning mod's row id — recorded as `FileEntry.source_mod` (D-03).
+    /// The winning mod's row id — recorded as `FileEntry.source_mod`.
     pub mod_id: i64,
     /// The winning mod's staging root.
     pub staging_root: PathBuf,
@@ -83,8 +83,8 @@ pub struct WinnerFile {
 /// Pure fold (the only I/O is walking each mod's staged tree). For each
 /// deploy-root-relative path provided by 1+ mods, the winner is the lowest-rank (=
 /// highest-priority) provider; the output `Vec<WinnerFile>` has exactly one entry per
-/// path (Pitfall 3 — UNIQUE-safe), and a [`FileConflict`] is emitted only for paths
-/// with more than one provider (CONF-01).
+/// path (UNIQUE-safe), and a [`FileConflict`] is emitted only for paths
+/// with more than one provider.
 ///
 /// Iteration/output order is deterministic (a `BTreeMap` keyed by `target_rel`), so a
 /// given mod set always produces the same winner set + conflict list.
@@ -92,7 +92,7 @@ pub struct WinnerFile {
 /// # Errors
 ///
 /// [`DeployError::PathEscape`] if any winner's relpath lexically escapes its mod's
-/// staging root (T-02-06); [`DeployError::Io`] if a staged tree cannot be walked.
+/// staging root; [`DeployError::Io`] if a staged tree cannot be walked.
 pub fn resolve(mods: &[ModInput]) -> Result<(Vec<WinnerFile>, Vec<FileConflict>), DeployError> {
     // target_rel -> providers, each (rank, mod_id, staging_root). The OUTER map is a
     // BTreeMap so winners/conflicts come out in a stable, path-sorted order.
@@ -116,7 +116,7 @@ pub fn resolve(mods: &[ModInput]) -> Result<(Vec<WinnerFile>, Vec<FileConflict>)
         providers.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
         let (_rank, winner_mod, winner_root) = providers[0].clone();
 
-        // T-02-06: the winning relpath must resolve inside its own staging root.
+        // The winning relpath must resolve inside its own staging root.
         let abs = winner_root.join(&target_rel);
         guard_within_root(&winner_root, &abs)?;
 
@@ -183,7 +183,7 @@ mod tests {
 
     /// Two mods both provide Data/shared.esp: the lower-rank mod wins, the output has
     /// exactly ONE entry for that path, and a FileConflict lists both providers with
-    /// the lower-rank mod as winner (CONF-01/CONF-02).
+    /// the lower-rank mod as winner.
     #[test]
     fn lower_rank_wins_shared_path() {
         let dir = TempDir::new().unwrap();
@@ -274,7 +274,7 @@ mod tests {
         assert_eq!(winners.len(), 3);
     }
 
-    /// Raising the winning mod's rank above the other flips the winner (CONF-02).
+    /// Raising the winning mod's rank above the other flips the winner.
     #[test]
     fn rank_change_flips_winner() {
         let dir = TempDir::new().unwrap();
@@ -326,7 +326,7 @@ mod tests {
         );
     }
 
-    /// Pitfall 3 (mandatory): resolve NEVER emits two entries for the same target_rel,
+    /// Resolve NEVER emits two entries for the same target_rel,
     /// even with three mods all contending for the same path plus overlaps.
     #[test]
     fn never_emits_duplicate_target_rel() {

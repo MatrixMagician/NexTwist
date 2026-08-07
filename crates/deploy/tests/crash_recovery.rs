@@ -1,4 +1,4 @@
-//! crash_recovery (DEPLOY-06) — THE CENTERPIECE.
+//! crash_recovery — THE CENTERPIECE.
 //!
 //! Simulate a kill mid-deploy: drive `deploy_with_abort` so the engine commits the
 //! `pending` journal rows and places files on disk, but aborts BEFORE writing the

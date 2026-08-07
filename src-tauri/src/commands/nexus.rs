@@ -1,7 +1,7 @@
 //! NexusMods auth command adapters — thin IPC boundary over the headless `crates/nexus`
 //! client + the shell keyring / OAuth orchestration.
 //!
-//! Per the Anti-Pattern-4 contract (see `commands/mod.rs`): each command locks the
+//! Per the thin-adapter contract (see `commands/mod.rs`): each command locks the
 //! shared state, calls one headless/keyring/auth function, maps the error to a `String`,
 //! and returns. No HTTP, no file loops, no business logic here. A token or key is NEVER
 //! returned to the UI — only a `UserInfo`.
@@ -16,12 +16,12 @@ use crate::commands::{appid_for_domain, boundary_err};
 use crate::keyring;
 use crate::state::{AppState, OAUTH_REDIRECT};
 
-/// Process-monotonic nonce for `nxm://` download row ids (WR-06). Guarantees a unique id
+/// Process-monotonic nonce for `nxm://` download row ids. Guarantees a unique id
 /// per arrival even for repeated links to the same mod+file, so two concurrent arrivals
 /// never collide on the cancel-flag key or the temp archive path.
 static NXM_DOWNLOAD_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// The `nxm://` arrival toast payload (UI-SPEC §C.1). Emitted on `nxm://arrival` so the UI
+/// The `nxm://` arrival toast payload. Emitted on `nxm://arrival` so the UI
 /// can show the non-blocking "Download started from NexusMods" Success toast and seed a row.
 ///
 /// Carries NO secret — only the UI download id plus the **non-secret** download coordinates
@@ -43,7 +43,7 @@ struct NxmArrival {
     file_id: u64,
 }
 
-/// The `nxm://` expired/invalid-link payload (UI-SPEC §C.3). Emitted on `nxm://expired`
+/// The `nxm://` expired/invalid-link payload. Emitted on `nxm://expired`
 /// so the UI shows the Warning notice instead of a stuck Failed row. Carries no secret.
 #[derive(Debug, Clone, Serialize)]
 struct NxmExpired {
@@ -52,8 +52,8 @@ struct NxmExpired {
 }
 
 /// Log in with a manual NexusMods personal API key (the works-today fallback while OAuth
-/// client registration is pending — NEXUS-01). Validates the key against the live API,
-/// stores it in the keyring (NEXUS-02), caches the `UserInfo`, and returns it. The key
+/// client registration is pending). Validates the key against the live API,
+/// stores it in the keyring, caches the `UserInfo`, and returns it. The key
 /// itself never crosses back to the UI.
 #[tauri::command]
 pub async fn login_with_api_key(
@@ -65,7 +65,7 @@ pub async fn login_with_api_key(
         .await
         .map_err(boundary_err)?;
 
-    // Persist ONLY through the keyring (NEXUS-02 hard-fail-no-plaintext). If no backend,
+    // Persist ONLY through the keyring (hard-fail, never plaintext). If no backend,
     // this surfaces the NoKeyringBackend string the UI keys its destructive banner on.
     keyring::store_refresh_token(&key).map_err(boundary_err)?;
 
@@ -78,7 +78,7 @@ pub async fn login_with_api_key(
 
 /// Begin the OAuth2+PKCE login: build the authorize URL (headless), stash the CSRF +
 /// PKCE verifier in memory, and open the system browser. The `nxm://oauth/callback`
-/// code is delivered by the Plan-03 deep-link handler, which calls `auth::complete_oauth`.
+/// code is delivered by the deep-link handler, which calls `auth::complete_oauth`.
 /// Returns the authorize URL (also opened in the browser) so the UI can show a fallback link.
 #[tauri::command]
 pub async fn login_oauth_start(state: State<'_, Mutex<AppState>>) -> Result<String, String> {
@@ -87,7 +87,7 @@ pub async fn login_oauth_start(state: State<'_, Mutex<AppState>>) -> Result<Stri
         guard.oauth_client_id.clone()
     };
     if client_id.is_empty() {
-        // No registered client yet (RESEARCH Pitfall 3) — steer the UI to the key fallback.
+        // No registered client yet — steer the UI to the key fallback.
         return Err(
             "OAuth login is not yet available (no registered client). Use an API key instead."
                 .to_string(),
@@ -109,7 +109,7 @@ pub async fn login_oauth_start(state: State<'_, Mutex<AppState>>) -> Result<Stri
 }
 
 /// Log out: clear the keyring entry and the in-memory access token + cached user
-/// (NEXUS-01 / D-Auth). Idempotent — clearing when already logged out succeeds.
+/// Idempotent — clearing when already logged out succeeds.
 #[tauri::command]
 pub async fn logout(state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     keyring::clear_refresh_token().map_err(boundary_err)?;
@@ -123,11 +123,11 @@ pub async fn logout(state: State<'_, Mutex<AppState>>) -> Result<(), String> {
 /// Return the currently logged-in user, or `None` if logged out. The UI uses this to
 /// render the logged-in vs logged-out panel on load.
 ///
-/// WR-07: on the FIRST call after launch, if there is no in-memory session we restore one
+/// On the FIRST call after launch, if there is no in-memory session we restore one
 /// from the keyring — load the persisted credential and re-validate it as an API key,
 /// caching the resulting `UserInfo` so a stored login survives a restart (previously the
 /// keyring entry was write-only and the user appeared logged out every cold start). This
-/// honours NEXUS-02 (keyring-only, no plaintext): the credential never leaves the keyring
+/// is keyring-only, never plaintext: the credential never leaves the keyring
 /// path, only the `UserInfo` is cached. A keyring no-backend / missing-entry / invalid-key
 /// outcome simply leaves the session logged-out here — the explicit login path owns the
 /// destructive no-keyring banner.
@@ -173,11 +173,11 @@ pub async fn account_info(
     Ok(guard.user.clone())
 }
 
-/// Route one incoming `nxm://` URL (NXM-01 / NEXUS-04) — the deep-link handler's only job.
+/// Route one incoming `nxm://` URL — the deep-link handler's only job.
 ///
 /// This is a THIN router: ALL parsing lives in the headless `nexus::NxmLink::parse`, ALL
-/// download logic lives in Plan-02's `run_download_to_window`, and the OAuth code-exchange
-/// lives in Plan-01's `auth::complete_oauth`. Here we only parse, discriminate, and dispatch.
+/// download logic lives in `run_download_to_window`, and the OAuth code-exchange
+/// lives in `auth::complete_oauth`. Here we only parse, discriminate, and dispatch.
 ///
 /// SECURITY (V5/V7): the URL is untrusted OS input. We never shell out, never interpolate
 /// link content into a command, and never log the url/key/expires/code — only a coarse,
@@ -190,7 +190,7 @@ pub fn handle_nxm_url(app: &tauri::AppHandle, url: &str) {
         Ok(NxmLinkKind::Download(link)) => route_download(app, link),
         Ok(NxmLinkKind::OAuthCallback { code, state }) => route_oauth_callback(app, code, state),
         Err(_e) => {
-            // A malformed/spoofed/expired link → the UI Warning (UI-SPEC §C.3), not a
+            // A malformed/spoofed/expired link → the UI Warning, not a
             // stuck Failed row. We do NOT log `_e` (it could echo link content — V7).
             emit_expired(
                 app,
@@ -200,7 +200,7 @@ pub fn handle_nxm_url(app: &tauri::AppHandle, url: &str) {
     }
 }
 
-/// Dispatch a download `nxm://` link to the shared Plan-02 download core.
+/// Dispatch a download `nxm://` link to the shared download core.
 fn route_download(app: &tauri::AppHandle, link: NxmLink) {
     let Some(appid) = appid_for_domain(&link.game_domain) else {
         // Unknown/unmanaged game domain — surface the Warning rather than guess an AppID.
@@ -211,7 +211,7 @@ fn route_download(app: &tauri::AppHandle, link: NxmLink) {
         return;
     };
 
-    // A fresh, UNIQUE-per-arrival UI row id (WR-06). The arrival toast + the new downloads
+    // A fresh, UNIQUE-per-arrival UI row id. The arrival toast + the new downloads
     // row both key off it, and `AppState.downloads` keys its cancel flag off it. A
     // deterministic `nxm-<mod>-<file>` id let a re-fired link (a common double-click /
     // browser re-fire) collide: the second insert overwrote the first cancel flag, so a
@@ -222,7 +222,7 @@ fn route_download(app: &tauri::AppHandle, link: NxmLink) {
     let nonce = NXM_DOWNLOAD_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let id = format!("nxm-{}-{}-{}", link.mod_id, link.file_id, nonce);
 
-    // Confirm the arrival immediately (UI-SPEC §C.1) — the row then streams via events. The
+    // Confirm the arrival immediately — the row then streams via events. The
     // payload carries the non-secret coordinates (domain/mod/file) so a later Retry of this
     // row can re-issue a premium download; the key/expires secrets are NEVER emitted.
     let _ = app.emit(
@@ -241,7 +241,7 @@ fn route_download(app: &tauri::AppHandle, link: NxmLink) {
             return;
         };
         let state = app.state::<Mutex<AppState>>();
-        // Reuse the EXACT Plan-02 stream→extract→stage flow (NEXUS-04 free-user redemption):
+        // Reuse the EXACT stream→extract→stage flow (free-user redemption):
         // the parsed key/expires are passed straight through, never interpreted here.
         let _ = crate::commands::downloads::run_download_to_window(
             &state,
@@ -260,7 +260,7 @@ fn route_download(app: &tauri::AppHandle, link: NxmLink) {
     });
 }
 
-/// Dispatch an `nxm://oauth/callback` to the Plan-01 OAuth code-exchange, closing the loop.
+/// Dispatch an `nxm://oauth/callback` to the OAuth code-exchange, closing the loop.
 fn route_oauth_callback(app: &tauri::AppHandle, code: String, state_param: String) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -274,7 +274,7 @@ fn route_oauth_callback(app: &tauri::AppHandle, code: String, state_param: Strin
             // No login in progress — ignore a stray callback (defensive; never logged).
             return;
         };
-        // `complete_oauth` validates state == csrf (T-03-13) before exchanging the code,
+        // `complete_oauth` validates state == csrf before exchanging the code,
         // and stores the refresh token in the keyring. We never log code/state (V7).
         match auth::complete_oauth(&client_id, OAUTH_REDIRECT, &pending, &code, &state_param).await
         {
@@ -294,7 +294,7 @@ fn route_oauth_callback(app: &tauri::AppHandle, code: String, state_param: Strin
     });
 }
 
-/// Emit the secret-free expired/invalid-link Warning to the main window (UI-SPEC §C.3).
+/// Emit the secret-free expired/invalid-link Warning to the main window.
 fn emit_expired(app: &tauri::AppHandle, reason: &str) {
     let _ = app.emit(
         "nxm://expired",

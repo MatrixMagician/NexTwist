@@ -4,7 +4,7 @@
 //! fields of the NexusMods REST v1 / OAuth responses; richer mod/file metadata DTOs
 //! land in Plan 02. Naming follows the `core::model` round-trip convention.
 //!
-//! SECURITY (NEXUS-02): [`OAuthTokens`] is an **in-memory** carrier. The short-lived
+//! SECURITY: [`OAuthTokens`] is an **in-memory** carrier. The short-lived
 //! `access` token never touches disk; only the long-lived `refresh` string is handed
 //! to the shell to store in the OS keyring. There is deliberately NO code path here
 //! (or anywhere in this crate) that serialises an [`OAuthTokens`] to a file — the
@@ -75,16 +75,16 @@ pub struct ModFile {
     pub display_name: String,
 }
 
-/// A parsed `nxm://` download link (NXM-01 / NEXUS-04).
+/// A parsed `nxm://` download link.
 ///
-/// Shape (RESEARCH Pattern 5):
+/// Shape:
 /// `nxm://<game_domain>/mods/<mod_id>/files/<file_id>?key=<k>&expires=<ts>&user_id=<u>`.
 ///
 /// `mod_id`/`file_id` are validated as `u64` by the parser — a [`NxmLink`] can only exist
 /// with numeric ids. `key`/`expires` are present **only for free-user** "Mod Manager
 /// Download" links; a Premium link omits both. They are carried as **opaque strings** and
 /// are NEVER interpreted, logged, shelled out, or string-interpolated into a command — they
-/// are passed straight to the Plan-02 `download_link` redemption (Security Domain V5).
+/// are passed straight to the `download_link` redemption.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NxmLink {
     /// The NexusMods game domain (the URL host), e.g. `skyrimspecialedition`.
@@ -104,7 +104,7 @@ pub struct NxmLink {
 /// What an `nxm://` link routes to: a download or the OAuth callback.
 ///
 /// The shell's `on_open_url` handler matches on this to decide whether to drive the
-/// Plan-01 OAuth code-exchange or a Plan-02 download — the discrimination is made HERE in
+/// An OAuth code-exchange or a download — the discrimination is made HERE in
 /// the headless crate so the shell stays a thin router.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NxmLinkKind {
@@ -124,7 +124,7 @@ impl NxmLink {
     ///
     /// This is a **security boundary**: the input is an untrusted URL handed to the app by
     /// the OS deep-link handler (a malicious/​spoofed link is the primary new attack surface,
-    /// threat T-03-12). The parser therefore:
+    /// The parser therefore:
     /// - requires the scheme to be **exactly** `nxm` (case-insensitive per RFC 3986);
     /// - discriminates the `oauth/callback` authority from a download authority;
     /// - for a download, requires the path to be exactly `/mods/<mod_id>/files/<file_id>`
@@ -207,12 +207,12 @@ impl NxmLink {
 
 /// Look up a query-string parameter by name and percent-decode its value.
 ///
-/// A tiny dependency-free query reader (mirrors Plan-02's local percent-encoder decision
+/// A tiny dependency-free query reader (a local percent-encoder decision
 /// — the workspace `reqwest` stays on its minimal rustls-only feature set, and no
 /// `url`/`serde_urlencoded` dep is added). Returns the first match. The decoded value is
 /// treated as opaque by every caller.
 ///
-/// WR-04: every value this reads (`key`/`expires`/`user_id`/`code`/`state`) is an
+/// Every value this reads (`key`/`expires`/`user_id`/`code`/`state`) is an
 /// **opaque** token, NOT a `application/x-www-form-urlencoded` form field. OAuth
 /// `code`/`state` (and base64url-adjacent keys) legitimately contain a literal `+`, so we
 /// use **raw** RFC-3986 percent-decoding that does NOT apply the form `+`→space rule — a
@@ -229,7 +229,7 @@ fn query_get(query: &str, name: &str) -> Option<String> {
 /// Minimal RFC-3986 percent-decoder for **opaque** query values.
 ///
 /// Unlike `application/x-www-form-urlencoded` decoding, this does NOT translate `+` into a
-/// space: the only callers here are opaque OAuth/redemption tokens (WR-04), which may
+/// space: the only callers here are opaque OAuth/redemption tokens, which may
 /// contain a literal `+` (base64url-adjacent). A `+` is therefore passed through
 /// untouched. Invalid `%XX` sequences are passed through literally rather than panicking
 /// (defensive: untrusted input must never crash the handler).
@@ -266,7 +266,7 @@ fn percent_decode(s: &str) -> String {
 mod tests {
     use super::*;
 
-    /// WR-04: a literal `+` in an OAuth `code`/`state` (or an opaque key) must be
+    /// A literal `+` in an OAuth `code`/`state` (or an opaque key) must be
     /// preserved, NOT decoded to a space — these are not form fields. A `+`→space here
     /// produced spurious CSRF mismatches and bad code exchanges.
     #[test]
@@ -279,7 +279,7 @@ mod tests {
         assert_eq!(percent_decode("100%"), "100%");
     }
 
-    /// WR-04 at the query layer: an oauth callback whose `code`/`state` contain `+`
+    /// At the query layer: an oauth callback whose `code`/`state` contain `+`
     /// round-trips through `query_get` with the `+` intact (no CSRF-breaking mangling).
     #[test]
     fn oauth_callback_preserves_plus_in_code_and_state() {

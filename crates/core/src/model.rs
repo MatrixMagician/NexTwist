@@ -29,7 +29,7 @@ pub struct Game {
     pub staging_dir: PathBuf,
 }
 
-/// A single mod managed for a game. Phase 2 makes the store multi-mod: many
+/// A single mod managed for a game. The store is multi-mod: many
 /// `ManagedMod` rows coexist per game, ordered by `rank` for conflict resolution.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManagedMod {
@@ -41,11 +41,11 @@ pub struct ManagedMod {
     pub staging_root: PathBuf,
     /// Whether the mod is currently enabled (deployed).
     pub enabled: bool,
-    /// Deployment rank — LOWER rank = HIGHER priority = wins a file conflict; 1-based. D-01.
+    /// Deployment rank — LOWER rank = HIGHER priority = wins a file conflict; 1-based.
     pub rank: u32,
 }
 
-/// A profile: a lightweight reference set over the shared staging store (D-13/D-14).
+/// A profile: a lightweight reference set over the shared staging store.
 ///
 /// A profile does NOT own mod files — it records which mods are enabled and at what
 /// rank for a given game, plus its own plugin enable/order state. Many profiles for
@@ -63,11 +63,11 @@ pub struct Profile {
     pub active: bool,
 }
 
-/// NexusMods provenance for a managed mod that was acquired in-app (NEXUS-03/06).
+/// NexusMods provenance for a managed mod that was acquired in-app.
 ///
 /// Recorded additively (V4 migration) against the mod's `managed_mod` row so a
 /// Nexus-sourced mod is otherwise indistinguishable from a local-archive mod — it still
-/// deploys/purges through the Phase-1/2 engine. `mod_id` is the local `managed_mod` row
+/// deploys/purges through the deploy engine. `mod_id` is the local `managed_mod` row
 /// id; `nexus_mod_id`/`file_id` identify the file on NexusMods; `version`/`display_name`
 /// come from the GraphQL v2 metadata read. The FK CASCADEs, so deleting the mod sheds
 /// this row.
@@ -85,12 +85,12 @@ pub struct NexusSource {
     pub display_name: String,
 }
 
-/// A NexusMods Collection revision pinned for a game (COLL-01).
+/// A NexusMods Collection revision pinned for a game.
 ///
 /// A Collection is parsed from its revision manifest (`collection.json`) and persisted
 /// additively (V5 migration). `(appid, slug, revision)` identify the exact revision and
 /// form the idempotent upsert key. `profile_id` is `None` until the Collection is
-/// materialised into its dedicated Phase-2 profile (Plan 04); deploying a Collection is a
+/// materialised into its dedicated profile; deploying a Collection is a
 /// profile switch, never a new primitive. The `id` field is assigned by the store.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Collection {
@@ -104,11 +104,11 @@ pub struct Collection {
     pub revision: u32,
     /// Human-readable Collection name (from the manifest `info.name`).
     pub name: String,
-    /// The dedicated Phase-2 profile this Collection deploys into, once materialised.
+    /// The dedicated profile this Collection deploys into, once materialised.
     pub profile_id: Option<i64>,
 }
 
-/// One pinned mod inside a Collection (COLL-02).
+/// One pinned mod inside a Collection.
 ///
 /// Carries the Nexus source identity (`nexus_mod_id`/`file_id`/`md5`), the install
 /// `phase` (0-based ordering), the conflict `rank` (lower = higher priority, derived
@@ -135,7 +135,7 @@ pub struct CollectionMod {
 }
 
 /// The kind of a Bethesda plugin master/light/regular file, used to group masters
-/// ahead of regular plugins when sorting load order (D-08).
+/// ahead of regular plugins when sorting load order.
 ///
 /// `Esm` (`.esm`) and `Esl` (ESL-flagged / `.esl`) form the *master group* that sorts
 /// ahead of `Esp` regular plugins. The lowercase token is the stable DB persistence form.
@@ -171,10 +171,10 @@ impl PluginKind {
     }
 }
 
-/// Per-profile plugin enable + load-order state (D-07/D-13).
+/// Per-profile plugin enable + load-order state.
 ///
 /// One row per plugin known to a profile: whether it is enabled and its position in
-/// the load order. The actual ordering is computed by LOOT (Plan 04); this is the
+/// the load order. The actual ordering is computed by LOOT; this is the
 /// persisted, per-profile result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Plugin {
@@ -188,11 +188,11 @@ pub struct Plugin {
     pub order: u32,
 }
 
-/// A file-level conflict: many mods provide the same deploy-relative path (CONF-01).
+/// A file-level conflict: many mods provide the same deploy-relative path.
 ///
 /// `providers` and `winner` are `ManagedMod` row ids. `winner` is the provider whose
-/// file is actually deployed (lowest rank wins, D-01); it is recorded in the deploy
-/// manifest so purge stays pristine (D-03).
+/// file is actually deployed (lowest rank wins); it is recorded in the deploy
+/// manifest so purge stays pristine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileConflict {
     /// Deploy-root-relative path multiple mods contend for.
@@ -225,7 +225,7 @@ pub struct FileEntry {
 /// The per-target filesystem primitive used to place a file.
 ///
 /// Chosen per (staging, target) pair at deploy time via an empirical capability
-/// probe (Plan 04), never globally — btrfs returns EXDEV across subvolumes even on
+/// probe, never globally — btrfs returns EXDEV across subvolumes even on
 /// the same disk, so the ladder degrades reflink → hardlink → symlink → copy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

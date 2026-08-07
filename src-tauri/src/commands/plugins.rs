@@ -1,4 +1,4 @@
-//! Plugin / LOOT adapters (PLUGIN-01/02/03) — delegate to the headless `loadorder` crate.
+//! Plugin / LOOT adapters — delegate to the headless `loadorder` crate.
 //!
 //! Zero safety/format logic lives here: `loadorder` owns the scan, the asterisk
 //! plugins.txt write, the masterlist fetch, and the LOOT sort (all via libloot). These
@@ -7,8 +7,8 @@
 //! the IPC boundary.
 //!
 //! The active-state/order source of truth is the per-profile `plugin_state` store table
-//! (D-07/D-13); `plugins.txt` in the Proton prefix is DERIVED from it (regenerable; not
-//! the pristine invariant — RESEARCH OQ3). `list_plugins` MERGES the on-disk scan
+//!`plugins.txt` in the Proton prefix is DERIVED from it (regenerable; not
+//! the pristine invariant). `list_plugins` MERGES the on-disk scan
 //! (filenames + ESM/ESL/ESP badges) with the stored enable/order per profile.
 
 use nextwist_core::{Game, Plugin};
@@ -19,7 +19,7 @@ use tokio::sync::{Mutex, MutexGuard};
 use crate::commands::{boundary_err, require_game};
 use crate::state::AppState;
 
-/// Build the merged plugin view for a game using an ALREADY-HELD state guard (WR-03).
+/// Build the merged plugin view for a game using an ALREADY-HELD state guard.
 ///
 /// Identical merge to [`merged_plugins`] but it performs every store read (active profile,
 /// scan roots, stored state) and the on-disk scan under the SAME lock the caller holds, so
@@ -45,8 +45,8 @@ fn merged_plugins_locked(
         .map(|m| m.staging_root)
         .collect();
     let data_dir = game.install_dir.join("Data");
-    // SFLO-03: scan into the richer PluginView so each row carries `medium` from the header.
-    let mut merged =
+    // Scan into the richer PluginView so each row carries `medium` from the header.
+    let merged =
         loadorder::scan_plugin_views_for(game_id, &roots, &data_dir).map_err(boundary_err)?;
 
     let profile_id = guard
@@ -60,32 +60,19 @@ fn merged_plugins_locked(
         .list_plugin_state(profile_id)
         .map_err(boundary_err)?;
 
-    // Merge the per-profile enable/order onto the scanned view (match by name).
-    for view in &mut merged {
-        if let Some(s) = stored.iter().find(|s| s.name == view.name) {
-            view.enabled = s.enabled;
-            view.order = s.order;
-        }
-    }
-
-    // SFLO-03 protected: fill each view's `protected` from the LIVE libloot probe. This is the
-    // engine's authority — the adapter only supplies the paths + enabled-name set (no name
-    // literals). Computed for every supported game (SSE/FO4 base masters are implicitly active
-    // too). Degrade gracefully: a probe Err (unresolvable prefix / libloot open failure) is
-    // LOGGED and the protected set treated as EMPTY — v1.0 `list_plugins` succeeded from
-    // scan+store alone, so a probe failure must never break the list view (no SSE/FO4 regression).
-    let enabled_names: std::collections::HashSet<String> = merged
-        .iter()
-        .filter(|v| v.enabled)
-        .map(|v| v.name.clone())
-        .collect();
-    let protected = protected_set(&game, appid, &enabled_names);
-    for view in &mut merged {
-        view.protected = protected.contains(&view.name);
-    }
-
-    merged.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.name.cmp(&b.name)));
-    Ok(merged)
+    // Protected masters: the LIVE libloot probe is the engine's authority — the adapter only
+    // supplies the paths + enabled-name set (no name literals). Computed for every supported
+    // game (SSE/FO4 base masters are implicitly active too). Degrade gracefully: a probe Err
+    // (unresolvable prefix / libloot open failure) is LOGGED and the protected set treated as
+    // EMPTY — v1.0 `list_plugins` succeeded from scan+store alone, so a probe failure must
+    // never break the list view (no SSE/FO4 regression).
+    //
+    // The merge rules themselves are the engine's (pure + unit-tested); this adapter only
+    // gathers the inputs and sequences the two phases the probe forces: settle `enabled`
+    // from the store first, because the probe needs the post-merge enabled set, then stamp.
+    let settled = loadorder::merge_plugin_state(merged, &stored);
+    let protected = protected_set(&game, appid, &loadorder::enabled_names(&settled));
+    Ok(loadorder::stamp_protected(settled, &protected))
 }
 
 /// Compute the implicitly-active protected-master set from the live libloot probe, degrading
@@ -136,14 +123,14 @@ async fn merged_plugins(
     state: &State<'_, Mutex<AppState>>,
     appid: u32,
 ) -> Result<Vec<loadorder::PluginView>, String> {
-    // WR-03: acquire the state lock once and build the entire merged view (all store reads
+    // Acquire the state lock once and build the entire merged view (all store reads
     // + the scan) under it, so the scan and the stored-state read it is merged with are a
     // consistent snapshot rather than two separately-locked reads with a scan between.
     let guard = state.lock().await;
     merged_plugins_locked(&guard, appid)
 }
 
-/// List a game's plugins (PLUGIN-01 discovery): the enabled mods' + game `Data/` plugins,
+/// List a game's plugins: the enabled mods' + game `Data/` plugins,
 /// ESM/ESL/ESP-badged, merged with the active profile's stored enable/order.
 #[tauri::command]
 pub async fn list_plugins(
@@ -153,7 +140,7 @@ pub async fn list_plugins(
     merged_plugins(&state, appid).await
 }
 
-/// Enable/disable a single plugin (PLUGIN-01). Persists to the active profile's
+/// Enable/disable a single plugin. Persists to the active profile's
 /// `plugin_state` only — writing `plugins.txt` happens on `save_plugin_order` (the UI sends
 /// the full desired list there). The plugin's kind/order are taken from the current merged
 /// list so the stored row stays consistent with the scan.
@@ -164,7 +151,7 @@ pub async fn set_plugin_enabled(
     name: String,
     enabled: bool,
 ) -> Result<(), String> {
-    // WR-03: hold the state lock for the WHOLE read-modify-write (resolve active profile,
+    // Hold the state lock for the WHOLE read-modify-write (resolve active profile,
     // build the merged view, toggle, persist) so the row written cannot be stale relative
     // to a concurrent plugin op. The on-disk scan inside the merge runs under the lock too
     // — on a single-user desktop app the brief extra hold is worth the atomicity.
@@ -194,16 +181,15 @@ pub async fn set_plugin_enabled(
         .map_err(boundary_err)
 }
 
-/// Persist a plugin load order (PLUGIN-02) and write the asterisk `plugins.txt` at the
+/// Persist a plugin load order and write the asterisk `plugins.txt` at the
 /// Proton-prefix AppData location via libloot (masters-first enforced internally).
 ///
 /// `order` is the full desired plugin list (name/kind/enabled/order) in the user's chosen
 /// order; the index in the vector becomes the stored order. Writes `plugins.txt` FIRST,
 /// then persists every row to `plugin_state` only after the file write succeeds. On a
-/// write failure the libloot reason is surfaced verbatim for the UI-SPEC plugins.txt error
-/// copy.
+/// write failure the libloot reason is surfaced verbatim for the plugins.txt error copy.
 ///
-/// WR-05: the file write precedes the DB persist so a libloot/IO failure leaves the DB
+/// The file write precedes the DB persist so a libloot/IO failure leaves the DB
 /// UNTOUCHED — matching the user's "nothing was saved" mental model when the command
 /// returns an error. (Writing the DB first would record the new order while the on-disk
 /// `plugins.txt` was never written, leaving the persisted state and the prefix disagreeing
@@ -218,12 +204,12 @@ pub async fn save_plugin_order(
     let profile_id = active_profile_id(&state, appid).await?;
 
     // Persist under one held lock for a consistent snapshot; the write-before-persist
-    // ordering (WR-05) lives in the synchronous core so it is unit-testable.
+    // ordering lives in the synchronous core so it is unit-testable.
     let guard = state.lock().await;
     save_plugin_order_inner(&guard.store, &game, profile_id, &order)
 }
 
-/// Synchronous core of [`save_plugin_order`] (WR-05): write the asterisk `plugins.txt` at
+/// Synchronous core of [`save_plugin_order`]: write the asterisk `plugins.txt` at
 /// the Proton-prefix AppData location FIRST, then persist every plugin row to the profile's
 /// `plugin_state` only after the file write succeeds.
 ///
@@ -239,8 +225,8 @@ fn save_plugin_order_inner(
     profile_id: i64,
     order: &[Plugin],
 ) -> Result<std::path::PathBuf, String> {
-    // 1. Write plugins.txt at the prefix AppData via libloot (masters-first; D-08). Doing
-    //    this FIRST means a failure here leaves the DB untouched (WR-05: nothing saved).
+    // 1. Write plugins.txt at the prefix AppData via libloot (masters-first). Doing
+    //    this FIRST means a failure here leaves the DB untouched (nothing saved).
     let folder = loadorder::appdata_folder_name(game.appid)
         .ok_or_else(|| format!("game {} is not supported", game.appid))?;
     let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
@@ -264,7 +250,7 @@ fn save_plugin_order_inner(
     Ok(written)
 }
 
-/// Propose a LOOT-sorted order (PLUGIN-03, D-12) — returns the proposed order + critical
+/// Propose a LOOT-sorted order — returns the proposed order + critical
 /// warnings WITHOUT writing. The UI reviews it and calls `save_plugin_order` only on
 /// confirm (no silent apply).
 #[tauri::command]
@@ -278,12 +264,7 @@ pub async fn sort_with_loot(
     let plugins: Vec<Plugin> = merged_plugins(&state, appid)
         .await?
         .into_iter()
-        .map(|v| Plugin {
-            name: v.name,
-            kind: v.kind,
-            enabled: v.enabled,
-            order: v.order,
-        })
+        .map(loadorder::view_to_plugin)
         .collect();
     let folder = loadorder::appdata_folder_name(appid)
         .ok_or_else(|| format!("game {appid} is not supported"))?;
@@ -303,7 +284,7 @@ pub async fn sort_with_loot(
     .map_err(boundary_err)
 }
 
-/// Reconcile the on-disk `plugins.txt` against the recorded plugin state (SFLO-04).
+/// Reconcile the on-disk `plugins.txt` against the recorded plugin state.
 ///
 /// Thin adapter: under one held lock it resolves the managed game + active profile, reads the
 /// recorded per-profile plugin state, reads the on-disk asterisk `plugins.txt` from the prefix
@@ -312,8 +293,7 @@ pub async fn sort_with_loot(
 /// call to `loadorder::reconcile_plugins_txt`. All classification lives in the engine.
 ///
 /// `deploy::verify` / `VerifyReport` is a SEPARATE surface and is deliberately untouched:
-/// `plugins.txt` lives in the prefix AppData, never seen by the `Data/`-hash verify walk
-/// (07-RESEARCH Pitfall 4).
+/// `plugins.txt` lives in the prefix AppData, never seen by the `Data/`-hash verify walk.
 ///
 /// `protected_plugins` opens a libloot game but does no blocking HTTP (unlike `sort_with_loot`'s
 /// masterlist fetch), so — like `save_plugin_order` — it is called directly under the lock.
@@ -344,24 +324,21 @@ pub async fn reconcile_plugins(
     let appdata_local = loadorder::appdata_local_path(&game.prefix, folder);
 
     // An absent Plugins.txt is treated as empty (never-launched game reconciles cleanly), NOT
-    // an error; any other read error is a real boundary error.
-    let on_disk_txt = match std::fs::read_to_string(appdata_local.join("Plugins.txt")) {
-        Ok(txt) => txt,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(boundary_err(e)),
-    };
+    // an error; any other read error is a real boundary error. The filename is libloot's
+    // contract, so the engine owns it (`read_plugins_txt`).
+    let on_disk_txt = loadorder::read_plugins_txt(&appdata_local).map_err(boundary_err)?;
 
     // Protected set from the live libloot probe (data-driven EXPECTED set); enabled_names =
-    // the recorded state's enabled plugins (what NexTwist itself writes as `*` lines). IN-02:
+    // the recorded state's enabled plugins (what NexTwist itself writes as `*` lines).
     // degrade gracefully via the same `protected_set` helper `list_plugins` uses — a probe
     // failure (unresolvable prefix / libloot hiccup) logs and treats protected as EMPTY rather
     // than hard-failing this advisory reconciliation surface with a scary error toast.
-    let enabled_names: std::collections::HashSet<String> = recorded
+    let enabled: std::collections::HashSet<String> = recorded
         .iter()
         .filter(|p| p.enabled)
         .map(|p| p.name.clone())
         .collect();
-    let protected = protected_set(&game, appid, &enabled_names);
+    let protected = protected_set(&game, appid, &enabled);
 
     Ok(loadorder::reconcile_plugins_txt(
         &recorded,
@@ -376,7 +353,7 @@ mod tests {
     use nextwist_core::PluginKind;
     use std::fs;
 
-    /// WR-05 (failure-injection): if the `plugins.txt` write fails, the DB `plugin_state`
+    /// If the `plugins.txt` write fails, the DB `plugin_state`
     /// is left UNTOUCHED — the write-before-persist ordering holds even on the error path.
     ///
     /// This is the failure path the code-fixer flagged as reasoned-through but not directly
@@ -428,7 +405,7 @@ mod tests {
         );
         assert!(
             store.list_plugin_state(profile_id).unwrap().is_empty(),
-            "WR-05: a plugins.txt write failure must leave plugin_state UNTOUCHED (nothing saved)"
+            "a plugins.txt write failure must leave plugin_state UNTOUCHED (nothing saved)"
         );
     }
 }

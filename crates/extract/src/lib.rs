@@ -5,7 +5,7 @@
 //! staging tree. It has NO knowledge of Steam, deployment, or Tauri — it depends
 //! only on `core` types.
 //!
-//! ## Security model (the Phase 1 centerpiece)
+//! ## Security model
 //!
 //! Untrusted third-party archive content is the entire threat surface of this
 //! phase. Every archive entry is routed through the single shared
@@ -30,7 +30,7 @@ pub mod staging;
 pub mod validate;
 pub mod zip;
 
-pub use staging::{StagedMod, install_archive};
+pub use staging::{StagedMod, install_archive, staging_dir_name};
 pub use validate::{ExtractError, validate_entry};
 
 /// The archive formats NexTwist can install.

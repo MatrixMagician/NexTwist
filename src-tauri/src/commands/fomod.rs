@@ -1,5 +1,5 @@
-//! FOMOD guided-installer adapter (FOMOD-01/FOMOD-02) — the thin IPC boundary over the
-//! headless `crates/fomod` engine. Per the Anti-Pattern-4 contract (see `commands/mod.rs`):
+//! FOMOD guided-installer adapter — the thin IPC boundary over the
+//! headless `crates/fomod` engine. Per the thin-adapter contract (see `commands/mod.rs`):
 //! NO FOMOD business logic lives here. Each `#[tauri::command]`:
 //!
 //! 1. resolves the managed game (`require_game`) or extracts the archive to a temp tree,
@@ -13,14 +13,14 @@
 //!   `fomod/ModuleConfig.xml`, and return a SERIALIZABLE projection of the AST (the
 //!   wizard renders radio/checkbox groups + type-states from this). A malformed
 //!   `ModuleConfig.xml` returns the verbatim [`fomod::FomodError`] string so the
-//!   frontend can offer the plain-mod fallback (UI-SPEC §A.8).
+//!   frontend can offer the plain-mod fallback.
 //! * [`resolve_fomod`] — the PURE dry-run: given the user's selection, call
-//!   `fomod::resolve` and return a serializable file-install plan with a per-destination
-//!   conflict classification. Writes NOTHING (the locked dry-run-before-apply gate).
-//! * [`apply_fomod`] — on a confirmed (non-blocking) install, route the archive through
-//!   the validated `extract::install_archive` staging path (Plan-01 root-detection,
-//!   zip-slip/symlink/`..` defenses unchanged — the adapter adds no new write primitive,
-//!   threat T-04-05), then `store.add_mod` so the result is an ordinary `ManagedMod`.
+//!   `fomod::resolve` and return a serializable file-install plan. Writes NOTHING (the
+//!   locked dry-run-before-apply gate); an unresolvable selection is an `Err`, not a plan.
+//! * [`apply_fomod`] — on a confirmed install, route the archive through
+//!   the validated `extract::install_archive` staging path (root-detection,
+//!   zip-slip/symlink/`..` defenses unchanged — the adapter adds no new write primitive),
+//!   then `store.add_mod` so the result is an ordinary `ManagedMod`.
 //!
 //! The temp extraction here re-uses the SAME validated extractor the rest of the app
 //! uses; FOMOD source-path resolution and parsing are pure reads over that tree.
@@ -28,10 +28,7 @@
 use std::path::{Path, PathBuf};
 
 use extract::ArchiveFormat;
-use fomod::{
-    FomodModule, GroupType, OrderKind, PluginType, Selection, parse_module_config, resolve,
-    validate_selection,
-};
+use fomod::{Selection, parse_module_config, resolve, validate_selection};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tempfile::TempDir;
@@ -47,112 +44,6 @@ use crate::state::AppState;
 // Live re-evaluation (option type-state flips, step visibility) is driven by repeated
 // `resolve_fomod` calls; the static projection carries the authored structure + the
 // authored default type, and the dependency-conditions the engine evaluates.
-
-/// The parsed FOMOD module, projected for the wizard (FOMOD-01).
-#[derive(Debug, Clone, Serialize)]
-pub struct FomodProjection {
-    /// `<moduleName>` — the wizard modal title.
-    pub module_name: String,
-    /// The ordered wizard steps (already name-sorted per the authored `order`).
-    pub steps: Vec<StepProjection>,
-}
-
-/// One wizard install step.
-#[derive(Debug, Clone, Serialize)]
-pub struct StepProjection {
-    /// Step name (the "· {step name}" in the counter).
-    pub name: String,
-    /// Whether this step carries a `<visible>` condition (its live truth is decided by
-    /// the engine in `resolve_fomod`; the wizard skips an invisible step).
-    pub conditional: bool,
-    /// The option groups in this step.
-    pub groups: Vec<GroupProjection>,
-}
-
-/// One option group within a step.
-#[derive(Debug, Clone, Serialize)]
-pub struct GroupProjection {
-    /// Group name.
-    pub name: String,
-    /// The FOMOD selection constraint (drives radio-vs-checkbox + min/max).
-    pub group_type: GroupTypeDto,
-    /// The selectable options.
-    pub options: Vec<OptionProjection>,
-}
-
-/// One selectable option (`<plugin>`).
-#[derive(Debug, Clone, Serialize)]
-pub struct OptionProjection {
-    /// Option name (the label + the selection identity).
-    pub name: String,
-    /// `<description>` (muted when unselected).
-    pub description: String,
-    /// Archive-relative `<image path>` if present (the wizard bounds it ≤96px).
-    pub image: Option<String>,
-    /// The authored default/static type-state (Required/Optional/Recommended/NotUsable/
-    /// CouldBeUsable). The LIVE type-state after choices is recomputed by `resolve_fomod`.
-    pub default_type: PluginTypeDto,
-    /// The `(flag, value)` pairs this option sets when selected (`<conditionFlags>`). The
-    /// wizard accumulates these into the flag set it passes back to `resolve_fomod`, so the
-    /// engine re-evaluates `conditionalFileInstalls` (and type-states) live on each choice.
-    pub flags: Vec<[String; 2]>,
-}
-
-/// Serializable mirror of [`fomod::GroupType`].
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub enum GroupTypeDto {
-    /// Exactly one (radio).
-    SelectExactlyOne,
-    /// At most one (radio, none allowed).
-    SelectAtMostOne,
-    /// At least one (checkbox, min 1).
-    SelectAtLeastOne,
-    /// All (checkbox, locked on).
-    SelectAll,
-    /// Any (checkbox, free).
-    SelectAny,
-}
-
-impl From<GroupType> for GroupTypeDto {
-    fn from(g: GroupType) -> Self {
-        match g {
-            GroupType::SelectExactlyOne => GroupTypeDto::SelectExactlyOne,
-            GroupType::SelectAtMostOne => GroupTypeDto::SelectAtMostOne,
-            GroupType::SelectAtLeastOne => GroupTypeDto::SelectAtLeastOne,
-            GroupType::SelectAll => GroupTypeDto::SelectAll,
-            GroupType::SelectAny => GroupTypeDto::SelectAny,
-        }
-    }
-}
-
-/// Serializable mirror of [`fomod::PluginType`] (the 5-state option type).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub enum PluginTypeDto {
-    /// Pre-selected and locked on.
-    Required,
-    /// Freely selectable.
-    Optional,
-    /// Pre-selected but unlockable.
-    Recommended,
-    /// Disabled / cannot be selected.
-    NotUsable,
-    /// Selectable but warns.
-    CouldBeUsable,
-}
-
-impl From<PluginType> for PluginTypeDto {
-    fn from(p: PluginType) -> Self {
-        match p {
-            PluginType::Required => PluginTypeDto::Required,
-            PluginType::Optional => PluginTypeDto::Optional,
-            PluginType::Recommended => PluginTypeDto::Recommended,
-            PluginType::NotUsable => PluginTypeDto::NotUsable,
-            PluginType::CouldBeUsable => PluginTypeDto::CouldBeUsable,
-        }
-    }
-}
 
 // ── Serializable selection (webview → adapter) ─────────────────────────────────────
 
@@ -184,28 +75,6 @@ impl SelectionDto {
 
 // ── Serializable dry-run plan + conflict preview (adapter → webview) ────────────────
 
-/// The conflict classification for the dry-run preview (UI-SPEC §A.6). This mirrors the
-/// FOMOD safety gate's three buckets: a clean plan, a priority-resolvable overwrite, or a
-/// BLOCKING conflict that disables Install.
-///
-/// The headless `fomod::resolve` only ever returns a conflict-FREE, deterministically
-/// deduped plan (or a `FomodError`), so the adapter constructs `None` for a resolved plan
-/// and surfaces the blocking case via the command's `Err` (the engine rejected the
-/// selection). `Resolvable`/`Blocking` are retained as part of the stable serialized
-/// contract the wizard's TypeScript mirror consumes (and the future cross-mod
-/// classification target); they are not constructed inline here, hence the allow.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ConflictClass {
-    /// No two installs target the same destination.
-    None,
-    /// Two installs target the same destination but priority picks a winner.
-    Resolvable,
-    /// Two installs target the same destination with EQUAL priority — no winner.
-    Blocking,
-}
-
 /// One row of the resolved dry-run plan (a single `dest_rel`).
 #[derive(Debug, Clone, Serialize)]
 pub struct PlanEntry {
@@ -217,15 +86,16 @@ pub struct PlanEntry {
     pub priority: i32,
 }
 
-/// The full dry-run result the wizard shows BEFORE any staging write (FOMOD-02).
+/// The full dry-run result the wizard shows BEFORE any staging write.
+///
+/// The plan alone: a plan that exists is by construction safe to install, because
+/// `fomod::resolve` is the gate and returns either a deduplicated, conflict-free plan
+/// or a typed error. Cross-MOD contests are a different concern entirely and belong to
+/// the conflict-and-priority surface, which resolves them by mod rank after install.
 #[derive(Debug, Clone, Serialize)]
 pub struct ResolvePreview {
     /// The ordered, deduped file-install plan.
     pub plan: Vec<PlanEntry>,
-    /// The overall conflict classification (the worst of any per-destination contest).
-    pub classification: ConflictClass,
-    /// The destinations that two equal-priority sources contested (the blocking set).
-    pub blocking: Vec<String>,
 }
 
 // ── The three thin commands ────────────────────────────────────────────────────────
@@ -235,30 +105,29 @@ pub struct ResolvePreview {
 /// Extracts the archive into a validated temporary tree (the SAME defended extractor the
 /// install path uses), then calls the pure `fomod::parse_module_config`. A non-FOMOD or
 /// malformed archive returns the verbatim `FomodError` string so the frontend offers the
-/// plain-mod fallback (UI-SPEC §A.8). The temp tree is dropped on return — this writes
+/// plain-mod fallback. The temp tree is dropped on return — this writes
 /// nothing to staging.
 #[tauri::command]
 pub async fn parse_fomod(
     state: State<'_, Mutex<AppState>>,
     appid: u32,
     archive: PathBuf,
-) -> Result<FomodProjection, String> {
+) -> Result<fomod::WizardProjection, String> {
     // Resolve the game only to assert it is managed (parity with the install path); the
     // parse itself reads the archive, not the game tree.
     let _game = require_game(&state, appid).await?;
 
     let (_temp, tree_root) = extract_to_temp(&archive).map_err(boundary_err)?;
     let module = parse_module_config(&tree_root).map_err(boundary_err)?;
-    Ok(project_module(&module))
+    Ok(fomod::project(&module))
 }
 
-/// The PURE dry-run resolve (FOMOD-02): turn the user's selection into the file-install
-/// plan + conflict classification WITHOUT writing anything.
+/// The PURE dry-run resolve: turn the user's selection into the file-install plan
+/// WITHOUT writing anything.
 ///
 /// Re-extracts the archive to a temp tree (so source-path resolution and the live
 /// type-state evaluation see the real staged layout), parses, and calls the pure
-/// `fomod::resolve`. The conflict classification is computed over the resolved plan's
-/// destinations (a pure fold). No staging write occurs.
+/// `fomod::resolve`. No staging write occurs.
 #[tauri::command]
 pub async fn resolve_fomod(
     state: State<'_, Mutex<AppState>>,
@@ -272,22 +141,22 @@ pub async fn resolve_fomod(
     let module = parse_module_config(&tree_root).map_err(boundary_err)?;
     let sel = selection.into_selection();
 
-    // Server-side cardinality validation (WR-02): the webview is not a trust boundary, so a
+    // Server-side cardinality validation: the webview is not a trust boundary, so a
     // crafted IPC selection that violates a group's SelectExactlyOne/AtLeastOne/AtMostOne
     // constraint is rejected here before the plan is computed.
     validate_selection(&module, &sel).map_err(boundary_err)?;
 
-    // PURE: fomod::resolve performs zero filesystem writes (Plan-01 invariant).
+    // PURE: fomod::resolve performs zero filesystem writes.
     let plan = resolve(&module, &sel).map_err(boundary_err)?;
-    Ok(classify_plan(&plan))
+    Ok(preview_plan(&plan))
 }
 
-/// Apply a confirmed (non-blocking) FOMOD install: stage the validated archive and record
-/// it as an ordinary `ManagedMod`.
+/// Apply a confirmed FOMOD install: stage the validated archive and record it as an
+/// ordinary `ManagedMod`.
 ///
 /// The selection is re-resolved (defence in depth: never apply a plan the engine now
-/// rejects — e.g. a blocking conflict) BEFORE any write. On success the archive is staged
-/// through the validated `extract::install_archive` path (Plan-01 root-detection,
+/// rejects) BEFORE any write. On success the archive is staged
+/// through the validated `extract::install_archive` path (root-detection,
 /// zip-slip/symlink/`..` defenses unchanged — the adapter adds no new write primitive),
 /// and the staged tree is persisted via `store.add_mod`. Returns the new mod's row id.
 #[tauri::command]
@@ -300,28 +169,22 @@ pub async fn apply_fomod(
 ) -> Result<ApplyResult, String> {
     let game = require_game(&state, appid).await?;
 
-    // 1. Re-resolve to reject a blocking selection before touching disk (the dry-run gate
-    //    is enforced server-side too, not only in the UI).
+    // 1. Re-resolve to reject an unresolvable selection before touching disk (the
+    //    dry-run gate is enforced server-side too, not only in the UI).
     let (temp, tree_root) = extract_to_temp(&archive).map_err(boundary_err)?;
     let module = parse_module_config(&tree_root).map_err(boundary_err)?;
     let sel = selection.into_selection();
-    // Server-side cardinality validation (WR-02): reject a selection that violates a group's
+    // Server-side cardinality validation: reject a selection that violates a group's
     // declared cardinality BEFORE any disk write, regardless of what the UI submitted.
     validate_selection(&module, &sel).map_err(boundary_err)?;
-    let plan = resolve(&module, &sel).map_err(boundary_err)?;
-    let preview = classify_plan(&plan);
-    if preview.classification == ConflictClass::Blocking {
-        return Err(
-            "This selection installs conflicting files with no clear winner. \
-                    Change a choice to continue."
-                .to_string(),
-        );
-    }
+    // `resolve` IS the gate: a selection with no clear winner is an Err above, never a
+    // plan. Reaching here means the plan is safe to stage.
+    resolve(&module, &sel).map_err(boundary_err)?;
     drop(temp); // release the dry-run temp tree before the real validated staging.
 
     // 2. Stage the validated archive into a per-mod staging subdir (the SAME defended
     //    extractor the local-archive + download paths use). No new write primitive.
-    let staging_root = game.staging_dir.join(sanitize(&name));
+    let staging_root = fomod_staging_root(&game.staging_dir, &name);
     let staged = extract::install_archive(&archive, &staging_root).map_err(boundary_err)?;
 
     // 3. Persist as an ordinary ManagedMod so it appears in the existing mod list.
@@ -361,7 +224,7 @@ pub struct ApplyResult {
     pub files: usize,
 }
 
-// ── Pure helpers (projection + classification + temp extraction) ────────────────────
+// ── Pure helpers (projection + temp extraction) ─────────────────────────────────────
 
 /// Extract `archive` into a fresh temp dir via the validated extractor, returning the
 /// guard (kept alive by the caller) and the tree root the FOMOD engine reads.
@@ -392,108 +255,27 @@ fn extract_to_temp(archive: &Path) -> Result<(TempDir, PathBuf), extract::Extrac
     Ok((temp, tree_root))
 }
 
-/// Project a parsed [`FomodModule`] into the serializable wizard shape, applying the
-/// authored `order` to steps/groups/options exactly as the engine would.
-fn project_module(module: &FomodModule) -> FomodProjection {
-    let mut steps = Vec::new();
-    if let Some(step_list) = &module.steps {
-        let mut ordered: Vec<_> = step_list.steps.iter().collect();
-        sort_by_order(&mut ordered, step_list.order, |s| &s.name);
-        for step in ordered {
-            let mut groups = Vec::new();
-            if let Some(group_list) = &step.groups {
-                let mut og: Vec<_> = group_list.groups.iter().collect();
-                sort_by_order(&mut og, group_list.order, |g| &g.name);
-                for group in og {
-                    let mut options = Vec::new();
-                    if let Some(plugin_list) = &group.plugins {
-                        let mut pl: Vec<_> = plugin_list.plugins.iter().collect();
-                        sort_by_order(&mut pl, plugin_list.order, |p| &p.name);
-                        for plugin in pl {
-                            let flags = plugin
-                                .condition_flags
-                                .as_ref()
-                                .map(|cf| {
-                                    cf.flags
-                                        .iter()
-                                        .map(|f| [f.name.clone(), f.value.clone()])
-                                        .collect()
-                                })
-                                .unwrap_or_default();
-                            options.push(OptionProjection {
-                                name: plugin.name.clone(),
-                                description: plugin.description.clone(),
-                                image: plugin.image.as_ref().map(|i| i.path.clone()),
-                                default_type: default_type_of(plugin).into(),
-                                flags,
-                            });
-                        }
-                    }
-                    groups.push(GroupProjection {
-                        name: group.name.clone(),
-                        group_type: group.group_type.into(),
-                        options,
-                    });
-                }
-            }
-            steps.push(StepProjection {
-                name: step.name.clone(),
-                conditional: step.visible.is_some(),
-                groups,
-            });
-        }
-    }
-    FomodProjection {
-        module_name: module.module_name.clone(),
-        steps,
-    }
-}
-
-/// The authored default type-state of a plugin (static `<type>` or `<dependencyType>`
-/// default). The LIVE type after choices is recomputed by the engine in `resolve_fomod`;
-/// this is the initial render value (Optional when a descriptor is absent — never silently
-/// disables an option).
-fn default_type_of(plugin: &fomod::Plugin) -> PluginType {
-    match &plugin.type_descriptor {
-        Some(td) => td
-            .static_type
-            .as_ref()
-            .map(|t| t.name)
-            .or_else(|| td.dependency_type.as_ref().map(|d| d.default_type.name))
-            .unwrap_or(PluginType::Optional),
-        None => PluginType::Optional,
-    }
-}
-
-/// Sort a slice of element refs by the FOMOD `order` attribute (Ascending/Descending by
-/// name, or Explicit = document order preserved).
-fn sort_by_order<T, F>(items: &mut [&T], order: OrderKind, key: F)
-where
-    F: Fn(&T) -> &String,
-{
-    match order {
-        OrderKind::Explicit => {}
-        OrderKind::Ascending => items.sort_by(|a, b| key(a).cmp(key(b))),
-        OrderKind::Descending => items.sort_by(|a, b| key(b).cmp(key(a))),
-    }
-}
-
-/// Project the resolved plan into the dry-run preview rows + a conflict classification
-/// (UI-SPEC §A.6).
+/// The per-mod staging subdir a FOMOD install stages into: the game's staging dir plus ONE
+/// safe component derived from the module's display name.
 ///
-/// `fomod::resolve` IS the FOMOD-02 safety gate. It returns `Ok` only with a
-/// deterministically DEDUPED, conflict-free plan — one winner per `dest_rel`, the
-/// highest-priority `src` wins each destination — so a successfully-resolved plan has no
-/// remaining same-destination contest and is **safe to install** (`ConflictClass::None`).
-/// A genuinely no-winner / contradictory FOMOD construct (a missing `<typeDescriptor>`,
-/// an unsupported shape) is surfaced by the engine as a `FomodError` BEFORE this projection
-/// runs; the calling command maps that `Err` to the §A.6 blocking message verbatim and the
-/// wizard disables Install. The `ConflictClass::Resolvable`/`Blocking` variants therefore
-/// describe the FRONTEND's cross-source presentation contract (an authored same-destination
-/// overwrite vs an engine-rejected selection) — the headless engine never returns a plan
-/// that still contains an unresolved destination contest, which is exactly the safety
-/// invariant the dry-run gate depends on.
-fn classify_plan(plan: &[fomod::FileInstall]) -> ResolvePreview {
+/// The naming rules are the engine's ([`extract::staging_dir_name`]); what this adapter
+/// decides is the fallback used when the module name is blank, and that the result is joined
+/// under the game's staging dir rather than anywhere else. Extracted so both are testable.
+fn fomod_staging_root(staging_dir: &Path, module_name: &str) -> PathBuf {
+    staging_dir.join(extract::staging_dir_name(module_name, "fomod-mod"))
+}
+
+/// Project the resolved plan into the dry-run preview rows.
+///
+/// `fomod::resolve` IS the safety gate. It returns `Ok` only with a deterministically
+/// DEDUPED, conflict-free plan — one winner per `dest_rel`, the highest-priority `src`
+/// wins each destination — so a successfully-resolved plan has no remaining
+/// same-destination contest and is safe to install. A genuinely no-winner /
+/// contradictory FOMOD construct (a missing `<typeDescriptor>`, an unsupported shape)
+/// is surfaced by the engine as a `FomodError` BEFORE this projection runs; the calling
+/// command maps that `Err` to the blocking message verbatim and the wizard shows it.
+/// There is therefore nothing left for this function to classify.
+fn preview_plan(plan: &[fomod::FileInstall]) -> ResolvePreview {
     let rows: Vec<PlanEntry> = plan
         .iter()
         .map(|fi| PlanEntry {
@@ -503,41 +285,15 @@ fn classify_plan(plan: &[fomod::FileInstall]) -> ResolvePreview {
         })
         .collect();
 
-    ResolvePreview {
-        plan: rows,
-        classification: ConflictClass::None,
-        blocking: Vec::new(),
-    }
-}
-
-/// Sanitize a display name into a single safe staging-subdir component (no separators, no
-/// traversal). The full path-traversal defense still lives in `extract`; this only keeps
-/// the staging subdir name well-formed (mirrors `commands::downloads::sanitize`).
-fn sanitize(name: &str) -> String {
-    let cleaned: String = name
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    let trimmed = cleaned.trim();
-    if trimmed.is_empty() {
-        "fomod-mod".to_string()
-    } else {
-        trimmed.to_string()
-    }
+    ResolvePreview { plan: rows }
 }
 
 #[cfg(test)]
 mod tests {
     //! Headless adapter tests (no webview). They exercise the adapter's REAL logic — the
-    //! validated temp extraction (`extract_to_temp`), the AST projection (`project_module`),
-    //! the dry-run plan + classification (`classify_plan` over `fomod::resolve`), and the
-    //! malformed-FOMOD `Err` path — by zipping a Plan-01 fixture tree into a real archive
+    //! validated temp extraction (`extract_to_temp`), the ordered AST projection (`fomod::project`),
+    //! the dry-run plan (`preview_plan` over `fomod::resolve`), and the
+    //! malformed-FOMOD `Err` path — by zipping a fixture tree into a real archive
     //! and flowing it through the SAME functions the `#[tauri::command]`s call. The Tauri
     //! IPC shell (`require_game` + `State` lock) is the only part not covered, which is the
     //! pure boundary glue these tests deliberately exclude.
@@ -547,7 +303,7 @@ mod tests {
 
     use fomod::Selection;
 
-    /// Path to a Plan-01 fixture tree (the dir that CONTAINS the `fomod/` folder).
+    /// Path to a fixture tree (the dir that CONTAINS the `fomod/` folder).
     fn fixture(name: &str) -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../crates/fomod/tests/fixtures")
@@ -598,7 +354,7 @@ mod tests {
         // The adapter's validated extraction + the pure parse + the projection.
         let (_guard, tree_root) = super::extract_to_temp(&archive).expect("extract simple.zip");
         let module = fomod::parse_module_config(&tree_root).expect("parse simple fixture");
-        let proj = super::project_module(&module);
+        let proj = fomod::project(&module);
 
         assert_eq!(proj.module_name, "Simple Mod");
         assert_eq!(proj.steps.len(), 1);
@@ -608,12 +364,12 @@ mod tests {
         let group = &step.groups[0];
         assert!(matches!(
             group.group_type,
-            super::GroupTypeDto::SelectExactlyOne
+            fomod::GroupType::SelectExactlyOne
         ));
         assert_eq!(group.options.len(), 1);
         let opt = &group.options[0];
         assert_eq!(opt.name, "Standard Edition");
-        assert_eq!(opt.default_type, super::PluginTypeDto::Required);
+        assert_eq!(opt.default_type, fomod::PluginType::Required);
     }
 
     #[test]
@@ -644,7 +400,7 @@ mod tests {
         let (_guard, tree_root) = super::extract_to_temp(&archive).expect("extract simple.zip");
         let module = fomod::parse_module_config(&tree_root).expect("parse");
 
-        // A staging dir we assert stays untouched by the dry-run (FOMOD-02: writes nothing).
+        // A staging dir we assert stays untouched by the dry-run (writes nothing).
         let staging = tmp.path().join("staging");
         std::fs::create_dir_all(&staging).unwrap();
         let before = walkdir_files(&staging).len();
@@ -655,7 +411,7 @@ mod tests {
         sel.chosen
             .insert(("Main".into(), "Core".into(), "Standard Edition".into()));
         let plan = fomod::resolve(&module, &sel).expect("resolve");
-        let preview = super::classify_plan(&plan);
+        let preview = super::preview_plan(&plan);
 
         assert!(
             !preview.plan.is_empty(),
@@ -663,7 +419,6 @@ mod tests {
         );
         let row = &preview.plan[0];
         assert_eq!(row.dest, "standard.esp");
-        assert!(matches!(preview.classification, super::ConflictClass::None));
 
         // The dry-run resolve performed ZERO writes into the staging dir.
         let after = walkdir_files(&staging).len();
@@ -682,10 +437,28 @@ mod tests {
         assert_eq!(sel.flags.get("color").map(String::as_str), Some("red"));
     }
 
+    /// The staging root stays UNDER the game's staging dir and is exactly one component
+    /// deeper, even for a hostile module name — the adapter cannot be talked into staging
+    /// outside the directory it was given. A blank name still yields a usable subdir.
     #[test]
-    fn sanitize_strips_separators_and_falls_back() {
-        assert_eq!(super::sanitize("My Mod"), "My Mod");
-        assert_eq!(super::sanitize("../etc/passwd"), "___etc_passwd");
-        assert_eq!(super::sanitize("   "), "fomod-mod");
+    fn fomod_staging_root_stays_one_component_under_the_staging_dir() {
+        let staging = Path::new("/games/staging");
+        for name in ["My Mod", "../../etc/passwd", "/abs", "   ", ""] {
+            let root = super::fomod_staging_root(staging, name);
+            assert!(
+                root.starts_with(staging),
+                "{name:?} escaped the staging dir: {root:?}"
+            );
+            assert_eq!(
+                root.strip_prefix(staging).unwrap().components().count(),
+                1,
+                "{name:?} produced more than one component: {root:?}"
+            );
+        }
+        assert_eq!(
+            super::fomod_staging_root(staging, "   "),
+            staging.join("fomod-mod"),
+            "a blank module name falls back to the FOMOD default"
+        );
     }
 }

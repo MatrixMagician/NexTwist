@@ -1,4 +1,4 @@
-//! SFLO-04 reconciliation unit tests — the pure `reconcile_plugins_txt` verdict.
+//! Reconciliation unit tests — the pure `reconcile_plugins_txt` verdict.
 //!
 //! No prefix / libloot needed: the function is pure, so these use synthetic recorded slices
 //! and hand-written `plugins.txt` strings. They lock BOTH the expected-vs-drift classification
@@ -109,7 +109,7 @@ fn reconcile_identical_and_empty_are_insync() {
     );
 }
 
-/// IN-03: a pure CASE difference between the recorded name and the on-disk `plugins.txt` name
+/// A pure CASE difference between the recorded name and the on-disk `plugins.txt` name
 /// (Wine case-folding) is NOT drift — same plugins, same order, only casing differs → InSync.
 #[test]
 fn reconcile_case_only_difference_is_insync() {

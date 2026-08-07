@@ -16,9 +16,9 @@
 //!
 //! ## Module map
 //!
-//! * [`probe`]  — per-target fs-capability probe (st_dev, reflink, throwaway
+//! * [`mod@probe`]  — per-target fs-capability probe (st_dev, reflink, throwaway
 //!   hardlink, casefold) — `FsCaps`.
-//! * [`method`] — the `DeploymentMethod` trait + reflink → hardlink → symlink → copy
+//! * [`method`] — the per-file deploy primitives + reflink → hardlink → symlink → copy
 //!   ladder, chosen per-target with EXDEV/`CrossesDevices` fallback.
 //! * [`journal`] — intent-before-act protocol + idempotent replay/recovery on launch.
 //! * [`backup`] — backup-before-overwrite into a content-addressed vanilla store.
@@ -45,7 +45,7 @@ pub use gameconfig::{
     INI_FILENAME, IniActivationPreview, IniConflictResolution, IniDrift, IniOutcome,
     ensure_ini_active, ini_drift, preview_ini_activation, restore_ini,
 };
-pub use method::{DeploymentMethod, apply_idempotent, choose_method};
+pub use method::{apply_idempotent, choose_method};
 pub use probe::{Casefold, FsCaps, probe};
 pub use profile::{SwitchReport, switch_profile};
 pub use verify::{RepairReport, VerifyReport, repair, verify};
@@ -66,7 +66,7 @@ pub fn deploy_root(install_dir: &Path) -> PathBuf {
     // is filesystem-dependent and unordered, so a first-match-wins choice would be
     // NONDETERMINISTIC if a case-sensitive Linux FS (exactly NexTwist's Proton target)
     // somehow held both `Data` and `data` — a purge computed against one casing could then
-    // leave files under the other, breaking reversibility (WR-07). Choose deterministically.
+    // leave files under the other, breaking reversibility. Choose deterministically.
     if let Ok(rd) = std::fs::read_dir(install_dir) {
         let mut matches: Vec<String> = rd
             .flatten()
@@ -97,7 +97,6 @@ pub fn deploy_root(install_dir: &Path) -> PathBuf {
 /// leading `Data` segment and re-root under the resolved [`deploy_root`] so casing of
 /// the top-level `Data` directory is honored. A relpath without a leading `Data`
 /// segment is treated as already deploy-root-relative.
-#[allow(dead_code)] // wired into the engine in Task 2
 pub(crate) fn resolve_target(install_dir: &Path, staged_rel: &Path) -> PathBuf {
     let root = deploy_root(install_dir);
     let comps = staged_rel.components();

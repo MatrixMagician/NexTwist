@@ -4,7 +4,7 @@
 //! OAuth2+PKCE token exchange, API-key validation, REST v1 / GraphQL v2 metadata,
 //! download-link generation, streaming download, and the `governor` rate limiter.
 //!
-//! Tauri-free and **keyring-free** by design (NEXUS-01/02 locked decision). The
+//! Tauri-free and **keyring-free** by design (a locked decision). The
 //! src-tauri shell owns ALL OS-integration — the keyring (Secret Service), `nxm://`
 //! deep-link registration + capture, single-instance forwarding, and opening the
 //! system browser for the OAuth round-trip — and passes token *values* into this

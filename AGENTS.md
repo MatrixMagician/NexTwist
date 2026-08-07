@@ -1,9 +1,10 @@
 # AGENTS.md
 
 Canonical instructions for coding agents (jcode, Claude Code, Codex, etc.) working in
-this repository. `CLAUDE.md` covers the same ground for Claude Code; keep the two in
-sync when architecture changes. Stack rationale and "what NOT to use" rules live in
-`.claude/CLAUDE.md`.
+this repository. `CLAUDE.md` is a symlink to this file, so Claude Code loads exactly this
+document as project memory and the two can never drift — edit this file, never a copy.
+Stack rationale and "what NOT to use" rules live in `.claude/CLAUDE.md`, which is
+genuinely distinct content.
 
 ## The one rule that outranks everything
 
@@ -35,15 +36,25 @@ cargo deny check advisories bans licenses sources      # supply-chain gate
 npm --prefix frontend ci
 npm --prefix frontend run build     # -> frontend/build (Tauri's frontendDist)
 npm --prefix frontend run check     # svelte-check
+npm --prefix frontend test          # vitest over the pure $lib modules
 
 # Full desktop app (needs WebKitGTK 4.1 dev libs — see .github/workflows/ci.yml)
 cargo tauri dev
-cargo tauri build --bundles appimage
+NO_STRIP=true cargo tauri build --bundles appimage
 ```
 
 `src-tauri` is a workspace member, so `cargo test --workspace` compiles it and needs the
 WebKitGTK dev libs on the host. The `crates/*` engine needs none of them — when you lack
 those libs, iterate with `cargo test -p nextwist-<crate>`. Toolchain is pinned to stable
+
+**`NO_STRIP=true` is required for the AppImage on a modern distro**, not optional. Tauri
+bundles via `linuxdeploy`, which carries its own ancient `binutils`; that `strip` cannot
+parse the `.relr.dyn` relocation section modern glibc emits, so it fails on system
+libraries (`libzstd`, `libxml2`, `libxkbcommon`, ...) and the bundle step dies with a bare
+`failed to run linuxdeploy`. Setting `NO_STRIP=true` skips that pass and the bundle
+succeeds; the binary is already stripped anyway by `strip = true` in `[profile.release]`,
+so nothing is lost. Verified on this repo: the plain command fails identically on a
+pristine `main` checkout, so it is the environment rather than anything in the tree.
 ≥ 1.89 (MSRV set by `libloot`); see `rust-toolchain.toml`.
 
 ## Architecture
@@ -70,9 +81,12 @@ property-testable in CI without a webview. Honor the boundary: do not pull
 - **extract** — untrusted archive → validated read-only staging tree (zip + 7z +
   shell-out RAR), with zip-slip and symlink-write-through defense.
 - **fomod** — the full FOMOD 5.x `ModuleConfig.xml` engine as a pure transform: parse →
-  condition → resolve. `resolve` is a **pure dry-run** producing an ordered file-install
-  plan without touching disk; the plan is conflict-previewed before it is applied. A
-  malformed construct returns a specific `FomodError`, never a silent mis-install.
+  condition → resolve, plus `wizard::project` for the ordered step/group/option tree a UI
+  renders (the spec's `order` attribute is engine truth, not a UI preference; the projection
+  serializes straight to the webview, so the shell mirrors no types). `resolve` is a **pure
+  dry-run** producing an ordered file-install plan without touching disk; the plan is
+  conflict-previewed before it is applied. A malformed construct returns a specific
+  `FomodError`, never a silent mis-install.
 - **nexus** — headless NexusMods client: OAuth2+PKCE exchange, API-key validation, REST
   v1 + GraphQL v2 metadata, download-link generation, streaming download, `governor` rate
   limiting with reactive `X-RL-*` backoff. Async `reqwest`, redirects disabled,
@@ -109,6 +123,11 @@ Commands lock `AppState` and call the engine. The frontend
 is SvelteKit (Svelte 5 runes) built as a static SPA into `frontend/build` and embedded via
 `frontendDist`. New commands need a matching binding in `frontend/src/lib/api.ts`.
 
+The frontend mirrors the engine boundary: `routes/+page.svelte` holds only state wiring
+and markup, while pure rules live in unit-tested `$lib` modules (`fomod.ts` for wizard
+selection, `plugins.ts` for the masters-first/protected reorder rules, `format.ts` for
+display formatting). New UI logic with a testable rule belongs in `$lib`, not the route.
+
 ## Conventions and guardrails
 
 - **Errors**: `thiserror` enums in engine crates; `anyhow` only at the app/Tauri boundary.
@@ -132,13 +151,31 @@ Before claiming a change is complete:
    lacks WebKitGTK, and say so).
 3. `cargo clippy --workspace --all-targets -- -D warnings` is clean.
 4. `cargo deny check advisories bans licenses sources` passes if dependencies changed.
-5. `npm --prefix frontend run check` passes if frontend files changed.
+5. `npm --prefix frontend run check` and `npm --prefix frontend test` pass if frontend
+   files changed (both are CI-gated).
 6. Anything touching `deploy`/`store` has a test proving the reversibility or
    crash-recovery property still holds.
+7. If you touched the deploy **method ladder**, re-run `crates/deploy` with `TMPDIR` on a
+   CoW filesystem (see the reflink blind spot below).
 
 All gates were run green on `main` as of 2026-08-02, so a failure you see is
-something you introduced, not pre-existing noise. Two caveats worth knowing:
+something you introduced, not pre-existing noise. Three caveats worth knowing:
 
+- **CI never exercises the reflink rung.** GitHub runners are ext4 and `TempDir` defaults
+  to `/tmp`, so `caps.reflink` is false there and every reflink assertion in the suite is
+  vacuous — you can break copy-on-write deployment and still see a green tick. The
+  strongest rung of the ladder is therefore only truly tested on a developer machine
+  whose `TMPDIR` is on btrfs/XFS/bcachefs:
+
+  ```bash
+  mkdir -p target/reflink-tmp   # inside the repo, which is on the dev btrfs volume
+  TMPDIR="$PWD/target/reflink-tmp" cargo test -p nextwist-deploy
+  ```
+
+  `tests/reflink_rung.rs` is the one that matters: it asserts a reflink is an independent
+  inode and that writing through a deployed file cannot corrupt read-only staging. It
+  skips cleanly (printing why) when the filesystem has no CoW support, so a silent skip
+  in CI is expected and a silent skip locally means you proved nothing.
 - `cargo deny` carries two documented `ignore`d advisories (RUSTSEC-2026-0194/0195) for
   the vulnerable `quick-xml <0.41` that Tauri pulls in transitively via `plist` at build
   time. A `[[bans.deny]]` rule with `wrappers = ["plist"]` keeps that exception pinned to
@@ -149,11 +186,31 @@ something you introduced, not pre-existing noise. Two caveats worth knowing:
 
 ## Workflow
 
-This project runs the GSD workflow. Planning artifacts live in `.planning/`
-(`ROADMAP.md`, `STATE.md`, phase dirs). Route file-changing work through a GSD entry
-point (`/gsd-quick`, `/gsd-debug`, `/gsd-execute-phase`) rather than editing directly,
-unless explicitly told to bypass. The codebase is graphmind-indexed — prefer `/gm` for
-code exploration before grep.
+Work is driven by **jcode** plus the Matt Pocock engineering skills — there is no separate
+planning system to keep in sync, and no planning artifacts to update. The durable record of
+a change is the code, its tests, the Conventional Commit, and the GitHub issue it closes.
+
+Reach for the skill that matches the shape of the work:
+
+| Situation | Skill |
+| --- | --- |
+| A vague idea or plan that needs stress-testing before you build | `/grilling`, `/grill-with-docs` |
+| A change big enough to need decomposition | `/to-tickets`, `/wayfinder` |
+| Turning a discussion into a written spec on the tracker | `/to-spec` |
+| Building a feature or fixing a bug test-first | `/tdd` |
+| Something is broken, slow, or throwing | `/diagnosing-bugs` |
+| Reviewing a branch or PR against standards and spec | `/code-review` |
+| Reshaping a module's interface, or finding deepening opportunities | `/codebase-design`, `/improve-codebase-architecture` |
+| Suspected over-engineering | `/ponytail-review`, `/ponytail-audit` |
+| Naming a domain concept or recording a decision | `/domain-modeling` |
+| Triaging incoming issues and external PRs | `/triage` |
+| Handing work to another agent or session | `/handoff` |
+| Not sure which applies | `/ask-matt` |
+
+Edit code directly; there is no gate to route through. What is NOT optional is the
+[definition of done](#definition-of-done) above — a change is finished when the gates pass
+and anything touching `deploy`/`store` carries a test proving the reversibility or
+crash-recovery property still holds.
 
 ## Agent skills
 
@@ -171,4 +228,5 @@ The five canonical triage roles, using their default label strings
 ### Domain docs
 
 Single-context: `CONTEXT.md` plus `docs/adr/` at the repo root. See
-`docs/agents/domain.md`.
+`docs/agents/domain.md`. Neither exists yet — `/domain-modeling` creates them lazily when a
+term or decision actually needs pinning down, so do not scaffold them upfront.

@@ -1,4 +1,3 @@
-<!-- GSD:GENERATED quick-260623-m42 -->
 # Changelog
 
 All notable changes to NexTwist are documented here.
@@ -8,7 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No changes yet._
+### Changed
+
+- **`CLAUDE.md` is now a symlink to `AGENTS.md`** — the two were hand-maintained
+  near-duplicates with a standing instruction to keep them in sync. Drift is now
+  impossible by construction, and `.claude/CLAUDE.md` (stack rationale and the "what NOT
+  to use" rules) is untouched.
+- **The `DeploymentMethod` trait collapsed into the ladder** — four one-line implementors
+  in four files, four byte-identical `remove_file` bodies, and a `Box<dyn>` per deployed
+  file became a single `deploy_one` match on the `DeployMethod` tag. Ladder semantics are
+  unchanged: the reflink → hardlink → symlink → copy weakening order, the EXDEV
+  downgrade, remove-if-present-then-create idempotency, and per-file-only deployment all
+  hold, with each per-method safety note preserved on its match arm.
+- **The Starfield INI editor uses stdlib byte-slice helpers** — `trim_ascii`,
+  `strip_suffix`, and `split_inclusive` replace three hand-rolled index-arithmetic loops
+  in the module that carries the byte-fidelity guarantee on a user-owned config file.
+- **The FOMOD dry-run preview is just the plan** — the three-valued `ConflictClass` had
+  one reachable variant, because `fomod::resolve` is itself the gate and returns either a
+  deduplicated, conflict-free plan or a typed error. The enum, its TypeScript mirror, its
+  dead-code allow, and the two wizard branches that could never render are gone. Cross-mod
+  contests remain the conflict-and-priority surface's job.
+- **The shell keyring's single-implementor `KeyringBackend` trait is gone** — the trait
+  plus two test fakes existed only to inject one failure mode. All the branching lives in
+  three pure error mappers, which are now tested directly: a raw `keyring::Error` is
+  constructible in a test, so simulating a machine with no Secret Service needs no DBus
+  session. The no-plaintext-fallback invariant is unchanged and still structural (the
+  module reaches for no file API at all), and coverage went from four cases to six.
+- **Frontend logic moved behind a testable seam** — the FOMOD wizard selection rules, the
+  masters-first / protected-master reorder rules, and the display formatters now live in
+  pure `frontend/src/lib/{fomod,plugins,format}.ts` modules instead of inline in
+  `+page.svelte`, covered by 25 vitest cases.
+- **Session auth centralised** — `AppState::session_auth` / `nexus_client` are now the one
+  definition of how a NexusMods session authenticates and how the shared rate limiter is
+  wired, replacing copies in the download and Collection adapters.
+- **FOMOD wizard projection moved into the engine** — `fomod::wizard::project` owns the
+  spec's `order` attribute (steps/groups/plugins) and the authored type-state, and
+  serializes straight to the webview. The adapter's six mirrored DTO types are gone
+  (`commands/fomod.rs` 691 → 502 lines), with the wire shape pinned by a test.
+- **Plugin state merge moved into the engine** — `loadorder::merge_plugin_state` /
+  `enabled_names` now own the D-07/D-13 merge (stored enable/order + protected stamping +
+  display sort) that the Tauri adapter previously hand-rolled.
+- **`Plugins.txt` reads and view downgrades moved into the engine** —
+  `loadorder::read_plugins_txt` (with its absent-means-empty rule) and
+  `loadorder::view_to_plugin` replace adapter-side copies.
+- **Staging subdir naming consolidated** — `extract::staging_dir_name` replaces the
+  byte-identical `sanitize()` copies in the download and FOMOD adapters, with a
+  property-style test asserting the result is always exactly one normal path component.
+
+### Removed
+
+- **Stale `#[allow(dead_code)]` attributes and unreachable helpers** — four allows whose
+  "wired up later" plan references had all since come true, plus `CasingMap::len`, which
+  had zero callers anywhere.
+- **The unused `oauth2` `reqwest`/`rustls-tls` features** — oauth2 is used for S256 PKCE
+  and CSRF state only, so the features dragged a second, entirely unused HTTP stack
+  (reqwest 0.12 + webpki-roots) into the build.
+- **GSD tooling, its planning documents, and every reference to them.** The repo no longer
+  carries a parallel planning system: `.planning/` is gone and `AGENTS.md`/`CLAUDE.md`
+  document jcode plus the engineering skills as the way work happens. The research and
+  UI-spec documents went with it, and the ~750 source-comment citations that pointed at
+  them (`RESEARCH Pitfall 4`, `UI-SPEC §B.2`, `WR-03`, ...) were rewritten so each comment
+  states its own reasoning instead of referring to a document that no longer exists.
+
+### Fixed
+
+- **`deploy_collection` / `uninstall_collection` accepted a Collection belonging to a
+  different game** — uninstall purges one game's install and then deletes the Collection's
+  staged trees, so a mismatched pair could purge one game while destroying another's staged
+  mods. Both commands now refuse the mismatch up front.
+- Two stray NUL bytes in `frontend/src/routes/+page.svelte` made git treat the file as
+  binary, so every diff and code review of the UI showed only `Bin`.
+- `uninstall_collection` re-queried every mod for the game once per collection member
+  instead of looking the row up by id.
+
+### CI
+
+- `svelte-check` and the frontend unit tests are now gated in CI; the definition of done
+  listed them but no workflow step ran them.
+- **The reflink rung of the deploy ladder is now genuinely tested, and its CI blind spot
+  is documented.** CI runners are ext4 and `TempDir` defaults to `/tmp`, so `caps.reflink`
+  is false there and every reflink assertion in the suite was vacuous — copy-on-write
+  deployment, the strongest and safest rung, could break with a green tick.
+  `crates/deploy/tests/reflink_rung.rs` now asserts (only on a CoW filesystem, skipping
+  cleanly elsewhere) that reflink is chosen and succeeds without falling back, that the
+  result is an independent inode rather than a hardlink's shared inode, that the recorded
+  method is the one that truly ran, and that writing through a deployed file cannot
+  corrupt read-only staging. `AGENTS.md` documents the `TMPDIR`-on-btrfs run and adds it
+  to the definition of done for changes touching the method ladder.
 
 ## [1.0.0] - 2026-06-23
 

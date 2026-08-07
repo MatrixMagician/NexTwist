@@ -1,4 +1,3 @@
-<!-- generated-by: gsd-doc-writer -->
 # Getting Started
 
 NexTwist is a Rust + Tauri v2 desktop app that brings safe, fully-reversible mod

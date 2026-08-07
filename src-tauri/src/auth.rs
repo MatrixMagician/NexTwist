@@ -1,7 +1,7 @@
 //! OS-side OAuth orchestration (shell-only).
 //!
 //! This module holds the OS-bound half of the OAuth2 round-trip: opening the system
-//! browser to the authorize URL, and the `complete_oauth` entry point that the Plan-03
+//! browser to the authorize URL, and the `complete_oauth` entry point that the
 //! `nxm://oauth/callback` deep-link handler will call with the returned code. The
 //! security-sensitive PKCE/CSRF construction and the token exchange itself live in the
 //! headless `crates/nexus` (`nexus::build_authorize_url` / `nexus::exchange_code`); this
@@ -29,7 +29,7 @@ pub enum AuthError {
     /// The headless nexus client failed (URL build / code exchange / api-key validate).
     #[error("{0}")]
     Nexus(#[from] nexus::NexusError),
-    /// The keyring store/clear failed (includes the NEXUS-02 no-backend hard-fail).
+    /// The keyring store/clear failed (includes the no-backend hard-fail).
     #[error("{0}")]
     Keyring(#[from] keyring::KeyringError),
     /// The system browser could not be opened for the authorize step.
@@ -50,7 +50,7 @@ pub fn open_authorize_url(url: &str) -> Result<(), AuthError> {
 /// headless client, store the refresh token in the keyring, and return the in-memory
 /// access token to the caller (the shell caches it in `AppState`, never on disk).
 ///
-/// The Plan-03 deep-link handler calls this with the `code`+`state` from
+/// The deep-link handler calls this with the `code`+`state` from
 /// `nxm://oauth/callback`. `pending` carries the CSRF state + PKCE verifier captured at
 /// `login_oauth_start` time.
 pub async fn complete_oauth(
@@ -72,7 +72,7 @@ pub async fn complete_oauth(
     .await?;
 
     // The long-lived refresh token (if issued) goes to the keyring; the short-lived
-    // access token is returned to be held in memory only (NEXUS-02 / D-Auth).
+    // access token is returned to be held in memory only.
     if let Some(refresh) = tokens.refresh.as_deref() {
         keyring::store_refresh_token(refresh)?;
     }

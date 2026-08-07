@@ -29,7 +29,7 @@ fn probe_same_dir_reports_same_device_and_hardlink_ok() {
         caps.hardlink_ok,
         "same-device hardlink probe must succeed (no EXDEV within one fs)"
     );
-    // casefold is best-effort (A6): any verdict is acceptable, it must not error.
+    // casefold is best-effort: any verdict is acceptable, it must not error.
     assert!(matches!(
         caps.casefold,
         Casefold::On | Casefold::Off | Casefold::Unknown

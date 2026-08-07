@@ -1,7 +1,7 @@
 //! Thin Tauri command adapters — the ONLY job of this layer is to cross the IPC
 //! boundary and delegate to the headless safety core.
 //!
-//! Anti-Pattern 4 (RESEARCH.md / ARCHITECTURE.md): no business logic, no file loops,
+//! No business logic, no file loops,
 //! no path resolution lives here. Every `#[tauri::command]` below: locks the shared
 //! state, calls exactly one headless-crate function, maps the typed error to a
 //! `String` at the boundary (the webview only speaks JSON/strings), and returns. All
@@ -68,7 +68,7 @@ pub(crate) async fn require_game(
 mod tests {
     use super::*;
 
-    /// BUG 2: the known Bethesda domains map to their managed Steam AppIDs. This is the
+    /// The known Bethesda domains map to their managed Steam AppIDs. This is the
     /// allow-list `route_download` AND the `appid == 0` Retry-recovery path both depend on.
     #[test]
     fn appid_for_domain_maps_known_games() {
@@ -76,7 +76,7 @@ mod tests {
         assert_eq!(appid_for_domain("fallout4"), Some(377160));
     }
 
-    /// BUG 2: an unmanaged/unknown domain returns `None` — the Retry path turns this into a
+    /// An unmanaged/unknown domain returns `None` — the Retry path turns this into a
     /// clear error rather than guessing an AppID (and the router emits the §C.3 Warning).
     #[test]
     fn appid_for_domain_rejects_unknown_domain() {
@@ -84,7 +84,7 @@ mod tests {
         assert_eq!(appid_for_domain(""), None);
     }
 
-    /// BUG 2: the exact recovery `run_download_to_window` performs — when the IPC arg is the
+    /// The exact recovery `run_download_to_window` performs — when the IPC arg is the
     /// `appid == 0` sentinel (a Retry of an nxm-originated row, which never received an
     /// AppID frontend-side), resolve the real AppID from the non-secret `game_domain`. A
     /// known domain yields the managed AppID; an unknown one yields `None` (→ clear error).

@@ -1,4 +1,3 @@
-<!-- generated-by: gsd-doc-writer -->
 # Contributing to NexTwist
 
 Thanks for your interest in contributing to NexTwist — a Rust + Tauri v2 mod manager
@@ -35,7 +34,7 @@ idempotency of file ops — that is the reversibility guarantee in code.
 
 This document does not duplicate setup instructions. For getting up and running:
 
-- See **GETTING-STARTED.md** for prerequisites (Rust toolchain, WebKitGTK dev libs) and
+- See **docs/GETTING-STARTED.md** for prerequisites (Rust toolchain, WebKitGTK dev libs) and
   your first run.
 - See **docs/DEVELOPMENT.md** for local development setup, build commands, and code-style
   tooling.
@@ -96,9 +95,6 @@ submitting.
   requesting review.
 - **Describe the change** in the PR: what it does, why, and how you verified the safety
   invariant is preserved.
-
-> Internal planning artifacts live under `.planning/`. You do not need to touch them to
-> contribute a fix or feature — focus on the code change, tests, and PR description.
 
 ## Reporting issues
 

@@ -1,4 +1,4 @@
-//! Nexus provenance store facade (NEXUS-03/06): the `nexus_source` table.
+//! Nexus provenance store facade: the `nexus_source` table.
 //!
 //! Records where a managed mod was acquired from NexusMods (mod id, file id, version,
 //! display name) so a Nexus-sourced mod is otherwise indistinguishable from a
@@ -18,7 +18,7 @@ impl Store {
     /// Idempotent on `mod_id` (UNIQUE): re-recording provenance for the same mod UPDATEs
     /// the existing row (e.g. a re-download at a newer version) rather than erroring.
     pub fn add_nexus_source(&self, src: &NexusSource) -> Result<i64, StoreError> {
-        // WR-05: collapse the upsert to a SINGLE statement with `RETURNING id`. The prior
+        // Collapse the upsert to a SINGLE statement with `RETURNING id`. The prior
         // two-statement form (INSERT…ON CONFLICT, then a separate SELECT) was not atomic —
         // a concurrent writer could interleave and return a stale/wrong id (or the row
         // could be gone, erroring the SELECT). `RETURNING` yields the affected row's id

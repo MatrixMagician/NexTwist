@@ -3,7 +3,7 @@
 //!
 //! Every type maps to a LOCAL element name (`#[serde(rename = ...)]`) because quick-xml's
 //! serde is namespace-ignorant by default — we match `config`, not `{ns}config`, so the
-//! `xsi:noNamespaceSchemaLocation` attribute on real-world files is ignored (Pitfall 5).
+//! `xsi:noNamespaceSchemaLocation` attribute on real-world files is ignored.
 //! Every OPTIONAL element/attribute carries `#[serde(default)]` so a legitimately-absent
 //! element deserializes as empty rather than erroring (the XSD marks `moduleDependencies`,
 //! `requiredInstallFiles`, `installSteps`, `conditionalFileInstalls` and most leaf
@@ -93,7 +93,9 @@ pub struct Group {
 }
 
 /// The 5 FOMOD selection-group types (XSD `groupType` enum).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+///
+/// `Serialize` so a UI can render the constraint without the shell mirroring the enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
 pub enum GroupType {
     /// Exactly one option must be selected (radio).
     SelectExactlyOne,
@@ -223,7 +225,9 @@ pub struct TypePattern {
 }
 
 /// The 5-state FOMOD plugin-type enum (XSD `pluginTypeEnum`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+///
+/// `Serialize` so a UI can render the type-state without the shell mirroring the enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
 pub enum PluginType {
     /// Pre-selected and locked on.
     Required,

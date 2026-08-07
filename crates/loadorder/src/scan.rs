@@ -1,4 +1,4 @@
-//! Plugin discovery (PLUGIN-01 discovery half, D-06).
+//! Plugin discovery.
 //!
 //! Walks the enabled mods' staged trees plus the game `Data/` dir, collects every
 //! `.esp`/`.esm`/`.esl` file (case-insensitive — Wine), and classifies each as
@@ -15,7 +15,7 @@
 //! per-profile enable/order state is owned by the store's `plugin_state` and merged in by
 //! the Tauri command layer, not here.
 //!
-//! Path safety (T-02-12): scan collects only files physically present under the supplied
+//! Path safety: scan collects only files physically present under the supplied
 //! roots; plugin names are treated as opaque filenames and never joined as paths outside a
 //! root. Header parsing that fails (a corrupt/non-plugin file with a plugin extension) is
 //! a NON-fatal classification fallback to [`PluginKind::Esp`] with the parse error logged
@@ -77,7 +77,7 @@ fn is_plugin_file(path: &Path) -> bool {
 /// light), which esplugin gates to Starfield via `supports_medium_plugins` — so SkyrimSE /
 /// Fallout4 always yield `medium == false`. There is deliberately NO `PluginKind::Medium`:
 /// `core::Plugin` and the DB token set are frozen, so medium rides a separate boolean on the
-/// wire model only (07-RESEARCH Pattern 1 / Pitfall 2).
+/// wire model only.
 ///
 /// If the file cannot be header-parsed (corrupt / not actually a plugin), we DO NOT abort the
 /// scan — we fall back to `(PluginKind::Esp, false)` and log, because a single bad file must
@@ -107,7 +107,7 @@ fn classify(game_id: GameId, path: &Path) -> (PluginKind, bool) {
     }
 }
 
-/// A plugin scan result enriched with the two Phase-7 derived booleans that do NOT belong on
+/// A plugin scan result enriched with the two derived booleans that do NOT belong on
 /// the frozen persisted [`core::Plugin`](Plugin): `medium` (a CE2 medium master, read from
 /// the esplugin header at scan time) and `protected` (an implicitly-active base master,
 /// filled by the caller AFTER a live libloot `Game::is_plugin_active` probe — see
@@ -133,9 +133,13 @@ pub struct PluginView {
     pub protected: bool,
 }
 
-/// Drop the Phase-7 view-only booleans (`medium`/`protected`) to the persisted
+/// Drop the view-only booleans (`medium`/`protected`) to the persisted
 /// [`core::Plugin`](Plugin) the apply/sort callers consume unchanged.
-fn view_to_plugin(v: PluginView) -> Plugin {
+///
+/// Public because the command layer holds `PluginView`s (what it lists to the UI) but the
+/// apply/sort engine entry points speak `core::Plugin`; without this the shell would
+/// hand-roll the same field-by-field downgrade.
+pub fn view_to_plugin(v: PluginView) -> Plugin {
     Plugin {
         name: v.name,
         kind: v.kind,
@@ -227,7 +231,7 @@ pub fn scan_plugins(
     )
 }
 
-/// Discover the plugins for an EXPLICIT game (PLUGIN-01 discovery): same as
+/// Discover the plugins for an EXPLICIT game: same as
 /// [`scan_plugins`] but takes the resolved [`esplugin::GameId`] directly so the Tauri
 /// command (which already knows the appid) does not pay an inference cost.
 ///
@@ -246,7 +250,7 @@ pub fn scan_plugins_for(
     )
 }
 
-/// The medium-aware scan (SFLO-03): identical walk/de-dup to [`scan_plugins_for`] but returns
+/// The medium-aware scan: identical walk/de-dup to [`scan_plugins_for`] but returns
 /// the richer [`PluginView`] carrying the `medium` boolean (and a `protected: false` default
 /// the caller fills after a live libloot probe). [`scan_plugins_for`] is a thin wrapper that
 /// maps each view down to `core::Plugin`, so the apply/sort callers stay unchanged and the
@@ -274,6 +278,53 @@ pub fn esplugin_game_id(appid: u32) -> Option<GameId> {
     game_id_for(appid)
 }
 
+/// Merge a profile's persisted enable/order onto a scan, returning the list in
+/// display order (`order`, then name for stability).
+///
+/// The scan owns which plugins exist and their `kind`/`medium` badges; the store owns
+/// `enabled`/`order`. A scanned plugin with no stored row keeps the scan default (disabled,
+/// order 0). Pure, so the merge rules are testable without a Tauri runtime, a DB, or a game
+/// prefix — the command layer only gathers the inputs.
+///
+/// `protected` is NOT set here: the live libloot probe that determines it needs the
+/// post-merge enabled set (see [`enabled_names`]), so it is stamped afterwards by
+/// [`stamp_protected`].
+pub fn merge_plugin_state(mut scanned: Vec<PluginView>, stored: &[Plugin]) -> Vec<PluginView> {
+    for view in &mut scanned {
+        if let Some(s) = stored.iter().find(|s| s.name == view.name) {
+            view.enabled = s.enabled;
+            view.order = s.order;
+        }
+    }
+    scanned.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.name.cmp(&b.name)));
+    scanned
+}
+
+/// Stamp the implicitly-active protected-master set onto merged views.
+///
+/// Assignment, not OR-ing: a name absent from `protected` is set back to `false`. That is
+/// what makes a degraded probe (which yields an EMPTY set) show nothing as protected rather
+/// than leaving a stale `true` behind.
+pub fn stamp_protected(
+    mut views: Vec<PluginView>,
+    protected: &std::collections::HashSet<String>,
+) -> Vec<PluginView> {
+    for view in &mut views {
+        view.protected = protected.contains(&view.name);
+    }
+    views
+}
+
+/// The set of names enabled after a merge — the input the live `protected_plugins` probe
+/// needs. Kept next to [`merge_plugin_state`] so callers never hand-roll it.
+pub fn enabled_names(views: &[PluginView]) -> std::collections::HashSet<String> {
+    views
+        .iter()
+        .filter(|v| v.enabled)
+        .map(|v| v.name.clone())
+        .collect()
+}
+
 /// Internal: the scan operates per-game, but [`scan_plugins`] does not receive an appid —
 /// it is called with already-resolved roots. We default the classifier to SkyrimSE-class
 /// header semantics ONLY for the standalone helper used in tests; the Tauri command path
@@ -292,10 +343,10 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    /// A minimal but VALID 24-byte TES4 header (matches the Plan-02 spike fixture).
+    /// A minimal but VALID 24-byte TES4 header (matches the spike fixture).
     /// `flags` at bytes [8..12): 0x1 = master. Light flag is record-internal, so a true
     /// ESL fixture needs a record; for ESL we test the flag path via a real master bit and
-    /// document that header-only ESL detection from a hand-built 24-byte stub is a SUMMARY
+    /// document that header-only ESL detection from a hand-built 24-byte stub is a known
     /// limitation (a real ESL plugin sets the 0x200 light flag in the TES4 record header).
     fn tes4_header(master: bool) -> Vec<u8> {
         let mut h = vec![0u8; 24];
@@ -519,6 +570,115 @@ mod tests {
             !v[0].protected,
             "every scanned view starts protected == false"
         );
+    }
+
+    fn view(name: &str, kind: PluginKind) -> PluginView {
+        PluginView {
+            name: name.to_string(),
+            kind,
+            enabled: false,
+            order: 0,
+            medium: false,
+            protected: false,
+        }
+    }
+
+    fn stored(name: &str, enabled: bool, order: u32) -> Plugin {
+        Plugin {
+            name: name.to_string(),
+            kind: PluginKind::Esp,
+            enabled,
+            order,
+        }
+    }
+
+    #[test]
+    fn merge_applies_stored_enable_and_order() {
+        let scanned = vec![
+            view("B.esp", PluginKind::Esp),
+            view("A.esm", PluginKind::Esm),
+        ];
+        let rows = [stored("A.esm", true, 1), stored("B.esp", true, 0)];
+        let merged = merge_plugin_state(scanned, &rows);
+        assert_eq!(
+            merged.iter().map(|v| v.name.as_str()).collect::<Vec<_>>(),
+            ["B.esp", "A.esm"],
+            "stored order drives display order, not the scan order"
+        );
+        assert!(merged.iter().all(|v| v.enabled));
+    }
+
+    #[test]
+    fn merge_keeps_the_scan_kind_not_the_stored_kind() {
+        // The scan owns classification; a stale stored row must not downgrade an .esm badge.
+        let merged = merge_plugin_state(
+            vec![view("A.esm", PluginKind::Esm)],
+            &[stored("A.esm", true, 0)],
+        );
+        assert_eq!(merged[0].kind, PluginKind::Esm);
+    }
+
+    #[test]
+    fn merge_leaves_unstored_plugins_disabled_and_sorts_them_by_name() {
+        let scanned = vec![
+            view("Z.esp", PluginKind::Esp),
+            view("Y.esp", PluginKind::Esp),
+        ];
+        let merged = merge_plugin_state(scanned, &[]);
+        assert_eq!(
+            merged.iter().map(|v| v.name.as_str()).collect::<Vec<_>>(),
+            ["Y.esp", "Z.esp"],
+            "equal orders tie-break by name for a stable list"
+        );
+        assert!(merged.iter().all(|v| !v.enabled));
+    }
+
+    #[test]
+    fn stamp_protected_sets_the_flag_and_clears_it_when_the_probe_set_is_empty() {
+        let protected: std::collections::HashSet<String> = ["A.esm".to_string()].into();
+        let merged = stamp_protected(
+            merge_plugin_state(
+                vec![
+                    view("A.esm", PluginKind::Esm),
+                    view("B.esp", PluginKind::Esp),
+                ],
+                &[],
+            ),
+            &protected,
+        );
+        assert!(merged.iter().find(|v| v.name == "A.esm").unwrap().protected);
+        assert!(!merged.iter().find(|v| v.name == "B.esp").unwrap().protected);
+
+        // Re-stamping with an empty set (the degraded-probe path) must CLEAR the flag rather
+        // than leave a stale `true` behind.
+        let again = stamp_protected(merged, &Default::default());
+        assert!(again.iter().all(|v| !v.protected));
+    }
+
+    #[test]
+    fn merge_then_stamp_is_idempotent() {
+        let rows = [stored("A.esm", true, 1), stored("B.esp", false, 0)];
+        let protected: std::collections::HashSet<String> = ["A.esm".to_string()].into();
+        let scanned = vec![
+            view("A.esm", PluginKind::Esm),
+            view("B.esp", PluginKind::Esp),
+        ];
+        let once = stamp_protected(merge_plugin_state(scanned, &rows), &protected);
+        let twice = stamp_protected(merge_plugin_state(once.clone(), &rows), &protected);
+        assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn enabled_names_reflects_the_merged_state() {
+        let rows = [stored("A.esm", true, 0), stored("B.esp", false, 1)];
+        let merged = merge_plugin_state(
+            vec![
+                view("A.esm", PluginKind::Esm),
+                view("B.esp", PluginKind::Esp),
+            ],
+            &rows,
+        );
+        assert_eq!(enabled_names(&merged), ["A.esm".to_string()].into());
     }
 
     #[test]

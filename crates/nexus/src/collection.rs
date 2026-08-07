@@ -1,13 +1,13 @@
-//! Pure `collection.json` parser (COLL-01).
+//! Pure `collection.json` parser.
 //!
 //! Deserialises a NexusMods **Collection revision manifest** (Vortex's `ICollection`
 //! shape, authored by `extensions/collections/src/types/ICollection.ts`) into a typed
 //! [`Collection`] with NO I/O and NO Tauri — exactly the pure-parse discipline of
 //! `crates/store/src/nexus.rs` and the FOMOD parser, so it is unit-testable headless.
 //!
-//! The manifest is **untrusted input** (a trust boundary, T-04-08): it lives inside the
+//! The manifest is **untrusted input** (a trust boundary): it lives inside the
 //! attacker-authorable collection archive. Parsing it is allocation-bounded by `serde_json`
-//! (T-04-11 accept); nothing here fetches a URL or touches disk — the resolve gate
+//! nothing here fetches a URL or touches disk — the resolve gate
 //! ([`crate::resolve`]) decides what, if anything, is actionable, and off-Nexus source URLs
 //! are NEVER auto-fetched.
 //!
@@ -100,7 +100,7 @@ pub struct CollectionMod {
 ///
 /// `type` discriminates how (and whether) NexTwist may obtain the file. Only `nexus` and
 /// `bundle` are actionable; `direct`/`browse`/`manual` are off-Nexus and surfaced as
-/// manual steps — they are NEVER auto-fetched (locked decision; T-04-08 SSRF mitigation).
+/// manual steps — they are NEVER auto-fetched (a locked decision; SSRF mitigation).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceInfo {
     /// The source kind.
@@ -142,7 +142,7 @@ pub struct SourceInfo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SourceType {
-    /// A pinned NexusMods file (`modId`+`fileId`) — downloadable via the Phase-3 client.
+    /// A pinned NexusMods file (`modId`+`fileId`) — downloadable via the Nexus client.
     Nexus,
     /// A file bundled inside the collection archive itself — no download.
     Bundle,
@@ -156,7 +156,7 @@ pub enum SourceType {
 
 impl SourceType {
     /// Whether this source is off-Nexus and must be surfaced as a manual step rather than
-    /// fetched (the SSRF-safe classification, T-04-08).
+    /// fetched (the SSRF-safe classification).
     pub fn is_off_nexus(self) -> bool {
         matches!(
             self,
@@ -167,7 +167,7 @@ impl SourceType {
 
 /// The FOMOD-replay encoding (`IChoices`): an ordered list of steps by name, each with
 /// groups by name, each with the chosen options by name + index. Driven directly by
-/// `crates/fomod::resolve` in the headless Collection-install path (Plan 04 / COLL-03).
+/// `crates/fomod::resolve` in the headless Collection-install path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Choices {
     /// The choice encoding type — always `"fomod"` for a scripted-installer replay.
@@ -242,7 +242,7 @@ pub enum ModRuleType {
 ///
 /// A reference matches a resolved mod by `tag`, `md5`, `logicalFileName` (+ `versionMatch`),
 /// `fileExpression`, or `repo` (modId/fileId). All fields are optional; an empty reference
-/// (or one matching no resolved mod) is skipped, not fatal (Pitfall 4 / T-04-09).
+/// (or one matching no resolved mod) is skipped, not fatal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ModReference {
     /// Opaque tag matcher.
@@ -273,7 +273,7 @@ impl Collection {
     ///
     /// Pure (no I/O). A malformed or schema-invalid manifest flattens the serde error into a
     /// [`NexusError::Http`] string at the crate boundary (the crate's String-flattening
-    /// convention) — never a panic on this untrusted input (T-04-08 / T-04-11).
+    /// convention) — never a panic on this untrusted input.
     pub fn parse(json: &str) -> Result<Collection, NexusError> {
         serde_json::from_str(json)
             .map_err(|e| NexusError::Http(format!("malformed collection.json: {e}")))

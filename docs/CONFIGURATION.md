@@ -1,4 +1,3 @@
-<!-- generated-by: gsd-doc-writer -->
 # Configuration
 
 NexTwist is a desktop application, not a service. It has **no user-facing

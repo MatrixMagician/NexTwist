@@ -1,17 +1,17 @@
-//! Collection availability resolver — the resolve-before-download HARD GATE (COLL-02).
+//! Collection availability resolver — the resolve-before-download HARD GATE.
 //!
 //! Given a parsed [`crate::collection::Collection`], classify EVERY pinned mod's
 //! availability into a [`ResolveReport`] **before any download or disk write** (success
-//! criterion #2; the STATE Phase-4 blocker mitigation). The gate is structural: this module
+//! The gate is structural: this module
 //! only ever calls [`NexusClient::file_availability`] (a single metadata read per `nexus`
 //! mod, gated through the shared `governor` limiter via `until_ready()` first) — it has NO
-//! download path, so it cannot issue a download (T-04-10).
+//! download path, so it cannot issue a download.
 //!
-//! Classification follows the Source-type table (RESEARCH Collection Manifest Reference):
+//! Classification follows the Collection manifest's source-type table:
 //! * `nexus`  → the file-info read decides Available / Archived / Unavailable;
 //! * `bundle` → [`ModStatus::Available`] (the file is inside the collection archive — no fetch);
 //! * `direct` / `browse` / `manual` → [`ModStatus::Manual`] — off-Nexus, NEVER auto-fetched
-//!   (locked decision; T-04-08 SSRF mitigation). No request is issued for these.
+//!   (a locked decision; SSRF mitigation). No request is issued for these.
 //!
 //! Off-Nexus sources are classified purely from `source.type`; the resolver issues no
 //! network request for them at all, so a malicious/​off-Nexus `url` is never contacted.
@@ -20,10 +20,10 @@ use crate::client::{FileAvailability, NexusClient};
 use crate::collection::{Collection, SourceType};
 use crate::error::NexusError;
 
-/// The resolved availability of one Collection mod (COLL-02; UI-SPEC §B.3).
+/// The resolved availability of one Collection mod.
 ///
-/// Serializable so it crosses the Tauri IPC boundary to the resolve-report UI (UI-SPEC
-/// §B.3) — the report is rendered before any download.
+/// Serializable so it crosses the Tauri IPC boundary to the resolve-report UI — the
+/// report is rendered before any download.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum ModStatus {
     /// The mod's file is available to download (nexus) or bundled (bundle).
@@ -71,7 +71,7 @@ impl ResolveReport {
 }
 
 /// Resolve every pinned mod's availability into a [`ResolveReport`] — the hard
-/// resolve-before-download gate (COLL-02). Issues only metadata reads (zero downloads).
+/// resolve-before-download gate. Issues only metadata reads (zero downloads).
 ///
 /// For each mod:
 /// * `nexus` with a `(mod_id, file_id)` pair → [`NexusClient::file_availability`] (a single
@@ -96,7 +96,7 @@ pub async fn resolve_collection(
             SourceType::Bundle => ModStatus::Available,
             SourceType::Direct | SourceType::Browse | SourceType::Manual => {
                 // Off-Nexus: classified from the type ALONE. No request is issued, so the
-                // off-Nexus `url` is never contacted (T-04-08 SSRF mitigation).
+                // off-Nexus `url` is never contacted (SSRF mitigation).
                 ModStatus::Manual
             }
             SourceType::Nexus => match (m.source.mod_id, m.source.file_id) {

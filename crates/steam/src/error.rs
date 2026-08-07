@@ -1,6 +1,6 @@
 //! Error type for the steam crate.
 //!
-//! Per the locked error-design decision (CONTEXT.md): libraries use `thiserror`
+//! Per the locked error-design decision: libraries use `thiserror`
 //! enums; `anyhow` is reserved for the app/Tauri boundary only.
 
 use std::path::PathBuf;

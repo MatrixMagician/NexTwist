@@ -54,6 +54,14 @@ jobs:
           npm --prefix frontend ci
           npm --prefix frontend run build
 
+      # svelte-check and the $lib unit tests are listed in the definition of done but were
+      # never actually gated by CI, so a type error or a broken UI rule could land silently.
+      - name: svelte-check
+        run: npm --prefix frontend run check
+
+      - name: Frontend unit tests
+        run: npm --prefix frontend test
+
       - name: cargo test --workspace
         run: cargo test --workspace --locked
 

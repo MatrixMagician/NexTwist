@@ -1,9 +1,9 @@
-//! Per-game canonical `Data/` casing map (DEPLOY-08 input).
+//! Per-game canonical `Data/` casing map.
 //!
 //! Wine/Proton does NOT abstract the filesystem: a Windows `open("Data\\Textures\\x")`
 //! becomes a case-sensitive Linux `open()`, so mixed-case mod paths (authored on
-//! case-insensitive NTFS) silently fail to load (RESEARCH.md Pitfall 4). The deploy
-//! engine's `casefold.rs` (Plan 05) rewrites incoming mod paths to the game's REAL
+//! case-insensitive NTFS) silently fail to load. The deploy
+//! engine's `casefold.rs` rewrites incoming mod paths to the game's REAL
 //! casing — and the knowledge of that real casing lives HERE.
 //!
 //! This module ONLY produces the canonical-casing knowledge; it performs NO rewriting
@@ -40,11 +40,6 @@ impl CasingMap {
     /// on-disk under the game's `Data/` tree.
     pub fn canonical_dir(&self, lower_rel: &str) -> Option<&str> {
         self.dirs.get(lower_rel).map(String::as_str)
-    }
-
-    /// Number of directories recorded (excluding the `Data/` root itself).
-    pub fn len(&self) -> usize {
-        self.dirs.len()
     }
 
     /// True if no subdirectories were recorded.

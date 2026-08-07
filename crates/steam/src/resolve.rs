@@ -2,7 +2,7 @@
 //!
 //! steamlocate returns the `(App, Library)` pair but exposes NO compatdata API, so
 //! the Proton prefix `compatdata/<appid>/pfx` is derived MANUALLY here from the
-//! library root (RESEARCH.md Pitfall 5). Resolution honors `$STEAM_COMPAT_DATA_PATH`
+//! library root. Resolution honors `$STEAM_COMPAT_DATA_PATH`
 //! when set and re-resolves on every call (paths can move — never cached to disk).
 //!
 //! Only the two supported Bethesda AppIDs are accepted (allow-list, ENV-03).
@@ -198,9 +198,9 @@ fn library_root_of(install_dir: &Path) -> Option<&Path> {
 
 /// Resolve the full Starfield detection status for a supported appid (SFDET-01/02/03).
 ///
-/// The Tauri adapter (Plan 03) forwards this VERBATIM. Re-resolves the Steam library +
+/// The Tauri adapter forwards this VERBATIM. Re-resolves the Steam library +
 /// Proton prefix on every call (never cached — paths move) and keeps ALL path construction
-/// in the engine (T-06-04: the adapter builds no paths). The library root is the ancestor
+/// in the engine (the adapter builds no paths). The library root is the ancestor
 /// of the resolved install dir, which [`crate::ce2::starfield_status`] uses to read the
 /// installed build for the advisory drift compare.
 pub fn starfield_status_for(appid: u32) -> Result<crate::ce2::StarfieldStatus, SteamError> {
@@ -255,7 +255,7 @@ fn proton_prefix(library_root: &Path, appid: u32) -> PathBuf {
 /// Manual "add game by folder" fallback (ENV-03) for non-standard / Snap installs.
 ///
 /// Validates the supplied folder contains the expected Bethesda markers (a `Data/`
-/// directory and the game executable) BEFORE accepting it (threat T-01-04: untrusted
+/// directory and the game executable) BEFORE accepting it (untrusted
 /// path validation). Derives the prefix from a sibling `compatdata` when discoverable,
 /// else records the install dir with `prefix_exists = false` (unresolved-prefix
 /// warning surfaced by the caller).
@@ -362,14 +362,14 @@ fn has_file_ci(dir: &Path, name: &str) -> bool {
 }
 
 /// Return the child of `dir` whose name matches `name` case-insensitively, chosen
-/// DETERMINISTICALLY (WR-07): an exact-case match wins, else the lexicographically
+/// DETERMINISTICALLY: an exact-case match wins, else the lexicographically
 /// smallest case-variant. `read_dir` order is filesystem-dependent and unordered, so a
 /// first-match-wins choice would be nondeterministic across runs if a case-sensitive FS
 /// (NexTwist's Proton target) holds multiple case-variants of `name` (e.g. `Data`/`data`,
 /// or two executables) — a hazard for the reversibility guarantee built on top of it.
 ///
 /// `pub(crate)` so `ce2::my_games_path` reuses the exact same deterministic per-component
-/// case-fold for the `Documents/My Games/Starfield` walk (WR-07) — never re-implemented.
+/// case-fold for the `Documents/My Games/Starfield` walk — never re-implemented.
 pub(crate) fn entry_ci(dir: &Path, name: &str) -> Option<PathBuf> {
     let rd = std::fs::read_dir(dir).ok()?;
     let mut matches: Vec<String> = rd

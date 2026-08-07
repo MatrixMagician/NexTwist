@@ -1,4 +1,4 @@
-//! Collection lifecycle adapters (COLL-02/03/04/05) — THIN per Anti-Pattern-4.
+//! Collection lifecycle adapters — deliberately THIN.
 //!
 //! These four `#[tauri::command]`s orchestrate the FULL Collection lifecycle entirely out
 //! of EXISTING, safety-reviewed primitives — they add ZERO new download/deploy/purge code:
@@ -6,21 +6,21 @@
 //! * [`resolve_collection`] — parse the `collection.json` manifest (`nexus::Collection`),
 //!   gate the game domain (`appid_for_domain`), and run the headless `nexus::resolve_collection`
 //!   (metadata reads only, ZERO downloads) → the `ResolveReport`. No disk mutation before
-//!   the report is accepted (the resolve-before-download HARD GATE, COLL-02).
+//!   the report is accepted (the resolve-before-download HARD GATE).
 //! * [`download_collection`] — read `UserInfo.is_premium` FIRST (non-Premium ⇒ the
-//!   Premium-required notice, NO download starts — locked decision, T-04-16). For Premium:
+//!   Premium-required notice, NO download starts — a locked decision). For Premium:
 //!   bulk-download the AVAILABLE nexus set, reusing `run_download_to_window` VERBATIM per
 //!   mod under a small bounded concurrency so the shared governor limiter governs the global
-//!   rate (WR-03); a per-mod failure does NOT abort the batch; off-Nexus mods are recorded
-//!   as manual steps and NEVER fetched (T-04-12). Each mod's pinned FOMOD `choices` are
+//!   rate; a per-mod failure does NOT abort the batch; off-Nexus mods are recorded
+//!   as manual steps and NEVER fetched. Each mod's pinned FOMOD `choices` are
 //!   replayed headlessly through `nexus::replay_choices` + `fomod::resolve` (no per-mod
 //!   wizard) — a stale choice surfaces as a specific error, never a silent mis-install.
 //! * [`deploy_collection`] — `create_profile` → `set_profile_mod` (ranks from the rules) →
 //!   `deploy::switch_profile` (the journaled purge→deploy_winners→apply_load_order→set_active
-//!   path). NO new deploy primitive (COLL-04).
+//!   path). NO new deploy primitive.
 //! * [`uninstall_collection`] — `deploy::purge` (purge-to-pristine; switch/purge BEFORE the
 //!   delete since `store.delete_profile` REJECTS an active profile) → `store.delete_profile`
-//!   → remove the collection's staged mod trees + rows. Fully reversible (COLL-05); the
+//!   → remove the collection's staged mod trees + rows. Fully reversible; the
 //!   byte-for-byte pristine guarantee is regression-locked by `collection_round_trip`.
 //!
 //! Errors map to the `String` IPC boundary via `boundary_err`. NB: the live GraphQL
@@ -30,8 +30,7 @@
 
 use futures_util::stream::{self, StreamExt};
 use nexus::{
-    Collection as NexusCollection, NexusAuth, NexusClient, ResolveReport, SourceType,
-    replay_choices,
+    Collection as NexusCollection, NexusClient, ResolveReport, SourceType, replay_choices,
 };
 use serde::Serialize;
 use tauri::State;
@@ -41,13 +40,13 @@ use crate::commands::downloads::run_download_to_window;
 use crate::commands::{appid_for_domain, boundary_err, require_game};
 use crate::state::AppState;
 
-/// Small bounded concurrency for the bulk download (WR-03). The SHARED governor limiter
+/// Small bounded concurrency for the bulk download. The SHARED governor limiter
 /// (cloned per client) enforces the true global NexusMods rate; this only caps how many
 /// streams are in flight at once so a large Collection does not open hundreds of sockets.
 const DOWNLOAD_CONCURRENCY: usize = 3;
 
 /// Resolve EVERY pinned mod in a Collection manifest into a [`ResolveReport`] — the
-/// resolve-before-download HARD GATE (COLL-02). Issues only metadata reads (ZERO downloads,
+/// resolve-before-download HARD GATE. Issues only metadata reads (ZERO downloads,
 /// ZERO disk writes). The frontend renders this report and gates the "Download" CTA behind
 /// the user accepting it.
 ///
@@ -85,17 +84,17 @@ pub async fn resolve_collection(
         .map_err(boundary_err)
 }
 
-/// The outcome of a bulk Collection download (COLL-02/03): how many available mods were
+/// The outcome of a bulk Collection download: how many available mods were
 /// downloaded, which per-mod downloads failed (the batch is NOT aborted on a single
 /// failure), the manual (off-Nexus) steps the user must perform, and any stale FOMOD-choice
-/// replays the user must re-run manually. Serializable for the UI (UI-SPEC §B.4/§C.2).
+/// replays the user must re-run manually. Serializable for the UI.
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct DownloadCollectionReport {
     /// The local `collection` row id (so the UI can deploy/uninstall it).
     pub collection_id: i64,
     /// The number of available mods successfully downloaded + staged.
     pub downloaded: usize,
-    /// Per-mod failures `(mod name, reason)` — the batch continued past each (Pitfall 4).
+    /// Per-mod failures `(mod name, reason)` — the batch continued past each.
     pub failed: Vec<(String, String)>,
     /// Off-Nexus mods surfaced as manual steps (name + instructions); NEVER fetched.
     pub manual_steps: Vec<ManualStep>,
@@ -103,7 +102,7 @@ pub struct DownloadCollectionReport {
     pub stale_choices: Vec<(String, String)>,
 }
 
-/// One off-Nexus manual step surfaced to the user (never auto-fetched; T-04-12).
+/// One off-Nexus manual step surfaced to the user (never auto-fetched).
 #[derive(Debug, Clone, Serialize)]
 pub struct ManualStep {
     /// The mod display name.
@@ -115,7 +114,7 @@ pub struct ManualStep {
 }
 
 /// Bulk-download a Collection's AVAILABLE mods after the resolve report is accepted
-/// (COLL-02/03). Enforces the Premium gate FIRST (T-04-16): a non-Premium session returns
+/// Enforces the Premium gate FIRST: a non-Premium session returns
 /// the Premium-required notice and starts NO download (no `nxm://` fallback — locked
 /// decision). For a Premium session, each available `nexus` mod reuses
 /// `run_download_to_window` VERBATIM (the SAME stream→extract→stage→persist path), bounded
@@ -135,7 +134,7 @@ pub async fn download_collection(
     let collection = NexusCollection::parse(&manifest_json).map_err(boundary_err)?;
     let domain = collection.info.domain_name.clone();
 
-    // ── GAME-DOMAIN GATE (CR-01): bind the manifest domain to the selected appid BEFORE any
+    // ── GAME-DOMAIN GATE: bind the manifest domain to the selected appid BEFORE any
     //    download begins — the SAME check resolve_collection enforces. download_collection is
     //    a thin boundary that writes to disk (it stages mods under game.staging_dir), so it
     //    MUST re-assert the resolve-before-download safety invariant rather than trusting the
@@ -150,7 +149,7 @@ pub async fn download_collection(
         }
     }
 
-    // ── PREMIUM GATE (T-04-16): checked BEFORE any download begins. ──────────────────
+    // ── PREMIUM GATE: checked BEFORE any download begins. ──────────────────
     let is_premium = {
         let guard = state.lock().await;
         guard.user.as_ref().map(|u| u.is_premium).unwrap_or(false)
@@ -178,7 +177,7 @@ pub async fn download_collection(
         ..Default::default()
     };
 
-    // Partition: off-Nexus mods are manual steps (NEVER fetched, T-04-12); the rest are the
+    // Partition: off-Nexus mods are manual steps (NEVER fetched); the rest are the
     // auto-fetchable available set we bulk-download. We carry only the manifest INDEX +
     // owned coordinates into the download futures so no borrow of `collection` crosses the
     // bounded-concurrency stream (which would over-constrain the async-command lifetimes).
@@ -196,7 +195,7 @@ pub async fn download_collection(
                     "nexus mod is missing its pinned mod/file id".to_string(),
                 )),
             },
-            // Off-Nexus (`direct`/`browse`/`manual`) is a manual step, NEVER fetched (T-04-12).
+            // Off-Nexus (`direct`/`browse`/`manual`) is a manual step, NEVER fetched.
             SourceType::Direct | SourceType::Browse | SourceType::Manual => {
                 report.manual_steps.push(ManualStep {
                     name: m.name.clone(),
@@ -214,7 +213,7 @@ pub async fn download_collection(
     }
 
     // ── Bulk download the available set, bounded concurrency, shared governor. ────────
-    // A per-mod failure does NOT abort the batch (Pitfall 4): each result is collected.
+    // A per-mod failure does NOT abort the batch: each result is collected.
     type DlOutcome = (
         usize,
         String,
@@ -238,7 +237,7 @@ pub async fn download_collection(
         .collect()
         .await;
 
-    // ── Rule→rank mapping (COLL-04 / BL-01): compute each mod's deploy rank from the
+    // ── Rule→rank mapping: compute each mod's deploy rank from the
     //    manifest's modRules + fileOverrides ONCE, so the author-intended conflict order
     //    reaches the deploy engine (instead of every mod being hardcoded to one rank). The
     //    map is keyed by manifest index; a mod no rule touches keeps its manifest-order
@@ -252,7 +251,7 @@ pub async fn download_collection(
             Ok(dl) => {
                 // Replay the pinned FOMOD choices (no wizard). A stale choice surfaces as a
                 // specific error and is recorded — the mod still staged, but the user must
-                // run its installer manually (never a silent mis-install; COLL-03 / A3).
+                // run its installer manually (never a silent mis-install).
                 if let Some(choices) = &m.choices
                     && let Err(e) = replay_for(&dl.staging_root, choices)
                 {
@@ -271,7 +270,7 @@ pub async fn download_collection(
     Ok(report)
 }
 
-/// Deploy an installed Collection as its dedicated profile (COLL-04): create the profile,
+/// Deploy an installed Collection as its dedicated profile: create the profile,
 /// set each collection mod's per-profile membership + rank, then reconcile the deployment
 /// through `deploy::switch_profile` (the SAME journaled purge→deploy→load-order→set-active
 /// path every profile switch uses). NO new deploy primitive. Returns the engine's
@@ -285,7 +284,7 @@ pub async fn deploy_collection(
     let game = require_game(&state, appid).await?;
 
     // ── Store-read/setup section: hold the lock ONLY for the quick DB reads + profile
-    //    membership writes, then RELEASE it before the long blocking FS engine call (WR-03).
+    //    membership writes, then RELEASE it before the long blocking FS engine call.
     //    Holding the single AppState mutex across `switch_profile` (a journaled purge→deploy→
     //    load-order pass that performs many syscalls) would freeze every other command for the
     //    full duration of a large Collection deploy. ──────────────────────────────────────
@@ -297,6 +296,9 @@ pub async fn deploy_collection(
             .get_collection(collection_id)
             .map_err(boundary_err)?
             .ok_or_else(|| format!("collection {collection_id} is not installed"))?;
+        // Deploying another game's Collection into this game's profile would stage the wrong
+        // mods against the wrong install; refuse rather than mix them.
+        same_game_gate(&collection, appid)?;
         let mods = guard
             .store
             .list_collection_mods(collection_id)
@@ -324,7 +326,7 @@ pub async fn deploy_collection(
         };
 
         // Set per-profile membership: each collection mod enabled, ranked by its stored rank
-        // (which was derived from the manifest's modRules at download time, Pattern 7).
+        // (which was derived from the manifest's modRules at download time).
         for cm in &mods {
             guard
                 .store
@@ -335,13 +337,13 @@ pub async fn deploy_collection(
         profile_id
     }; // lock released here, before the blocking deploy.
 
-    // Deploy via the existing safe profile-switch path — no new primitive (COLL-04). The lock
+    // Deploy via the existing safe profile-switch path — no new primitive. The lock
     // is re-acquired only for the single engine call (mirrors commands/deploy.rs), not held
     // across the store reads above.
     deploy::switch_profile(&state.lock().await.store, &game, profile_id).map_err(boundary_err)
 }
 
-/// Uninstall an installed Collection, fully reversibly (COLL-05): purge the deployment back
+/// Uninstall an installed Collection, fully reversibly: purge the deployment back
 /// to byte-for-byte pristine, drop the dedicated profile (switch/purge FIRST since
 /// `delete_profile` rejects an active profile), then remove the collection's staged mod
 /// trees + their `managed_mod` + V5 collection rows. The pristine guarantee is
@@ -362,6 +364,11 @@ pub async fn uninstall_collection(
             .get_collection(collection_id)
             .map_err(boundary_err)?
             .ok_or_else(|| format!("collection {collection_id} is not installed"))?;
+        // The collection must belong to the game we are about to purge. Without this the
+        // command would purge game `appid` while deleting another game's staged trees and
+        // rows — a cross-game destructive mismatch, and the reason the mod lookups below can
+        // safely be by id.
+        same_game_gate(&collection, appid)?;
         let mods = guard
             .store
             .list_collection_mods(collection_id)
@@ -374,7 +381,7 @@ pub async fn uninstall_collection(
     //    active, and clears the on-disk deployment so the profile can be safely dropped.
     //    The lock is held ONLY for this single engine call (mirrors commands/deploy.rs), not
     //    across the row cleanup below — so a large Collection purge does not freeze every
-    //    other command for its full duration (WR-03).
+    //    other command for its full duration.
     let purged = deploy::purge(&state.lock().await.store, &game).map_err(boundary_err)?;
 
     // ── Row/tree cleanup section: re-acquire the lock for the quick DB writes + the staged
@@ -403,13 +410,9 @@ pub async fn uninstall_collection(
         // 3. Remove the collection's staged mod trees + their managed_mod rows, then drop the
         //    V5 collection rows (collection_mod + fomod_choice CASCADE off the collection).
         for cm in &mods {
-            if let Some(m) = guard
-                .store
-                .list_mods(appid)
-                .map_err(boundary_err)?
-                .into_iter()
-                .find(|m| m.id == cm.mod_id)
-            {
+            // Look the row up by id rather than re-scanning every mod for the game once per
+            // collection member (that made uninstall O(mods x collection size) queries).
+            if let Some(m) = guard.store.get_mod(cm.mod_id).map_err(boundary_err)? {
                 // Best-effort remove the staged tree (already purged from the live game).
                 let _ = std::fs::remove_dir_all(&m.staging_root);
             }
@@ -424,11 +427,29 @@ pub async fn uninstall_collection(
     Ok(purged)
 }
 
-// ── Pure / small helpers (no business logic — Anti-Pattern-4) ────────────────────────
+// ── Pure / small helpers (no business logic) ────────────────────────────────────────
 
-/// The Premium gate (T-04-16): a non-Premium session may NOT download a Collection. Returns
-/// `Ok(())` for a Premium session, or the exact Premium-required notice string (UI-SPEC §B.1
-/// Copywriting Contract) for a free session. Pure so the gate decision is unit-tested.
+/// Refuse to operate on a Collection that belongs to a different game than the one the
+/// command was invoked for.
+///
+/// `uninstall_collection` purges game `appid` and then deletes the Collection's staged trees
+/// and rows. If the Collection belonged to another game those two halves would disagree — it
+/// would purge one game while destroying another's staged mods. Pure so the gate is
+/// unit-tested; it is also what lets the row cleanup look mods up by id.
+fn same_game_gate(collection: &nextwist_core::Collection, appid: u32) -> Result<(), String> {
+    if collection.appid == appid {
+        Ok(())
+    } else {
+        Err(format!(
+            "collection {} belongs to game {}, not {appid}",
+            collection.id, collection.appid
+        ))
+    }
+}
+
+/// The Premium gate: a non-Premium session may NOT download a Collection. Returns
+/// `Ok(())` for a Premium session, or the exact Premium-required notice string for a free
+/// session. Pure so the gate decision is unit-tested.
 fn premium_gate(is_premium: bool) -> Result<(), String> {
     if is_premium {
         Ok(())
@@ -439,24 +460,11 @@ fn premium_gate(is_premium: bool) -> Result<(), String> {
     }
 }
 
-/// Build a `NexusClient` with the SHARED process-wide limiter + the session auth (OAuth
-/// bearer or the keyring API key). Mirrors the download path's auth resolution so the
-/// Collection metadata reads coordinate the same rate budget (WR-03).
+/// Lock the state and build a session `NexusClient` (`AppState::nexus_client` owns the auth
+/// resolution + shared-limiter wiring, so the Collection reads coordinate the same rate
+/// budget as downloads by construction).
 async fn build_client(state: &State<'_, Mutex<AppState>>) -> Result<NexusClient, String> {
-    let (auth, limiter) = {
-        let guard = state.lock().await;
-        let auth = match guard.access_token.clone() {
-            Some(tok) => NexusAuth::Bearer(tok),
-            None => {
-                let api_key = crate::keyring::load_refresh_token()
-                    .map_err(boundary_err)?
-                    .ok_or_else(|| "not logged in: no NexusMods session".to_string())?;
-                NexusAuth::ApiKey(api_key)
-            }
-        };
-        (auth, guard.rate_limiter.clone())
-    };
-    NexusClient::with_limiter(nexus::NEXUS_API_BASE, auth, limiter).map_err(boundary_err)
+    state.lock().await.nexus_client()
 }
 
 /// Replay a downloaded mod's pinned FOMOD choices headlessly against its staged tree.
@@ -479,10 +487,10 @@ fn replay_for(staging_root: &std::path::Path, choices: &nexus::Choices) -> Resul
 ///
 /// `rank` is the rule-derived deploy rank (manifest baseline + `modRules` delta, computed by
 /// `nexus::compute_collection_ranks`) so the author-intended conflict order reaches the
-/// deploy engine (BL-01 / COLL-04).
+/// deploy engine.
 ///
 /// The Nexus identity (`nexus_mod_id`/`file_id`) is resolved honestly rather than coerced to
-/// a sentinel `0` (WR-04): a `nexus` source MUST carry both ids — the fetchable partition in
+/// a sentinel `0`: a `nexus` source MUST carry both ids — the fetchable partition in
 /// `download_collection` already pushes any nexus mod missing its ids to `report.failed`
 /// BEFORE it can reach here, so a `nexus` mod without ids is a contract breach surfaced as a
 /// clear error, never written as a fake `0/0` pin that would later masquerade as a real
@@ -501,7 +509,7 @@ async fn persist_collection_mod(
         .map(|c| serde_json::to_string(c).map_err(boundary_err))
         .transpose()?;
 
-    // Resolve the Nexus identity honestly (WR-04): a `nexus` source must have both ids; any
+    // Resolve the Nexus identity honestly: a `nexus` source must have both ids; any
     // other source has none (records 0/0). Never coerce a MISSING nexus pin to 0.
     let (nexus_mod_id, file_id) = match m.source.kind {
         SourceType::Nexus => match (m.source.mod_id, m.source.file_id) {
@@ -539,7 +547,7 @@ mod tests {
     use super::*;
     use nexus::is_auto_fetchable;
 
-    /// T-04-16: the Premium gate decision. A Premium session passes; a free session gets the
+    /// The Premium gate decision. A Premium session passes; a free session gets the
     /// exact §B.1 Premium-required notice and (in the command) NO download starts.
     #[test]
     fn premium_gate_blocks_free_account() {
@@ -551,7 +559,32 @@ mod tests {
         );
     }
 
-    /// T-04-12: only `nexus`/`bundle` are auto-fetchable; every off-Nexus source
+    fn collection(appid: u32) -> nextwist_core::Collection {
+        nextwist_core::Collection {
+            id: 7,
+            appid,
+            slug: "some-collection".to_string(),
+            revision: 1,
+            name: "Some Collection".to_string(),
+            profile_id: None,
+        }
+    }
+
+    /// `uninstall_collection` purges one game and deletes the Collection's staged trees; if
+    /// the Collection belonged to a DIFFERENT game those halves would target different
+    /// installs. The gate refuses the mismatch rather than performing half a destructive op.
+    #[test]
+    fn a_collection_from_another_game_is_refused() {
+        assert!(same_game_gate(&collection(489830), 489830).is_ok());
+        let err = same_game_gate(&collection(377160), 489830)
+            .expect_err("a cross-game collection must be refused");
+        assert!(
+            err.contains("377160") && err.contains("489830"),
+            "the error names both games so the mismatch is obvious: {err}"
+        );
+    }
+
+    /// Only `nexus`/`bundle` are auto-fetchable; every off-Nexus source
     /// (`direct`/`browse`/`manual`) is a manual step and is NEVER requested.
     #[test]
     fn off_nexus_sources_are_never_auto_fetchable() {

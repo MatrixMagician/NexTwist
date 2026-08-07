@@ -1,8 +1,8 @@
-//! Multi-mod registry (D-01/D-13): the `managed_mod` table facade.
+//! Multi-mod registry: the `managed_mod` table facade.
 //!
-//! Phase 2 makes mods first-class: many [`core::ManagedMod`] rows coexist per game,
+//! Mods are first-class: many [`core::ManagedMod`] rows coexist per game,
 //! each carrying a `rank` (lower = higher priority) that orders file-conflict winners
-//! (CONF-02 substrate). No `rusqlite` type appears in this module's public surface.
+//! No `rusqlite` type appears in this module's public surface.
 
 use std::path::PathBuf;
 
@@ -140,7 +140,7 @@ mod tests {
         assert_eq!(store.get_mod(id).unwrap(), None);
     }
 
-    /// CONF-02 substrate: list_mods returns mods in ascending rank order.
+    /// list_mods returns mods in ascending rank order.
     #[test]
     fn rank_orders_list() {
         let dir = TempDir::new().unwrap();

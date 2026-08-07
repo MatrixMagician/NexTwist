@@ -1,6 +1,6 @@
 //! `nextwist-fomod` — the headless FOMOD `ModuleConfig.xml` engine.
 //!
-//! This crate is the only genuinely new safety-critical engine code in Phase 4. It
+//! This crate is a self-contained safety-critical engine. It
 //! implements the FULL FOMOD 5.x `ModuleConfig.xml` specification (CONTEXT-locked
 //! "full spec, not a subset" decision) as a pure transform: untrusted archive XML →
 //! typed AST → (user choices + accumulated flags) → an ordered, concrete file-install
@@ -32,6 +32,7 @@ pub mod error;
 pub mod model;
 pub mod parse;
 pub mod resolve;
+pub mod wizard;
 
 pub use condition::{FlagSet, InstalledFiles, eval, plugin_type_state};
 pub use error::FomodError;
@@ -42,3 +43,4 @@ pub use model::{
 };
 pub use parse::{parse_module_config, resolve_source_path};
 pub use resolve::{FileInstall, Selection, resolve, validate_selection};
+pub use wizard::{WizardGroup, WizardOption, WizardProjection, WizardStep, authored_type, project};

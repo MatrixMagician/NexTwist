@@ -16,7 +16,7 @@ use crate::{ArchiveFormat, list_files_rel, mark_tree_readonly, rar, sevenz, zip}
 
 /// A validated, read-only per-mod staging tree produced by [`install_archive`].
 ///
-/// Derives serde so the Tauri command layer (Plan 06) can return it to the webview and
+/// Derives serde so the Tauri command layer can return it to the webview and
 /// receive it back for the deploy call — it maps 1:1 onto `deploy::StagedFiles`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StagedMod {
@@ -24,6 +24,35 @@ pub struct StagedMod {
     pub staging_root: PathBuf,
     /// Every staged regular file, as a path relative to `staging_root`.
     pub files: Vec<PathBuf>,
+}
+
+/// Turn an untrusted display name into ONE safe staging-subdir component.
+///
+/// Every non-alphanumeric character other than `-`, `_` and space becomes `_`, so the result
+/// can contain no path separator, no `..`, and no NUL — a name like `../../etc/passwd`
+/// collapses to `______etc_passwd`. An empty or whitespace-only name falls back to
+/// `fallback` so callers never join an empty component onto the staging dir.
+///
+/// This is only the *well-formedness* layer: the authoritative path-traversal defense is
+/// [`crate::validate_entry`] on archive entries. It lives here (rather than being copied into
+/// each Tauri adapter) so the download and FOMOD install paths cannot drift apart.
+pub fn staging_dir_name(name: &str, fallback: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim();
+    if trimmed.is_empty() {
+        fallback.to_string()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 /// Install `archive` into `staging_root`, returning the validated [`StagedMod`].
@@ -64,7 +93,7 @@ pub fn install_archive(archive: &Path, staging_root: &Path) -> Result<StagedMod,
     // packaged as `MyMod/Data/foo.esp` instead of `Data/foo.esp`) so the staged tree is
     // `Data/`-rooted rather than double-nested under `Data/MyMod/...`. This runs strictly
     // between extract-validate and the move — the validated extract→validate→move→
-    // read-only ordering is preserved. (Carried Phase-2 gap; acute for FOMOD-02 because
+    // read-only ordering is preserved. (Carried gap; acute for the FOMOD dry-run because
     // `<file>/<folder>` source resolution depends on the detected archive root.)
     let plan = detect_archive_root(temp_root)?;
 
@@ -109,7 +138,7 @@ fn make_temp_near(staging_root: &Path) -> Result<TempDir, ExtractError> {
 /// Recognized top-level game-root items (case-insensitive). A wrapper directory that
 /// directly contains one of these — or a `Data` folder — is treated as the real root.
 ///
-/// Kept SMALL and explicit (threat T-04-04): a too-broad list would wrongly flatten a
+/// Kept SMALL and explicit: a too-broad list would wrongly flatten a
 /// legitimate multi-folder mod. `Data` is handled separately below (it is the dominant
 /// Bethesda root); these are the common script-extender / config siblings that ship at the
 /// game root alongside `Data`.
@@ -138,7 +167,7 @@ pub(crate) enum MoveSource {
 /// directory and, if so, plan to stage only that directory's GAME content. Otherwise
 /// plan to stage the whole tree unchanged.
 ///
-/// Heuristic (RESEARCH Pitfall 1): the tree is "wrapped" iff its top level is EXACTLY one
+/// Heuristic: the tree is "wrapped" iff its top level is EXACTLY one
 /// directory (no sibling files or dirs) AND that directory directly contains a recognizable
 /// game root — a child named `Data` (case-insensitively) or one of
 /// [`RECOGNIZED_ROOT_ITEMS`]. A real multi-folder mod (more than one top-level entry) or a
@@ -413,7 +442,7 @@ mod root_detection_tests {
     #[test]
     fn multi_folder_mod_is_never_flattened() {
         // More than one top-level entry ⇒ a legitimate multi-folder mod; leave it as-is
-        // even though one child is a recognizable root. This is the T-04-04 guard.
+        // even though one child is a recognizable root. This is the ambiguous-root guard.
         let tmp = tempfile::tempdir().unwrap();
         touch(tmp.path(), "Data/foo.esp");
         touch(tmp.path(), "readme.txt");
@@ -456,5 +485,53 @@ mod root_detection_tests {
         let plan = detect_archive_root(tmp.path()).unwrap();
         let children = assert_wrapper(&plan, &tmp.path().join("WrapDir"), &["SKSE"]);
         assert!(children[0].join("plugins/foo.dll").is_file());
+    }
+}
+
+#[cfg(test)]
+mod name_tests {
+    use super::staging_dir_name;
+    use std::path::{Component, Path};
+
+    #[test]
+    fn traversal_and_separators_collapse_to_underscores() {
+        assert_eq!(staging_dir_name("../etc/passwd", "x"), "___etc_passwd");
+        assert_eq!(staging_dir_name("a\\b", "x"), "a_b");
+    }
+
+    #[test]
+    fn ordinary_names_survive_intact() {
+        assert_eq!(
+            staging_dir_name("My Mod v1-2_final", "x"),
+            "My Mod v1-2_final"
+        );
+    }
+
+    #[test]
+    fn blank_names_fall_back() {
+        assert_eq!(staging_dir_name("   ", "fomod-mod"), "fomod-mod");
+        assert_eq!(staging_dir_name("", "nexus-mod"), "nexus-mod");
+    }
+
+    #[test]
+    fn the_result_is_always_exactly_one_normal_path_component() {
+        for raw in [
+            "../../root",
+            "/abs/path",
+            "C:\\Windows",
+            "..",
+            ".",
+            "with\0nul",
+            "mod\nname",
+            "🎮 emoji mod",
+        ] {
+            let safe = staging_dir_name(raw, "fallback");
+            let comps: Vec<_> = Path::new(&safe).components().collect();
+            assert_eq!(comps.len(), 1, "{raw:?} -> {safe:?} must be one component");
+            assert!(
+                matches!(comps[0], Component::Normal(_)),
+                "{raw:?} -> {safe:?} must be a normal component"
+            );
+        }
     }
 }

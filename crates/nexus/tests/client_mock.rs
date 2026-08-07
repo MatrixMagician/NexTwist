@@ -1,4 +1,4 @@
-//! mockito-backed tests for the hybrid NexusMods client (NEXUS-03/05).
+//! mockito-backed tests for the hybrid NexusMods client.
 //!
 //! These exercise the REST v1 `download_link.json` request shape (premium vs free),
 //! the rate-limit header reactions, and the error/expired-key paths — all against a
@@ -137,7 +137,7 @@ async fn rate_limit_429_maps_to_rate_limited_and_arms_backoff() {
     }
 }
 
-/// WR-03: a 429 on a client built from a SHARED `Arc<RateLimiter>` arms a backoff that a
+/// A 429 on a client built from a SHARED `Arc<RateLimiter>` arms a backoff that a
 /// SECOND client built from the same `Arc` observes — proving the limiter is process-wide
 /// and parallel downloads coordinate one budget + one backoff (not a fresh one each).
 #[tokio::test]
@@ -177,7 +177,7 @@ async fn shared_limiter_backoff_is_visible_across_clients() {
     // The SHARED limiter is now armed — a second client built from the same Arc sees it.
     assert!(
         limiter.is_backing_off(),
-        "WR-03: a 429 on one client must arm the shared limiter for all clients"
+        "a 429 on one client must arm the shared limiter for all clients"
     );
     let _client_b = NexusClient::with_limiter(
         &server.url(),
@@ -187,7 +187,7 @@ async fn shared_limiter_backoff_is_visible_across_clients() {
     .unwrap();
     assert!(
         limiter.is_backing_off(),
-        "WR-03: client B coordinates the same backoff deadline"
+        "client B coordinates the same backoff deadline"
     );
 }
 
@@ -218,7 +218,7 @@ async fn low_remaining_header_on_success_is_consumed() {
     assert_eq!(links.len(), 1);
 }
 
-/// BUG 1 fix: `mod_file_metadata` reads the proven REST v1 file-info endpoint
+/// `mod_file_metadata` reads the proven REST v1 file-info endpoint
 /// `.../files/{file_id}.json` (NOT a GraphQL POST) and parses `version` + `name` from the
 /// returned file object. The mock asserts the request method/path AND the auth header, so a
 /// regression back to the non-existent GraphQL v2 `modFile` field fails this test.
@@ -250,7 +250,7 @@ async fn mod_file_metadata_reads_v1_file_info() {
     assert_eq!(mf.display_name, "SKSE64");
 }
 
-/// BUG 1 fix: a 404 from the v1 file-info endpoint (deleted/unknown file id) surfaces as a
+/// A 404 from the v1 file-info endpoint (deleted/unknown file id) surfaces as a
 /// clean `NexusError::Http`, not a panic or a silent empty `ModFile` — the download row then
 /// fails with a clear reason instead of the old "GraphQL response missing modFile" abort.
 #[tokio::test]
@@ -277,7 +277,7 @@ async fn mod_file_metadata_missing_file_maps_to_http_error() {
 /// Test (streaming): `download_to` streams a stubbed body chunk-by-chunk to a temp file,
 /// invoking `on_progress` with a monotonically increasing `downloaded` and the
 /// Content-Length as `total`; the written bytes equal the stubbed body. Named `*_stage_*`
-/// so `cargo test -p nextwist-nexus stage` selects it (NEXUS-03/06 streaming gate).
+/// so `cargo test -p nextwist-nexus stage` selects it (the streaming gate).
 #[tokio::test]
 async fn download_to_streams_to_staging_file_with_progress() {
     use std::sync::Mutex;
@@ -353,7 +353,7 @@ async fn download_to_cancel_removes_partial_file() {
     assert!(!dest.exists(), "the partial file must be removed on cancel");
 }
 
-/// CR-01: a mid-stream transport error (the server promises more bytes via Content-Length
+/// A mid-stream transport error (the server promises more bytes via Content-Length
 /// than it sends, so reqwest yields an `Err` chunk) must ALSO unlink the partial file —
 /// not just the cancel path. Before the fix, only the cancel branch cleaned up, so a
 /// truncated/aborted body orphaned a `.archive` partial in the staging dir.
@@ -383,6 +383,6 @@ async fn download_to_transport_error_removes_partial_file() {
     assert!(matches!(err, NexusError::Http(_)));
     assert!(
         !dest.exists(),
-        "CR-01: the partial file must be removed on a mid-stream transport error"
+        "the partial file must be removed on a mid-stream transport error"
     );
 }

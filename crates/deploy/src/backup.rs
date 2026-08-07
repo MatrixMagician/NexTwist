@@ -1,4 +1,4 @@
-//! Backup-before-overwrite into a content-addressed vanilla store (DEPLOY-04).
+//! Backup-before-overwrite into a content-addressed vanilla store.
 //!
 //! This is the single most important safety mechanism: corruption of a vanilla game
 //! file is otherwise only fixable by a Steam re-verify. Before a deploy overwrites

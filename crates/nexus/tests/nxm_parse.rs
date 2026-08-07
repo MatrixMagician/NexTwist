@@ -1,4 +1,4 @@
-//! Strict `nxm://` parser tests (NXM-01 / NEXUS-04).
+//! Strict `nxm://` parser tests.
 //!
 //! The parser is a **security boundary**: the input is an untrusted URL handed to the app
 //! by the OS deep-link handler. These tests pin the four contract behaviours from the plan
@@ -46,7 +46,7 @@ fn parses_premium_link_without_key_or_expires() {
 }
 
 /// Test 3: the oauth-callback variant is discriminated from a download and yields the
-/// code+state for the Plan-01 code-exchange.
+/// code+state for the code-exchange.
 #[test]
 fn discriminates_oauth_callback() {
     let url = "nxm://oauth/callback?code=XYZ&state=S";

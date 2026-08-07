@@ -1,18 +1,18 @@
 //! A1/A3 de-risk spike: prove the libloot Linux seam.
 //!
-//! The single largest technical unknown of Phase 2 (RESEARCH Assumptions A1/A3) is
+//! The single largest technical unknown was
 //! whether libloot's load-order machinery works on Linux against a Proton-prefix
 //! AppData directory. On Linux `Game::new` returns `NoLocalAppData` (libloadorder's
 //! `local_path()` calls `dirs::data_local_dir()` which has no meaning inside a Proton
 //! prefix), so NexTwist must ALWAYS supply the AppData path via `Game::with_local_path`
-//! (Pitfall 1). This test proves, against a FIXTURE prefix built by
+//!. This test proves, against a FIXTURE prefix built by
 //! `testkit::fake_proton_prefix` (no real hardware), that:
 //!
 //!   1. `with_local_path` constructs a `Game` with NO `NoLocalAppData` error (the
 //!      non-negotiable A1/A3 goal), and
 //!   2. a `load → set_load_order` round-trip writes an asterisk-format `Plugins.txt`
 //!      at the libloot-reported `active_plugins_file_path()`, which lives under the
-//!      fixture AppData/Local path (T-02-04: the write stays bounded inside the prefix).
+//!      fixture AppData/Local path (the write stays bounded inside the prefix).
 //!
 //! libloot/libloadorder open and header-parse every plugin named in a load order
 //! (esplugin `parse_reader(header_only())`), so the fixture places minimal but VALID

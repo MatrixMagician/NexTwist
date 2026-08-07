@@ -42,11 +42,9 @@ pub enum NexusError {
     Auth(String),
 
     /// The client backed off to honour the NexusMods rate limit. The payload is the
-    /// number of seconds the caller should wait before retrying (NEXUS-05).
+    /// number of seconds the caller should wait before retrying.
     ///
-    /// Constructed by the rate limiter (Plan 02); declared now as part of the stable
-    /// error contract the download slices build on.
-    #[allow(dead_code)] // wired in Plan 02 (governor rate limiter / streaming download)
+    /// Constructed by the rate limiter on every 429 path.
     #[error("rate limited; retry after {0}s")]
     RateLimited(u64),
 
@@ -54,16 +52,14 @@ pub enum NexusError {
     /// from an `nxm://` link). Distinct from `Http` so the UI can surface the
     /// "link expired — re-open from the website" hint rather than a download error.
     ///
-    /// Constructed by the download-link path (Plan 02); declared now as part of the
-    /// stable error contract.
-    #[allow(dead_code)] // wired in Plan 02 (free-user nxm:// redemption)
+    /// Constructed by the `nxm://` link parser and the download-link path.
     #[error("download-link redemption failed: {0}")]
     Redeem(String),
 
     /// A Collection's pinned FOMOD choice no longer matches the mod's `ModuleConfig.xml`
     /// (the mod was updated since the Collection captured the choice). Distinct from a
     /// parse error so the UI can surface the "this mod changed — run its installer
-    /// manually" hint rather than mis-installing the stale plan (COLL-03; RESEARCH A3).
+    /// manually" hint rather than mis-installing the stale plan.
     #[error("collection choice replay failed: {0}")]
     Replay(String),
 }
@@ -71,9 +67,8 @@ pub enum NexusError {
 impl NexusError {
     /// Construct a [`NexusError::Io`] tagged with the offending path.
     ///
-    /// Used by the streaming-download path (Plan 02); declared now to mirror the
+    /// Used throughout the streaming-download path; mirrors the
     /// `LoadOrderError::io` constructor convention.
-    #[allow(dead_code)] // wired in Plan 02 (streaming download writes to a staging path)
     pub(crate) fn io(path: &std::path::Path, source: std::io::Error) -> Self {
         NexusError::Io {
             path: path.to_path_buf(),

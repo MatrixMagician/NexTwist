@@ -1,4 +1,4 @@
-//! round_trip_pristine (DEPLOY-01/02/03): for randomized game + mod file trees —
+//! round_trip_pristine: for randomized game + mod file trees —
 //! pure-adds AND overwrites of vanilla files — snapshot vanilla, deploy, purge, and
 //! assert the game tree is byte-for-byte identical to the vanilla snapshot, with no
 //! orphans.

@@ -1,6 +1,6 @@
-//! Client-side rate limiting (NEXUS-05).
+//! Client-side rate limiting.
 //!
-//! Two layers, per RESEARCH Pattern 6:
+//! Two layers:
 //!
 //! 1. **Proactive** — a `governor` direct token-bucket limiter sized to the documented
 //!    NexusMods budget. [`RateLimiter::until_ready`] gates *before* each request so a
@@ -10,7 +10,7 @@
 //!    429 was seen, records a backoff *deadline*. `until_ready` then also sleeps until
 //!    that deadline, so the client never walks into a self-inflicted ban.
 //!
-//! The exact budget numbers (RESEARCH A4) and header casing (RESEARCH A3) are
+//! The exact budget numbers and header casing are
 //! `[ASSUMED]` until confirmed against a live response — so they are centralised here as
 //! consts and the *reactive* header path is the real protection (it adapts to whatever
 //! the live `X-RL-*` headers report, regardless of the proactive bucket's sizing).
@@ -26,7 +26,7 @@ use governor::state::{InMemoryState, NotKeyed};
 use governor::{Quota, RateLimiter as GovLimiter};
 use reqwest::header::HeaderMap;
 
-/// Documented NexusMods per-hour request cap for API-key users (RESEARCH A4, `[ASSUMED]`).
+/// Documented NexusMods per-hour request cap for API-key users (`[ASSUMED]`).
 /// The reactive header path corrects for the real budget; this only sizes the proactive
 /// bucket so a runaway loop is throttled even before the first response is seen.
 const HOURLY_CAP: u32 = 100;
@@ -39,7 +39,7 @@ const LOW_REMAINING_THRESHOLD: u64 = 5;
 /// Fallback backoff (when a header signals "low"/429 but carries no usable `-Reset`).
 const DEFAULT_BACKOFF: Duration = Duration::from_secs(60);
 
-// --- X-RL-* header names (centralised — RESEARCH A3 flags the exact casing as ASSUMED). ---
+// --- X-RL-* header names (centralised — the exact casing is ASSUMED). ---
 const H_HOURLY_REMAINING: &str = "x-rl-hourly-remaining";
 const H_HOURLY_RESET: &str = "x-rl-hourly-reset";
 const H_DAILY_REMAINING: &str = "x-rl-daily-remaining";
@@ -77,7 +77,7 @@ impl RateLimiter {
     /// Returns once a request may be issued. When a backoff deadline is in the future
     /// (set by [`note_headers`]), this sleeps until it first, then waits for the bucket.
     ///
-    /// WR-03: with one shared limiter fronting parallel requests, the deadline may be
+    /// With one shared limiter fronting parallel requests, the deadline may be
     /// re-armed (extended) by a concurrent [`note_headers`] while we sleep. So we loop:
     /// after each sleep we re-read the deadline and only proceed once it has elapsed,
     /// and we clear it only if no later deadline was armed meanwhile — never blowing away
@@ -130,7 +130,7 @@ impl RateLimiter {
     /// [`LOW_REMAINING_THRESHOLD`], schedule a backoff until the matching `-Reset`
     /// (in seconds-from-now), falling back to [`DEFAULT_BACKOFF`].
     ///
-    /// WR-03: a healthy response only clears an *already-elapsed* backoff deadline — it
+    /// A healthy response only clears an *already-elapsed* backoff deadline — it
     /// must NEVER clear a deadline that is still in the future. Because one shared limiter
     /// fronts all parallel NexusMods requests, a healthy header on a concurrent in-flight
     /// request (e.g. a cheaper/cached endpoint) would otherwise wipe a freshly-armed 429
@@ -165,7 +165,7 @@ impl RateLimiter {
         } else if hourly_remaining.is_some() || daily_remaining.is_some() {
             // Budget is healthy and the server reported it. Only clear a backoff that has
             // ALREADY elapsed — a still-future deadline (armed by a concurrent 429/low
-            // response) must survive (WR-03).
+            // response) must survive.
             let mut guard = self.backoff_until.lock().expect("backoff lock");
             if matches!(*guard, Some(deadline) if deadline <= Instant::now()) {
                 *guard = None;
@@ -244,7 +244,7 @@ mod tests {
         assert_eq!(RateLimiter::retry_after_secs(&headers), 90);
     }
 
-    /// WR-03: a healthy response must NOT clear a still-FUTURE backoff deadline. With one
+    /// A healthy response must NOT clear a still-FUTURE backoff deadline. With one
     /// shared limiter fronting parallel requests, a concurrent healthy header (a cheaper
     /// endpoint) would otherwise wipe a freshly-armed 429 backoff and walk into a ban.
     #[test]
@@ -264,7 +264,7 @@ mod tests {
         );
     }
 
-    /// WR-03: an ALREADY-elapsed backoff is cleared by a healthy response (a deadline of
+    /// An ALREADY-elapsed backoff is cleared by a healthy response (a deadline of
     /// 0s is in the past by the time we re-check), so a stale deadline doesn't linger.
     #[test]
     fn healthy_remaining_clears_elapsed_backoff() {
@@ -283,7 +283,7 @@ mod tests {
         );
     }
 
-    /// WR-03: a stronger (later) backoff is never shortened by a weaker concurrent signal.
+    /// A stronger (later) backoff is never shortened by a weaker concurrent signal.
     #[test]
     fn later_backoff_is_not_shortened_by_earlier_one() {
         let rl = RateLimiter::new();

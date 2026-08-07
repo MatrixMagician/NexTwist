@@ -1,5 +1,3 @@
-<!-- generated-by: gsd-doc-writer -->
-
 # Development
 
 This guide covers local development setup, build and quality commands, code style,
@@ -131,12 +129,11 @@ These rules are architectural invariants, not preferences. Honor them in every c
 ## Branch Conventions
 
 - The default / main branch is **`main`**.
-- This project plans work as phases; the active development branches follow the
-  pattern `gsd/phase-NN-<slug>` (e.g. `gsd/phase-05-appimage-distribution`). Planning
-  artifacts live in `.planning/` and are kept out of the published product.
+- Work happens on short-lived topic branches named for the change, e.g.
+  `feat/appimage-distribution` or `fix/plugins-txt-encoding`.
 - **Commit messages follow Conventional Commits** — `feat:`, `fix:`, `docs:`, `test:`,
-  `chore:`, `refactor:`, etc., with an optional scope (e.g. `test(05): ...`,
-  `docs(phase-02): ...`).
+  `chore:`, `refactor:`, etc., with an optional scope naming the crate or area
+  (e.g. `fix(deploy): ...`, `test(loadorder): ...`).
 
 ## PR Process
 

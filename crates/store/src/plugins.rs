@@ -1,10 +1,10 @@
-//! Per-profile plugin state (D-07/D-13): the `plugin_state` table facade.
+//! Per-profile plugin state: the `plugin_state` table facade.
 //!
 //! One row per plugin known to a profile: its [`core::PluginKind`], whether it is
 //! enabled, and its load-order position. The `kind` column stores the PluginKind
 //! token (esm/esl/esp); a corrupt token surfaces [`StoreError::Corrupt`] via the
 //! double-Result row mapper (the same pattern as `manifest.rs`), never a silent wrong
-//! value (T-02-02). No `rusqlite` type leaks publicly.
+//! value. No `rusqlite` type leaks publicly.
 
 use core::{Plugin, PluginKind, StoreError};
 use rusqlite::params;
@@ -89,7 +89,7 @@ mod tests {
         }
     }
 
-    /// Create a real profile and return its id (WR-06: `plugin_state.profile_id` now
+    /// Create a real profile and return its id (`plugin_state.profile_id` now
     /// FK-references `profile(id)`, so tests must use real profile rows).
     fn new_profile(store: &Store, name: &str) -> i64 {
         store.create_profile(1, name).unwrap()
@@ -151,7 +151,7 @@ mod tests {
         assert_eq!(store.list_plugin_state(p2).unwrap().len(), 1);
     }
 
-    /// WR-06: a plugin_state row for a non-existent profile is rejected by the FK.
+    /// A plugin_state row for a non-existent profile is rejected by the FK.
     #[test]
     fn dangling_profile_rejected_by_fk() {
         let dir = TempDir::new().unwrap();

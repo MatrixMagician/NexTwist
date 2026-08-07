@@ -1,4 +1,4 @@
-//! Intent-before-act operation-journal protocol + idempotent replay (DEPLOY-06).
+//! Intent-before-act operation-journal protocol + idempotent replay.
 //!
 //! SQLite WAL gives ACID *inside* the DB, but a `link()`/`reflink()`/`copy()` syscall
 //! and the row recording it are two operations that cannot be made atomic together.
@@ -10,8 +10,10 @@
 //!
 //! This module owns the *protocol* (the store provides only durable row primitives):
 //!
-//! * [`begin`] — record a `pending` intent (durable before the syscall).
-//! * [`finish`] — flip to `done` + write the manifest row (after the syscall).
+//! * [`begin_deploy`] / [`begin_ini`] / [`begin_purge`] — record a `pending` intent
+//!   (durable BEFORE the syscall).
+//! * [`finish_deploy`] / [`finish_purge`] — flip to `done` + write the manifest row
+//!   (AFTER the syscall).
 //! * [`replay`] — on launch, roll every non-`done` row forward (finish a deploy) or
 //!   back (undo a purge + restore vanilla), idempotently, to a consistent state.
 
@@ -29,7 +31,7 @@ pub const KIND_DEPLOY: &str = "deploy";
 pub const KIND_PURGE: &str = "purge";
 /// The StarfieldCustom.ini activation op. Rides a bare `StarfieldCustom.ini` sentinel
 /// OUTSIDE the `Data/` deploy root; its replay resolves via `steam::my_games_path`, never
-/// `resolve_target`/`guard_within_root` — the `Data/`-root guard stays untouched (SFINI-04).
+/// `resolve_target`/`guard_within_root` — the `Data/`-root guard stays untouched.
 pub const KIND_INI: &str = "ini";
 
 /// Record a `pending` deploy intent for `target_rel` and return its id. The store
@@ -53,7 +55,7 @@ pub fn begin_deploy(
 }
 
 /// Record a `pending` StarfieldCustom.ini-activation intent and return its id. The
-/// `sentinel_rel` is the bare `StarfieldCustom.ini` (NO `Data/` prefix, Pitfall 2) so it
+/// `sentinel_rel` is the bare `StarfieldCustom.ini` (NO `Data/` prefix) so it
 /// can never collide with a `Data/`-rooted manifest relpath. Mirrors [`begin_purge`]
 /// (`method: None`, `source_hash: None`).
 pub fn begin_ini(store: &Store, appid: u32, sentinel_rel: &Path) -> Result<JournalId, DeployError> {
@@ -105,7 +107,7 @@ pub fn finish_purge(store: &Store, id: JournalId) -> Result<(), DeployError> {
 ///
 /// The purged relpaths are returned so `recover_on_launch` can run the SAME
 /// manifest/journal-derived empty-directory cleanup that `purge()` runs — keeping a
-/// crash-then-recover purge path directory-pristine (T-01-21) WITHOUT a blind disk scan.
+/// crash-then-recover purge path directory-pristine WITHOUT a blind disk scan.
 #[derive(Debug, Clone, Default)]
 pub struct ReplayOutcome {
     /// Number of journal rows replayed (rolled forward or back).
@@ -203,8 +205,8 @@ fn replay_purge(store: &Store, game: &Game, row: &JournalRow) -> Result<(), Depl
 ///
 /// This is the copy of [`replay_purge`]'s body that swaps ONLY the target resolution: the
 /// INI target resolves via `steam::my_games_path(&game.prefix)`, NEVER `resolve_target` /
-/// `guard_within_root` (Pitfall 1 — the copy-paste trap; the `Data/`-root guard stays
-/// byte-for-byte untouched, SFINI-04). Rolling a crashed *ensure* back to provenance is a
+/// `guard_within_root` (the copy-paste trap; the `Data/`-root guard stays
+/// byte-for-byte untouched). Rolling a crashed *ensure* back to provenance is a
 /// valid recovery: the activation simply didn't take, and re-runs on the next deploy.
 fn replay_ini(store: &Store, game: &Game, row: &JournalRow) -> Result<(), DeployError> {
     let target = steam::my_games_path(&game.prefix).join(crate::gameconfig::INI_FILENAME);
@@ -228,7 +230,7 @@ mod ini_replay_tests {
 
     /// A crashed INI op (a lingering `pending` KIND_INI row) is replayed to provenance via
     /// `my_games_path` — NEVER `resolve_target` — so recovery touches the prefix INI and
-    /// never leaves a stray `Data/StarfieldCustom.ini` (Pitfall 1).
+    /// never leaves a stray `Data/StarfieldCustom.ini`.
     #[test]
     fn replay_ini_resolves_under_prefix_not_data_and_rolls_back() {
         let dir = TempDir::new().unwrap();

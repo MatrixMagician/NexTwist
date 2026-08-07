@@ -1,4 +1,4 @@
-//! SFLO-04 on-launch `plugins.txt` reconciliation — a PURE compare-and-classify verdict.
+//! On-launch `plugins.txt` reconciliation — a PURE compare-and-classify verdict.
 //!
 //! Starfield rewrites its `plugins.txt` on launch: it adds Creation-Club `.ccc` entries,
 //! strips implicitly-active masters (they don't belong in the file), and re-adds blueprint
@@ -14,7 +14,7 @@
 //! result is a CLASSIFIED verdict, never a raw text diff. It lives OUTSIDE `deploy::verify`'s
 //! `Data/`-hash walk because `plugins.txt` is in the prefix AppData, not the deploy root.
 //!
-//! Path safety (T-02-12 / T-07-02): on-disk lines are parsed as OPAQUE filenames — a name is
+//! Path safety: on-disk lines are parsed as OPAQUE filenames — a name is
 //! never joined as a path. The function is pure (no filesystem / libloot I/O), so it is
 //! unit-testable with hand-written `plugins.txt` strings and synthetic recorded slices.
 
@@ -22,7 +22,7 @@ use std::collections::HashSet;
 
 use nextwist_core::Plugin;
 
-/// The SFLO-04 reconciliation verdict.
+/// The reconciliation verdict.
 ///
 /// Serde repr is the DEFAULT external tagging the frontend depends on: the unit variant
 /// [`ReconcileState::InSync`] serializes as the bare JSON string `"InSync"` (NOT
@@ -38,13 +38,13 @@ pub enum ReconcileState {
     Drift(Vec<String>),
 }
 
-/// Reconcile the on-disk `plugins.txt` against the recorded plugin state (SFLO-04).
+/// Reconcile the on-disk `plugins.txt` against the recorded plugin state.
 ///
 /// `recorded` is the store's per-profile plugin state (the user's INTENT). `on_disk_txt` is
 /// the raw asterisk-format file the game may have rewritten. `protected` is the
 /// libloot-derived implicitly-active set (from `loot::protected_plugins`) — the data-driven
 /// EXPECTED set, so this self-corrects against the real game's implicit plugins rather than a
-/// fixed name list (07-RESEARCH Assumptions A1/A2).
+/// fixed name list.
 ///
 /// Returns [`ReconcileState::InSync`] when every delta is an expected on-launch rewrite of a
 /// protected plugin, else [`ReconcileState::Drift`] with the sorted, unique offending names.
@@ -56,7 +56,7 @@ pub fn reconcile_plugins_txt(
     protected: &HashSet<String>,
 ) -> ReconcileState {
     // On-disk ACTIVE plugins = the `*`-prefixed lines (opaque filenames), in file order.
-    // IN-03: all recorded-vs-on-disk matching is done on an ASCII-lowercased key (the
+    // All recorded-vs-on-disk matching is done on an ASCII-lowercased key (the
     // plugins.txt convention) so a pure CASE difference under Wine case-folding (`MyMod.esp`
     // vs `mymod.esp`) is NOT reported as drift; the original-cased name is kept for output.
     let on_disk: Vec<String> = parse_active_lines(on_disk_txt);
@@ -131,7 +131,7 @@ pub fn reconcile_plugins_txt(
 ///
 /// Blank and `#`-comment lines are ignored; a leading `*` marks an active plugin and is
 /// stripped. Non-`*` lines (present-but-inactive) are NOT active, so they are dropped. Each
-/// name is an OPAQUE filename — never joined as a path (T-02-12).
+/// name is an OPAQUE filename — never joined as a path.
 fn parse_active_lines(txt: &str) -> Vec<String> {
     txt.lines()
         .map(str::trim)

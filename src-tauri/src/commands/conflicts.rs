@@ -1,11 +1,11 @@
-//! Conflict-slice adapters (CONF-01/02/03) — delegate to the headless `deploy::conflict`
+//! Conflict-slice adapters — delegate to the headless `deploy::conflict`
 //! resolver and the unchanged safe engine. Zero business logic: each command looks up
 //! the game, reads the enabled mod set, and forwards ONE resolve / deploy call.
 //!
 //! The resolver is a pure fold (`deploy::conflict::resolve`); the winner-set deploy goes
 //! through `deploy::deploy_winners`, which reuses the same journaled per-file primitive
-//! as Phase-1 `deploy` (the safe engine is never bypassed). `set_mod_rank` only persists
-//! the new priority — it does NOT deploy (D-04: rank changes are pending until Deploy).
+//! as `deploy` (the safe engine is never bypassed). `set_mod_rank` only persists
+//! the new priority — it does NOT deploy (rank changes are pending until Deploy).
 
 use deploy::{DeployReport, ModInput, conflict};
 use nextwist_core::{FileConflict, ManagedMod};
@@ -40,7 +40,7 @@ async fn enabled_mod_inputs(
 }
 
 /// List a game's managed mods in priority (rank-ascending) order — the data source for
-/// the Conflict view's priority list (UI-SPEC §A.1) and for mapping winner/provider mod
+/// the Conflict view's priority list and for mapping winner/provider mod
 /// ids to names in the conflict table. A single `list_mods` read.
 #[tauri::command]
 pub async fn list_mods(
@@ -56,7 +56,7 @@ pub async fn list_mods(
         .map_err(boundary_err)
 }
 
-/// List the file-level conflicts among a game's ENABLED mods (CONF-01): one entry per
+/// List the file-level conflicts among a game's ENABLED mods: one entry per
 /// contested `target_rel`, naming every provider and the priority winner.
 #[tauri::command]
 pub async fn list_conflicts(
@@ -69,8 +69,8 @@ pub async fn list_conflicts(
     Ok(conflicts)
 }
 
-/// Set a mod's deployment rank (CONF-02). Persists only — the change is PENDING until
-/// the user explicitly deploys (D-04); this command never touches disk.
+/// Set a mod's deployment rank. Persists only — the change is PENDING until
+/// the user explicitly deploys; this command never touches disk.
 #[tauri::command]
 pub async fn set_mod_rank(
     state: State<'_, Mutex<AppState>>,
@@ -88,7 +88,7 @@ pub async fn set_mod_rank(
 }
 
 /// Resolve the enabled-mod winner set and reconcile the deployment through the safe
-/// engine (CONF-03): the deterministic, deduped (one owner per path) winners are applied
+/// engine: the deterministic, deduped (one owner per path) winners are applied
 /// via `deploy::redeploy_winners`, which PURGES the current deployment back to pristine
 /// before deploying the fresh set.
 ///
@@ -97,7 +97,7 @@ pub async fn set_mod_rank(
 /// would orphan the now-dropped files on disk and corrupt the `pre_existing` vanilla-backup
 /// flag — defeating byte-for-byte pristine restore. Routing through `redeploy_winners`
 /// mirrors `switch_profile`'s purge-then-deploy reconcile, so repeated deploys stay fully
-/// reversible (Pitfall 4). The purge half of the report is discarded; the UI consumes the
+/// reversible. The purge half of the report is discarded; the UI consumes the
 /// fresh deploy report.
 #[tauri::command]
 pub async fn deploy_winner_set(

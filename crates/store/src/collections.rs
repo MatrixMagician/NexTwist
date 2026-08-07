@@ -1,4 +1,4 @@
-//! Collection persistence store facade (COLL-01/02): the V5 `collection`,
+//! Collection persistence store facade: the V5 `collection`,
 //! `collection_mod`, and `fomod_choice` tables.
 //!
 //! Records a pinned NexusMods Collection revision, every mod it pins (with the mod's
@@ -20,7 +20,7 @@ impl Store {
     ///
     /// Idempotent on `(appid, slug, revision)` (UNIQUE): re-resolving the same revision
     /// UPDATEs the existing row (name/profile_id refreshed) and returns the SAME id rather
-    /// than erroring or duplicating. The single-statement `RETURNING id` form (WR-05) yields
+    /// than erroring or duplicating. The single-statement `RETURNING id` form yields
     /// the affected row's id for BOTH the INSERT and the DO UPDATE branch atomically.
     pub fn add_collection(&self, c: &Collection) -> Result<i64, StoreError> {
         let id: i64 = self

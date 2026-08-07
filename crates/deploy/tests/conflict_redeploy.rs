@@ -1,14 +1,14 @@
-//! conflict_redeploy (CONF-03) — BLOCKING-PRISTINE.
+//! conflict_redeploy — BLOCKING-PRISTINE.
 //!
 //! The conflict slice's safety gate: deploying the user's deterministic conflict-winner
 //! set must (1) place exactly ONE owner per `target_rel` (no `deployed_file` UNIQUE
-//! violation — the resolver dedups before deploy, Pitfall 3) and (2) remain fully
+//! violation — the resolver dedups before deploy) and (2) remain fully
 //! reversible — a `purge` after the multi-mod deploy returns the game **byte-for-byte
-//! pristine** (Pitfall 4 safety invariant), INCLUDING after a priority/rank change that
+//! pristine** (the safety invariant), INCLUDING after a priority/rank change that
 //! flips the winner and triggers a redeploy.
 //!
 //! These run through the UNCHANGED safe engine (`deploy_winners` reuses the same
-//! journaled per-file primitive as Phase-1 `deploy`; `purge` is untouched) and assert
+//! journaled per-file primitive as `deploy`; `purge` is untouched) and assert
 //! pristine via the testkit DIR_SENTINEL harness (empty-dir shape included).
 
 use std::collections::BTreeMap;
@@ -72,7 +72,7 @@ fn lay_vanilla(fx: &Fixture) -> BTreeMap<PathBuf, String> {
     snapshot_tree(&fx.install).unwrap()
 }
 
-/// CONF-03: the deterministic winner set deploys with exactly one owner per path
+/// The deterministic winner set deploys with exactly one owner per path
 /// (no UNIQUE violation), and deploy -> purge returns the game byte-for-byte pristine.
 #[test]
 fn conflict_winner_set_deploys_unique_and_pristine() {
@@ -141,14 +141,14 @@ fn conflict_winner_set_deploys_unique_and_pristine() {
     rels.sort();
     rels.dedup();
     assert_eq!(rels.len(), 3, "one owner per target_rel");
-    // D-03: the winning mod id is recorded for the contested file.
+    // The winning mod id is recorded for the contested file.
     let shared_entry = deployed
         .iter()
         .find(|e| e.target_rel == std::path::Path::new("Data/shared.esp"))
         .unwrap();
     assert_eq!(
         shared_entry.source_mod, 1,
-        "manifest records the winning mod id (D-03)"
+        "manifest records the winning mod id"
     );
 
     // Relaunch (fresh store) then purge -> byte-for-byte pristine.
@@ -165,7 +165,7 @@ fn conflict_winner_set_deploys_unique_and_pristine() {
 }
 
 /// A rank change that flips the winner, redeployed after a purge, also returns pristine
-/// — proving redeploy after a priority change is reversible (Pitfall 4 across a switch).
+/// — proving redeploy after a priority change is reversible across a switch.
 #[test]
 fn rank_change_redeploy_stays_pristine() {
     let fx = Fixture::new();
@@ -257,7 +257,7 @@ fn rank_change_redeploy_stays_pristine() {
     }
 }
 
-/// CR-01 REGRESSION: the LIVE re-deploy path (`redeploy_winners`, used by the
+/// REGRESSION: the LIVE re-deploy path (`redeploy_winners`, used by the
 /// `deploy_winner_set` command) must itself purge-to-pristine before each fresh deploy.
 /// This test deploys winner set A, then redeploys a CHANGED set (rank flip + a mod
 /// disabled so a path leaves the set) WITHOUT any manual purge between the deploys, then

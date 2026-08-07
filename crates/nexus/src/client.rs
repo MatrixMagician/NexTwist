@@ -1,6 +1,6 @@
 //! `NexusClient` — the async reqwest + governor NexusMods API client.
 //!
-//! The hybrid surface (RESEARCH Pitfall 2): the **download link** comes from REST v1
+//! The hybrid surface: the **download link** comes from REST v1
 //! `download_link.json` (v2 does NOT generate links and v1 is load-bearing), and
 //! **file metadata** (version / display name) is read from the REST v1 file-info
 //! endpoint `.../files/{file_id}.json`. (An earlier GraphQL v2 `modFile` metadata read
@@ -47,7 +47,7 @@ pub enum NexusAuth {
 /// The async NexusMods API client: a hardened reqwest client + a `governor` rate limiter
 /// + an injectable base URL + the session auth.
 ///
-/// WR-03: the `limiter` is an `Arc<RateLimiter>` so a single process-wide limiter can be
+/// The `limiter` is an `Arc<RateLimiter>` so a single process-wide limiter can be
 /// shared across every per-download client. With a per-client limiter, N concurrent
 /// downloads each got a full fresh hourly bucket and an independent backoff deadline, so
 /// the "never self-inflict a ban" guarantee did not hold across parallel downloads. The
@@ -62,7 +62,7 @@ pub struct NexusClient {
 impl NexusClient {
     /// Build a client against the real NexusMods host with the given session auth and a
     /// **fresh** (un-shared) rate limiter. Prefer [`Self::with_limiter`] in the shell so
-    /// the limiter is shared process-wide (WR-03); this constructor remains for tests and
+    /// the limiter is shared process-wide; this constructor remains for tests and
     /// one-off callers that do not need cross-request coordination.
     pub fn new(auth: NexusAuth) -> Result<Self, NexusError> {
         Self::with_base(NEXUS_API_BASE, auth)
@@ -76,7 +76,7 @@ impl NexusClient {
         Self::with_limiter(base, auth, Arc::new(RateLimiter::new()))
     }
 
-    /// Build a client that uses a **shared** process-wide rate limiter (WR-03).
+    /// Build a client that uses a **shared** process-wide rate limiter.
     ///
     /// All NexusMods requests issued by clients built with the same `limiter` `Arc`
     /// coordinate one token bucket and one backoff deadline, so parallel downloads cannot
@@ -182,7 +182,7 @@ impl NexusClient {
         if !status.is_success() {
             // Diagnostic (secret-free per V7 — NEVER log key/expires/uri): record the real
             // HTTP status of a failed download-link request. The UI replaces this with the
-            // friendly "link expired" message (UI-SPEC §C.3), which hides the actual code
+            // friendly "link expired" message, which hides the actual code
             // and makes field diagnosis of a redemption 4xx (401/403 auth vs 404/410 gone)
             // impossible from logs alone. `had_key` distinguishes a free-user redemption
             // from a premium request.
@@ -220,7 +220,7 @@ impl NexusClient {
     /// load-bearing path that the same base + auth header already use for
     /// [`download_link`]. (A previously-guessed GraphQL v2 `modFile(gameDomain,modId,fileId)`
     /// top-level field does NOT exist in the live v2 schema, so it always returned a null
-    /// `modFile` and aborted the download — RESEARCH was only MEDIUM-confidence on v2.)
+    /// `modFile` and aborted the download — v2 coverage here was never confirmed.)
     ///
     /// The base URL is centralised so a future host swap is one edit.
     ///
@@ -274,7 +274,7 @@ impl NexusClient {
         })
     }
 
-    /// Resolve a pinned `(mod_id, file_id)`'s availability over REST v1 (COLL-02 resolve gate).
+    /// Resolve a pinned `(mod_id, file_id)`'s availability over REST v1 (the resolve gate).
     ///
     /// Reuses the same proven v1 file-info endpoint as [`mod_file_metadata`] — gated through
     /// `limiter.until_ready()` FIRST — but classifies the result for the Collection resolve
@@ -285,7 +285,7 @@ impl NexusClient {
     /// * a 404 (the file id no longer exists / was removed) ⇒ [`FileAvailability::Unavailable`].
     ///
     /// This issues a single METADATA read — never a `download_link` or CDN request — so the
-    /// "zero downloads before the resolve report is accepted" gate (T-04-10) holds structurally.
+    /// "zero downloads before the resolve report is accepted" gate holds structurally.
     ///
     /// # Errors
     /// * [`NexusError::RateLimited`] on HTTP 429.
@@ -344,7 +344,7 @@ impl NexusClient {
 
 /// The availability of a pinned NexusMods file, from a single v1 file-info metadata read.
 ///
-/// Drives the Collection resolve report's per-mod status for `nexus` sources (COLL-02). It
+/// Drives the Collection resolve report's per-mod status for `nexus` sources. It
 /// is deliberately download-free: it is computed from metadata only, before any download.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileAvailability {

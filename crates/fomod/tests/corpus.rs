@@ -260,7 +260,7 @@ fn resolve_omits_conditional_when_flag_unset() {
     );
 }
 
-/// WR-02: server-side group cardinality. The `flags` fixture's first step has a
+/// Server-side group cardinality. The `flags` fixture's first step has a
 /// `SelectExactlyOne` group "Variant" with two options. A selection that chooses BOTH must be
 /// rejected with `InvalidSelection` (the webview is not a trust boundary).
 #[test]
@@ -285,7 +285,7 @@ fn validate_selection_rejects_two_in_a_select_exactly_one() {
     );
 }
 
-/// WR-02: a `SelectExactlyOne` group with NONE chosen is also invalid (under-selection).
+/// A `SelectExactlyOne` group with NONE chosen is also invalid (under-selection).
 #[test]
 fn validate_selection_rejects_none_in_a_select_exactly_one() {
     let m = parse_module_config(&fixture("flags")).unwrap();
@@ -299,7 +299,7 @@ fn validate_selection_rejects_none_in_a_select_exactly_one() {
     );
 }
 
-/// WR-02: a valid one-option selection in the SelectExactlyOne group passes validation.
+/// A valid one-option selection in the SelectExactlyOne group passes validation.
 #[test]
 fn validate_selection_accepts_exactly_one() {
     let m = parse_module_config(&fixture("flags")).unwrap();
@@ -312,7 +312,7 @@ fn validate_selection_accepts_exactly_one() {
     validate_selection(&m, &sel).expect("exactly one chosen is a valid selection");
 }
 
-/// WR-02: an invisible step's group cardinality is NOT enforced (its selection is irrelevant
+/// An invisible step's group cardinality is NOT enforced (its selection is irrelevant
 /// because resolve skips the step). The second step is invisible without `hires=on`, so its
 /// SelectAny group never blocks validation regardless of selection — and the first
 /// SelectExactlyOne group still needs exactly one, which we satisfy.
@@ -329,7 +329,7 @@ fn validate_selection_ignores_invisible_step_groups() {
     validate_selection(&m, &sel).expect("invisible step groups are not enforced");
 }
 
-/// WR-01: a step whose `<visible>` dependency does NOT hold is skipped entirely — its
+/// A step whose `<visible>` dependency does NOT hold is skipped entirely — its
 /// selected options' files must be ABSENT from the plan. The `flags` fixture's second step
 /// ("Hi-Res Options", file `hires/extra.dds → textures/extra.dds`) is visible only when the
 /// flag `hires=on`. Selecting its option WITHOUT that flag (the step is invisible) must
@@ -353,7 +353,7 @@ fn resolve_skips_invisible_step_files() {
     );
 }
 
-/// WR-01 (positive): when the `<visible>` dependency holds (flag `hires=on`), the same
+/// When the `<visible>` dependency holds (flag `hires=on`), the same
 /// selected option's files DO install — visibility gates the step, it doesn't disable it.
 #[test]
 fn resolve_includes_visible_step_files() {

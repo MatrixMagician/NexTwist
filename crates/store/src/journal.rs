@@ -1,7 +1,7 @@
-//! Write-ahead operation journal (DEPLOY-06): the `op_journal` table facade.
+//! Write-ahead operation journal: the `op_journal` table facade.
 //!
 //! This module provides ONLY the durable row primitives. The intent-before-act
-//! protocol and idempotent replay/rollback live in the deploy crate (Plan 04):
+//! protocol and idempotent replay/rollback live in the deploy crate:
 //!
 //! 1. `begin_op(intent)` — insert a `pending` row, returns its id (COMMIT it).
 //! 2. perform the idempotent filesystem syscall.

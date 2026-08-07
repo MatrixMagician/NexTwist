@@ -1,12 +1,12 @@
 //! Creation Engine 2 (Starfield) config-path resolution + version-drift compare.
 //!
 //! Starfield splits its user data across TWO prefix locations: `plugins.txt` lives in
-//! `AppData/Local/Starfield/` (that arm is Phase 7's job), while `StarfieldCustom.ini`
+//! `AppData/Local/Starfield/` (that arm belongs to the load-order code), while `StarfieldCustom.ini`
 //! and the first-launch marker live in `Documents/My Games/Starfield/`. THIS module
 //! resolves the latter — the `My Games` path — mirroring libloadorder's own derivation
 //! but computing it ourselves (libloot keeps its copy private).
 //!
-//! Everything here is READ-ONLY: Phase 6 writes nothing to a real prefix. The resolver
+//! Everything here is READ-ONLY: this writes nothing to a real prefix. The resolver
 //! is case-folded (Wine prefixes are case-sensitive on Linux; the on-disk casing may not
 //! match the canonical Bethesda casing) and defensively redirection-aware (a `user.reg`
 //! `"Personal"` shell-folder repoint is honored, with the default steamuser/Documents
@@ -40,14 +40,14 @@ pub enum Ce2ConfigState {
 /// The build NexTwist's Starfield support is validated against.
 ///
 /// `0` = baseline UNSET → the drift notice is SUPPRESSED (`drift_notice` always returns
-/// `None`) until Phase 9 seeds the real installed build. Keeping the compare here (in
+/// `None`) until the real installed build is seeded. Keeping the compare here (in
 /// `steam`, below `loadorder`) co-locates the constant with the compare that uses it.
 pub const VALIDATED_BUILD: u64 = 0;
 
 /// An advisory, non-blocking version-drift signal (SFDET-03).
 ///
 /// Produced only when the installed build is strictly newer than a non-zero validated
-/// build. It never gates management — reversibility is build-independent (Phase 6 writes
+/// build. It never gates management — reversibility is build-independent (this writes
 /// nothing).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DriftNotice {
@@ -59,7 +59,7 @@ pub struct DriftNotice {
     pub is_newer: bool,
 }
 
-/// The aggregate Starfield detection status the Tauri adapter (Plan 03) forwards verbatim.
+/// The aggregate Starfield detection status the Tauri adapter forwards verbatim.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StarfieldStatus {
     /// CE2 `My Games` config-dir state (ready / first-launch-pending).
@@ -84,7 +84,7 @@ pub fn my_games_path(prefix: &Path) -> PathBuf {
     components.push("My Games".to_string());
     components.push(STARFIELD_FOLDER.to_string());
     let resolved = resolve_cased(prefix, &components);
-    // Load-bearing last-line invariant (T-06-01): whatever the redirect
+    // Load-bearing last-line invariant: whatever the redirect
     // produced, the final My Games path MUST stay under <prefix>/drive_c. This
     // is a lexical, canonicalize-free containment check — safe because the
     // component guard already rejects `..`, so no `..` can appear in the
@@ -116,7 +116,7 @@ fn default_documents_components() -> Vec<String> {
 
 /// Read `<prefix>/user.reg`, extract the `"Personal"` shell-folder value, and map it to
 /// in-prefix components. `None` (→ default fallback) on any absence, parse failure, or a
-/// value that would escape `<prefix>/drive_c` (T-06-01 traversal guard).
+/// value that would escape `<prefix>/drive_c` (traversal guard).
 fn read_personal_redirect(prefix: &Path) -> Option<Vec<String>> {
     let raw = std::fs::read_to_string(prefix.join("user.reg")).ok()?;
     let value = extract_personal(&raw)?;
@@ -158,7 +158,7 @@ fn extract_personal(reg: &str) -> Option<String> {
 /// Rejects a non-`C:` drive and any segment that is not a single plain path
 /// component — `.`/`..`/empty, an embedded `/`, or an absolute `/…` segment —
 /// all of which could let `resolve_cased`'s `Path::join` escape drive_c
-/// (T-06-01 traversal guard). `my_games_path` re-checks lexical containment.
+/// (traversal guard). `my_games_path` re-checks lexical containment.
 fn windows_path_to_components(value: &str) -> Option<Vec<String>> {
     let mut parts = value.split('\\');
     if !parts.next()?.eq_ignore_ascii_case("C:") {
@@ -464,7 +464,7 @@ mod tests {
             status.ce2_state,
             Ce2ConfigState::FirstLaunchPending(_)
         ));
-        // Drift is dormant in Phase 6 (VALIDATED_BUILD == 0).
+        // Drift is dormant while VALIDATED_BUILD == 0.
         assert!(status.drift.is_none());
         // The whole aggregate serializes (the Tauri adapter forwards it).
         let json = serde_json::to_string(&status).unwrap();
