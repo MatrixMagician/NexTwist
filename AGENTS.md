@@ -200,7 +200,8 @@ something you introduced, not pre-existing noise. Some caveats worth knowing:
   verify → repair → purge, asserting the tree returns byte-for-byte),
   `real_plugin_scan.rs` (discovery + classification), `real_libloot_seam.rs` (the libloot
   Linux seam: protected-master probe, asterisk `plugins.txt` round-trip, user-order splice),
-  and `real_archive_workflow.rs` (archive → extract → stage → deploy → purge, the full user
+  `real_profile_switch.rs` (A→B→A with no cross-profile leakage), and
+  `real_archive_workflow.rs` (archive → extract → stage → deploy → purge, the full user
   workflow). They skip cleanly without the sandbox, so CI never runs them:
 
   ```bash
