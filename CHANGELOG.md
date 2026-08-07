@@ -97,6 +97,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The managed-game radio and plugin checkbox were stretched to 22rem** by an
+  `input, select { min-width: 22rem }` rule written for text fields. The game selector — how
+  you choose which game every section below operates on — rendered as a lone dot with its
+  own label ~20rem across the row. Found by rendering the UI *with data in it*; the empty
+  state has no managed games, so the broken row never appears on first run.
+
 - **The release shipped a "NexTwist — Walking Skeleton" dev heading**, the first thing a
   user saw after installing a 1.0 mod manager whose whole pitch is that it will not damage
   their game. It also posted a "List games ok" success banner on launch, for an internal

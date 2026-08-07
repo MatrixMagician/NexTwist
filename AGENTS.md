@@ -169,7 +169,9 @@ Before claiming a change is complete:
     output. `spectacle -b -n -f -o shot.png` captures it on a Wayland session. Note that
     `cargo build --release -p nextwist` skips the bundling that embeds the frontend, so that
     binary shows "Could not connect to localhost" and tells you nothing — use
-    `cargo tauri build`.
+    `cargo tauri build`. **Look at it with DATA in it**, not just the empty state: the
+    managed-game radio was stretched across its row by a text-input CSS rule, and that row
+    does not exist until a game is added (see the empty-state blind spot below).
 
 All gates were run green on `main` as of 2026-08-02, so a failure you see is
 something you introduced, not pre-existing noise. Some caveats worth knowing:
@@ -219,6 +221,15 @@ something you introduced, not pre-existing noise. Some caveats worth knowing:
   dir before deploying — so a mid-run failure cannot leave a damaged tree that the next run
   would mistake for a pristine baseline. That protection was added after an experiment
   proved the hazard was real.
+- **The empty state is not the product.** Launching the app shows you an empty account
+  panel and two empty lists; the sections that do the work (install/deploy, conflicts,
+  plugins, profiles) only render once a game is selected, so a layout or wiring bug in them
+  is invisible to a first-run screenshot. Two ways to get data on screen without touching
+  the real database: point `XDG_DATA_HOME` at a throwaway dir and populate it with
+  `cargo test -p nextwist-deploy --test ui_fixture -- --ignored`, or serve
+  `frontend/build` with a stubbed `window.__TAURI_INTERNALS__.invoke` and render it in a
+  headless browser. The latter shows every section at once and is how the radio-width bug
+  surfaced.
 - `cargo deny` carries two documented `ignore`d advisories (RUSTSEC-2026-0194/0195) for
   the vulnerable `quick-xml <0.41` that Tauri pulls in transitively via `plist` at build
   time. A `[[bans.deny]]` rule with `wrappers = ["plist"]` keeps that exception pinned to
