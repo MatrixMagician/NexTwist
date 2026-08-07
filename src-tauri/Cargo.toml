@@ -30,6 +30,10 @@ tempfile = { workspace = true }
 mockito = { workspace = true }
 zip = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "fs"] }
+# The byte-for-byte pristine oracle (blake3 whole-tree snapshot + compare) shared with the
+# engine's round-trip suites, so the shell's end-to-end test asserts the SAME guarantee in
+# the same way rather than re-deriving it.
+testkit.workspace = true
 
 [dependencies]
 # Headless safety core — the command adapters delegate to these and add ZERO logic.
