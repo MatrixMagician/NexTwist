@@ -202,59 +202,12 @@ fn collect_from_root(
     Ok(())
 }
 
-/// Discover the plugins visible to a game: every `.esp`/`.esm`/`.esl` in the enabled mods'
-/// staged trees plus the game `Data/` dir, type-badged from header flags and de-duplicated
-/// by case-insensitive filename (the staged/enabled copy wins).
-///
-/// The returned entries carry `enabled = false` / `order = 0` defaults; the caller merges
-/// the real per-profile enable/order from the store's `plugin_state`. Returned order is by
-/// case-insensitive filename (stable/deterministic) — the load order is a separate concern
-/// owned by libloot + the store, not by discovery.
-///
-/// # Errors
-/// [`LoadOrderError::Io`] if a root directory cannot be walked. An unsupported `appid`
-/// yields an empty list (no classifier) rather than an error, so the UI degrades to no
-/// plugins for an unmanaged game.
-pub fn scan_plugins(
-    enabled_staging_roots: &[PathBuf],
-    game_data: &Path,
-) -> Result<Vec<Plugin>, LoadOrderError> {
-    // No classifier for this game → no plugins (the allow-list lives in game_id_for).
-    let Some(game_id) = game_id_for_data(enabled_staging_roots, game_data) else {
-        return Ok(Vec::new());
-    };
-    Ok(
-        scan_plugin_views_for(game_id, enabled_staging_roots, game_data)?
-            .into_iter()
-            .map(view_to_plugin)
-            .collect(),
-    )
-}
-
-/// Discover the plugins for an EXPLICIT game: same as
-/// [`scan_plugins`] but takes the resolved [`esplugin::GameId`] directly so the Tauri
-/// command (which already knows the appid) does not pay an inference cost.
-///
-/// # Errors
-/// [`LoadOrderError::Io`] if a root directory cannot be walked.
-pub fn scan_plugins_for(
-    game_id: GameId,
-    enabled_staging_roots: &[PathBuf],
-    game_data: &Path,
-) -> Result<Vec<Plugin>, LoadOrderError> {
-    Ok(
-        scan_plugin_views_for(game_id, enabled_staging_roots, game_data)?
-            .into_iter()
-            .map(view_to_plugin)
-            .collect(),
-    )
-}
-
-/// The medium-aware scan: identical walk/de-dup to [`scan_plugins_for`] but returns
-/// the richer [`PluginView`] carrying the `medium` boolean (and a `protected: false` default
-/// the caller fills after a live libloot probe). [`scan_plugins_for`] is a thin wrapper that
-/// maps each view down to `core::Plugin`, so the apply/sort callers stay unchanged and the
-/// walk logic lives in exactly one place.
+/// The medium-aware scan: walk the enabled mods' staged trees plus the game `Data/` dir,
+/// returning a [`PluginView`] per discovered plugin — de-duplicated by case-insensitive
+/// filename (the staged/enabled copy wins), type-badged from header flags, and carrying the
+/// `medium` boolean plus a `protected: false` default the caller fills after a live libloot
+/// probe. Callers map each view down with [`view_to_plugin`], so the walk logic lives in
+/// exactly one place.
 ///
 /// # Errors
 /// [`LoadOrderError::Io`] if a root directory cannot be walked.
@@ -325,23 +278,28 @@ pub fn enabled_names(views: &[PluginView]) -> std::collections::HashSet<String> 
         .collect()
 }
 
-/// Internal: the scan operates per-game, but [`scan_plugins`] does not receive an appid —
-/// it is called with already-resolved roots. We default the classifier to SkyrimSE-class
-/// header semantics ONLY for the standalone helper used in tests; the Tauri command path
-/// uses [`scan_plugins_for`] with the real appid. Returning `Some` keeps the standalone
-/// `scan_plugins` usable in unit tests without threading an appid through every caller.
-fn game_id_for_data(_roots: &[PathBuf], _data: &Path) -> Option<GameId> {
-    // Header light/master flag bits are identical across SkyrimSE/Fallout4 for the fields
-    // scan reads (is_master_file / is_light_plugin), so SkyrimSE is a safe default for the
-    // appid-less helper. The command layer always uses scan_plugins_for with the real id.
-    Some(GameId::SkyrimSE)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
+
+    /// Scan through the real production path (`scan_plugin_views_for` + `view_to_plugin`)
+    /// with a fixed classifier, so these tests do not have to thread an appid through every
+    /// case. The header flag bits `scan` reads (`is_master_file` / `is_light_plugin`) are
+    /// identical across SkyrimSE and Fallout 4, so the choice does not affect what is
+    /// asserted here; `scan_plugins_for_uses_explicit_game_id` covers passing a real id.
+    fn scan_plugins_for_test(
+        enabled_staging_roots: &[PathBuf],
+        game_data: &Path,
+    ) -> Result<Vec<Plugin>, LoadOrderError> {
+        Ok(
+            scan_plugin_views_for(GameId::SkyrimSE, enabled_staging_roots, game_data)?
+                .into_iter()
+                .map(view_to_plugin)
+                .collect(),
+        )
+    }
 
     /// A minimal but VALID 24-byte TES4 header (matches the spike fixture).
     /// `flags` at bytes [8..12): 0x1 = master. Light flag is record-internal, so a true
@@ -377,7 +335,7 @@ mod tests {
         // Game Data/: a master only present in the game.
         write(data.path(), "Update.esm", &tes4_header(true));
 
-        let plugins = scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
+        let plugins = scan_plugins_for_test(&[staged.path().to_path_buf()], data.path()).unwrap();
         let by_name: std::collections::HashMap<&str, &Plugin> =
             plugins.iter().map(|p| (p.name.as_str(), p)).collect();
 
@@ -404,7 +362,7 @@ mod tests {
         write(staged.path(), "Shared.esm", &tes4_header(true));
         write(data.path(), "Shared.esm", &tes4_header(false));
 
-        let plugins = scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
+        let plugins = scan_plugins_for_test(&[staged.path().to_path_buf()], data.path()).unwrap();
         assert_eq!(
             plugins.len(),
             1,
@@ -423,7 +381,7 @@ mod tests {
         // Different casing of the same logical plugin in Data/ — Wine treats these as one.
         write(data.path(), "mod.ESP", &tes4_header(false));
 
-        let plugins = scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
+        let plugins = scan_plugins_for_test(&[staged.path().to_path_buf()], data.path()).unwrap();
         assert_eq!(plugins.len(), 1, "case-variant duplicate collapses to one");
         // The staged casing is preserved for display.
         assert_eq!(plugins[0].name, "Mod.esp");
@@ -434,7 +392,7 @@ mod tests {
         let staged = TempDir::new().unwrap();
         let data = TempDir::new().unwrap();
         write(staged.path(), "A.esp", &tes4_header(false));
-        let plugins = scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
+        let plugins = scan_plugins_for_test(&[staged.path().to_path_buf()], data.path()).unwrap();
         assert_eq!(plugins.len(), 1);
         assert!(
             !plugins[0].enabled,
@@ -448,7 +406,7 @@ mod tests {
 
     #[test]
     fn missing_roots_yield_empty_not_error() {
-        let plugins = scan_plugins(
+        let plugins = scan_plugins_for_test(
             &[PathBuf::from("/no/such/staged/root")],
             Path::new("/no/such/data"),
         )
@@ -468,7 +426,7 @@ mod tests {
         );
         write(staged.path(), "Good.esm", &tes4_header(true));
 
-        let plugins = scan_plugins(&[staged.path().to_path_buf()], data.path()).unwrap();
+        let plugins = scan_plugins_for_test(&[staged.path().to_path_buf()], data.path()).unwrap();
         assert_eq!(plugins.len(), 2, "the corrupt file is still collected");
         let by_name: std::collections::HashMap<&str, &Plugin> =
             plugins.iter().map(|p| (p.name.as_str(), p)).collect();
@@ -476,17 +434,22 @@ mod tests {
         assert_eq!(by_name["Good.esm"].kind, PluginKind::Esm);
     }
 
+    /// The production path takes the resolved `GameId` explicitly — the command layer
+    /// already knows the appid, so nothing has to infer it from the roots.
     #[test]
-    fn scan_plugins_for_uses_explicit_game_id() {
+    fn scan_uses_the_explicitly_passed_game_id() {
         let staged = TempDir::new().unwrap();
         let data = TempDir::new().unwrap();
         write(staged.path(), "Skyrim.esm", &tes4_header(true));
-        let plugins = scan_plugins_for(
+        let plugins: Vec<Plugin> = scan_plugin_views_for(
             GameId::SkyrimSE,
             &[staged.path().to_path_buf()],
             data.path(),
         )
-        .unwrap();
+        .unwrap()
+        .into_iter()
+        .map(view_to_plugin)
+        .collect();
         assert_eq!(plugins.len(), 1);
         assert_eq!(plugins[0].kind, PluginKind::Esm);
     }

@@ -33,20 +33,6 @@ impl Store {
         Ok(())
     }
 
-    /// True if any vanilla backup row references this blake3 hash. Used to decide
-    /// whether the content-addressed blob already exists on disk (dedupe).
-    pub fn backup_key_exists(&self, hash: &str) -> Result<bool, StoreError> {
-        let n: i64 = self
-            .conn
-            .query_row(
-                "SELECT count(*) FROM vanilla_backup WHERE hash = ?1",
-                params![hash],
-                |r| r.get(0),
-            )
-            .map_err(|e| StoreError::Db(e.to_string()))?;
-        Ok(n > 0)
-    }
-
     /// Delete the vanilla backup row for a (appid, target_rel), if present. The
     /// content-addressed blob is intentionally left in place (it is dedup-shared and
     /// cheap; a future GC may reclaim it). Idempotent — deleting a missing row is a no-op.
@@ -93,17 +79,15 @@ mod tests {
     const HASH: &str = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
 
     #[test]
-    fn record_then_lookup_by_target_and_key() {
+    fn record_then_lookup_by_target() {
         let dir = TempDir::new().unwrap();
         let store = Store::open(&dir.path().join("d.db")).unwrap();
         let target = PathBuf::from("Data/textures/rock.dds");
 
-        assert!(!store.backup_key_exists(HASH).unwrap());
         assert_eq!(store.vanilla_for(489830, &target).unwrap(), None);
 
         store.record_vanilla(489830, &target, HASH).unwrap();
 
-        assert!(store.backup_key_exists(HASH).unwrap());
         assert_eq!(
             store.vanilla_for(489830, &target).unwrap(),
             Some(HASH.to_string())
@@ -123,7 +107,5 @@ mod tests {
             store.vanilla_for(1, &target).unwrap(),
             Some("hash_two".to_string())
         );
-        assert!(!store.backup_key_exists("hash_one").unwrap());
-        assert!(store.backup_key_exists("hash_two").unwrap());
     }
 }

@@ -56,6 +56,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **Three public helpers kept alive only by their own tests.** `loadorder::scan_plugins`
+  and `scan_plugins_for` were thin wrappers over `scan_plugin_views_for`, which the command
+  layer already calls directly. Propping them up was `game_id_for_data` — a stub that
+  ignored both parameters and returned a hardcoded `GameId::SkyrimSE`, i.e. the plugin layer
+  quietly deciding which game's header semantics apply. Harmless while the flags `scan`
+  reads match across SkyrimSE and Fallout 4, wrong the moment a fourth game arrives; the
+  tests it supported now go through the production path with an explicit `GameId`.
+  `store::backup_key_exists` was dead *and* misleading: its doc claimed to gate
+  content-addressed dedupe, which actually checks the filesystem, pointing anyone auditing
+  the backup path at the wrong mechanism. Net 55 lines, no behaviour change.
+
 - **155 citations pointing at documents that no longer exist.** Deleting `.planning/` was
   supposed to take its ~750 source-comment citations with it, but the sweep was
   incomplete: 93 references to `Plan 0N` / `RESEARCH ...` / `WR-0N` / `D-NN` /

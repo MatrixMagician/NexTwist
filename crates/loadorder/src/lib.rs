@@ -28,5 +28,5 @@ pub use masterlist::{ensure_masterlist, masterlist_snapshot_date};
 pub use reconcile::{ReconcileState, reconcile_plugins_txt};
 pub use scan::{
     PluginView, enabled_names, esplugin_game_id, merge_plugin_state, scan_plugin_views_for,
-    scan_plugins, scan_plugins_for, stamp_protected, view_to_plugin,
+    stamp_protected, view_to_plugin,
 };
