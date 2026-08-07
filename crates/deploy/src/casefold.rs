@@ -14,6 +14,22 @@
 //! does not have keeps the mod's own casing (there is no canonical answer to defer to).
 //! Normalization ALWAYS runs regardless of the best-effort `Casefold` probe so the
 //! result is portable across filesystems.
+//!
+//! ## Known limitation: a wrong-case LEAF replacing a vanilla file
+//!
+//! Because leaves are verbatim, a mod shipping `Data/hearthfires.esm` against a game whose
+//! real file is `Data/HearthFires.esm` deploys as a SECOND file on a case-sensitive
+//! filesystem rather than replacing the original. Verified against a real Skyrim SE
+//! install: the vanilla file is untouched, no backup is taken (correctly — nothing was
+//! overwritten), and purge removes only the file we added, so the round trip stays
+//! byte-for-byte pristine. The reversibility guarantee therefore holds; what the user gets
+//! is a mod that silently does not take effect, which the `NotCasefolded` warning in the
+//! deploy report is there to explain.
+//!
+//! Fixing it would mean extending the casing map to leaf filenames, which is a bigger and
+//! riskier change than it looks: two vanilla files differing only in case are legal on
+//! Linux, so a leaf map needs a collision policy, and picking the wrong winner would
+//! overwrite a real game file. Left as-is deliberately.
 
 use std::path::{Component, Path, PathBuf};
 
