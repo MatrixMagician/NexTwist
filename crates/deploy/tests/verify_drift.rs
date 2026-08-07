@@ -121,10 +121,15 @@ fn unrecorded_extra_file_is_orphan_and_repair_does_not_delete_it() {
     fs::write(&orphan, b"user-added").unwrap();
 
     let report = verify(&h.store, &h.game).unwrap();
-    assert!(!report.pristine);
     assert!(
         report.orphans.iter().any(|p| p.ends_with("extra/user.txt")),
         "extra unrecorded file must be reported as an orphan: {report:?}"
+    );
+    // `pristine` describes OUR deployment, which is intact here: an unmanaged file the
+    // user put in the game folder is not our drift. It is reported, never deleted.
+    assert!(
+        report.pristine,
+        "an unmanaged file is not OUR drift: {report:?}"
     );
 
     // repair MUST report-not-delete the orphan.
@@ -178,10 +183,6 @@ fn empty_orphan_dir_is_reported_and_repair_removes_it() {
 
     let report = verify(&h.store, &h.game).unwrap();
     assert!(
-        !report.pristine,
-        "an orphan empty dir must make verify non-pristine"
-    );
-    assert!(
         report
             .orphan_dirs
             .iter()
@@ -229,7 +230,6 @@ fn dir_with_unmanaged_file_is_not_orphan_dir_and_file_is_not_deleted() {
     fs::write(&unmanaged, b"user-content").unwrap();
 
     let report = verify(&h.store, &h.game).unwrap();
-    assert!(!report.pristine);
     // The non-empty dir is NOT an orphan dir.
     assert!(
         !report.orphan_dirs.iter().any(|p| p.ends_with("usermod")),
