@@ -18,7 +18,7 @@
 //!
 //! * [`probe`]  — per-target fs-capability probe (st_dev, reflink, throwaway
 //!   hardlink, casefold) — `FsCaps`.
-//! * [`method`] — the `DeploymentMethod` trait + reflink → hardlink → symlink → copy
+//! * [`method`] — the per-file deploy primitives + reflink → hardlink → symlink → copy
 //!   ladder, chosen per-target with EXDEV/`CrossesDevices` fallback.
 //! * [`journal`] — intent-before-act protocol + idempotent replay/recovery on launch.
 //! * [`backup`] — backup-before-overwrite into a content-addressed vanilla store.
@@ -45,7 +45,7 @@ pub use gameconfig::{
     INI_FILENAME, IniActivationPreview, IniConflictResolution, IniDrift, IniOutcome,
     ensure_ini_active, ini_drift, preview_ini_activation, restore_ini,
 };
-pub use method::{DeploymentMethod, apply_idempotent, choose_method};
+pub use method::{apply_idempotent, choose_method};
 pub use probe::{Casefold, FsCaps, probe};
 pub use profile::{SwitchReport, switch_profile};
 pub use verify::{RepairReport, VerifyReport, repair, verify};

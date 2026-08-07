@@ -11,7 +11,7 @@
 use std::fs;
 use std::path::Path;
 
-use deploy::method::{CopyMethod, DeploymentMethod, HardlinkMethod, ReflinkMethod, SymlinkMethod};
+use deploy::method::{deploy_one, remove_if_present};
 use deploy::{apply_idempotent, choose_method};
 use nextwist_core::DeployMethod;
 use tempfile::TempDir;
@@ -24,53 +24,47 @@ fn each_method_deploy_then_remove_round_trips_a_single_file() {
     fs::create_dir_all(src.parent().unwrap()).unwrap();
     fs::write(&src, b"payload-bytes").unwrap();
 
-    let methods: Vec<Box<dyn DeploymentMethod>> = vec![
-        Box::new(ReflinkMethod),
-        Box::new(HardlinkMethod),
-        Box::new(SymlinkMethod),
-        Box::new(CopyMethod),
+    let methods = [
+        DeployMethod::Reflink,
+        DeployMethod::Hardlink,
+        DeployMethod::Symlink,
+        DeployMethod::Copy,
     ];
 
     for m in methods {
-        let dst = dir.path().join(format!("game/{:?}.bin", m.name()));
+        let dst = dir.path().join(format!("game/{m:?}.bin"));
         fs::create_dir_all(dst.parent().unwrap()).unwrap();
 
-        match m.deploy_file(&src, &dst) {
+        match deploy_one(m, &src, &dst) {
             Ok(()) => {
                 // Deployed: the destination must exist and read back the source bytes
                 // (symlink resolves to src; hardlink/reflink/copy carry the bytes).
-                assert!(dst.exists(), "{:?} should create the destination", m.name());
+                assert!(dst.exists(), "{m:?} should create the destination");
                 assert_eq!(
                     fs::read(&dst).unwrap(),
                     b"payload-bytes",
-                    "{:?} deployed wrong content",
-                    m.name()
+                    "{m:?} deployed wrong content"
                 );
-                m.remove_file(&dst).unwrap();
-                assert!(
-                    !dst.exists(),
-                    "{:?} remove_file must leave dst absent",
-                    m.name()
-                );
+                remove_if_present(&dst).unwrap();
+                assert!(!dst.exists(), "{m:?} removal must leave dst absent");
                 // Removing again is idempotent.
-                m.remove_file(&dst).unwrap();
+                remove_if_present(&dst).unwrap();
             }
             Err(e) => {
                 // Reflink may be unsupported on the test fs (e.g. tmpfs/ext4); that is
-                // an acceptable outcome for ReflinkMethod specifically. The ladder
+                // an acceptable outcome for Reflink specifically. The ladder
                 // (tested below) is what guarantees a working fallback.
                 assert_eq!(
-                    m.name(),
+                    m,
                     DeployMethod::Reflink,
-                    "only reflink may be unsupported here; {:?} failed: {e}",
-                    m.name()
+                    "only reflink may be unsupported here; {m:?} failed: {e}"
                 );
             }
         }
     }
 }
 
-/// The symlink method must NEVER create a directory symlink — it operates per-file.
+/// The symlink rung must NEVER create a directory symlink — it operates per-file.
 #[test]
 fn symlink_method_is_per_file_only() {
     let dir = TempDir::new().unwrap();
@@ -80,7 +74,7 @@ fn symlink_method_is_per_file_only() {
     let dst = dir.path().join("game/subdir");
     // Deploying a *directory* must fail (canonicalize+symlink of a dir is not our
     // contract). We only ever deploy individual files.
-    let res = SymlinkMethod.deploy_file(&src_dir, &dst);
+    let res = deploy_one(DeployMethod::Symlink, &src_dir, &dst);
     // Either it errors, or if it created something it must not be a followed dir link
     // that exposes staging. The contract: callers pass files, so a dir is misuse;
     // assert we did not silently create a directory symlink into staging.
