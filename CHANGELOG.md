@@ -86,6 +86,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Crash recovery could destroy a vanilla game file and then report the game pristine.**
+  The engine writes a durable `pending` intent *before* taking the vanilla backup, so a
+  crash — or an ordinary I/O failure such as a full or read-only disk — in that window
+  left a journal row declaring intent to overwrite a file no copy existed of. Two defects
+  compounded there. Recovery reconstructed the staged source as `staging_dir/<target_rel>`,
+  a path production never produces (both install paths stage each mod in a per-mod
+  subdirectory), so forward recovery could never fire and every interrupted deploy took
+  the roll-back branch instead. That branch deleted the target unconditionally and then
+  called `restore_vanilla`, which returns `Ok(false)` when the ledger has no row —
+  discarded. Net effect: an untouched vanilla file deleted outright, `verify()` reporting
+  `pristine = true`, and a purge with nothing to restore. Now the staging root is recorded
+  with the intent (migration `V6`, nullable so pre-existing rows fall back to the old
+  reconstruction), forward replay backs up before it overwrites, and recovery refuses
+  rather than touching an original it cannot first preserve — a transient disk failure
+  keeps the intent pending for a later retry instead of costing the user their file. Four
+  tests in `crates/deploy/tests/recovery_vanilla_safety.rs` pin the behaviour, and a
+  `V5 → V6` upgrade test proves a pre-existing pending row survives the migration.
+- **`repair` silently restored nothing for any mod staged the way production stages
+  them.** The same root cause as above, in the sibling code path: it reconstructed the
+  staged source as `staging_dir/<target_rel>`, so `redeploy_from_staging` returned `false`
+  for every file and repair reported success having changed nothing. Nothing was destroyed
+  (it refuses to fabricate content rather than guess), but `verify` + `repair` is the tool
+  a user reaches for when a deployment drifts, and a full purge and redeploy was the only
+  way out. No new schema was needed: the manifest already records each file's
+  `source_mod`, and `ManagedMod` carries that mod's `staging_root`.
 - **`deploy_collection` / `uninstall_collection` accepted a Collection belonging to a
   different game** — uninstall purges one game's install and then deletes the Collection's
   staged trees, so a mismatched pair could purge one game while destroying another's staged
