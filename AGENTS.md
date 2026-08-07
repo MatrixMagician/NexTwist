@@ -164,6 +164,12 @@ Before claiming a change is complete:
    against your real app-data database — `cargo tauri build --bundles appimage` is not
    enough, it must start. The whole suite runs on empty databases, so an entire class of
    failure is invisible to it (see the migration-checksum blind spot below).
+10. If you touched the **frontend**, LOOK at the running app, do not just read its log. A
+    blank window, a placeholder heading and a correct render all produce identical startup
+    output. `spectacle -b -n -f -o shot.png` captures it on a Wayland session. Note that
+    `cargo build --release -p nextwist` skips the bundling that embeds the frontend, so that
+    binary shows "Could not connect to localhost" and tells you nothing — use
+    `cargo tauri build`.
 
 All gates were run green on `main` as of 2026-08-02, so a failure you see is
 something you introduced, not pre-existing noise. Some caveats worth knowing:

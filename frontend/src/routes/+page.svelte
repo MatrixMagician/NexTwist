@@ -200,13 +200,17 @@
   const modName = (id: number): string =>
     mods.find((m) => m.id === id)?.name ?? `mod #${id}`;
 
-  async function run<T>(label: string, fn: () => Promise<T>): Promise<T | undefined> {
+  async function run<T>(
+    label: string,
+    fn: () => Promise<T>,
+    quiet = false,
+  ): Promise<T | undefined> {
     busy = true;
     error = null;
     status = null;
     try {
       const result = await fn();
-      status = `${label} ok`;
+      if (!quiet) status = `${label} ok`;
       return result;
     } catch (e) {
       error = `${label} failed: ${String(e)}`;
@@ -216,8 +220,14 @@
     }
   }
 
-  async function refreshManaged() {
-    const games = await run("List games", api.listGames);
+  /// Refresh the managed-game list.
+  ///
+  /// `quiet` suppresses the success banner: `run` reports the outcome of something the
+  /// USER asked for, and the on-mount load is not that. Announcing "List games ok" to
+  /// someone who has just opened the app is debug chatter, and it trains them to ignore
+  /// the banner that matters when a real action succeeds or fails. Errors still surface.
+  async function refreshManaged(quiet = false) {
+    const games = await run("List games", api.listGames, quiet);
     if (games) managed = games;
   }
 
@@ -990,8 +1000,9 @@
     }
   });
 
-  // Load any already-managed games + the current account on mount.
-  refreshManaged();
+  // Load any already-managed games + the current account on mount. Quiet: the user did
+  // not ask for this, so it must not post a success banner.
+  refreshManaged(true);
   loadAccount();
 
   // Subscribe to download progress events: the list is updated entirely off
@@ -1004,7 +1015,7 @@
 </script>
 
 <main>
-  <h1>NexTwist — Walking Skeleton</h1>
+  <h1>NexTwist</h1>
 
   {#if busy}<p class="busy">Working…</p>{/if}
   {#if status}<p class="ok">{status}</p>{/if}
