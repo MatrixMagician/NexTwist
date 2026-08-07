@@ -104,6 +104,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whose banners are how it reports real drift. Both found by screenshotting the running
   AppImage; every earlier check read the startup log, which is identical whether the UI
   renders correctly, renders a placeholder, or renders nothing.
+- **37 more citations pointing at the deleted UI-SPEC** (`§A.8`, `§B.2`, `§C.3`, ...) across
+  the frontend and three command adapters. The earlier sweep searched `.rs` and config files
+  and never looked at `.svelte`/`.ts`, so the largest single file in the project kept its
+  dangling references. RFC citations (`RFC 6749 §4.1.3`) resolve and are kept.
 
 - **Every unmodded game reported "Drift detected".** `pristine` folded in the orphan walk,
   which by definition contains the untouched vanilla game tree, so a freshly added game

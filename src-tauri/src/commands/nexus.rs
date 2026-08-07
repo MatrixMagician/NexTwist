@@ -28,7 +28,7 @@ static NXM_DOWNLOAD_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::Atomi
 /// (`game_domain`, `mod_id`, `file_id`). The `key`/`expires` redemption secrets are NEVER
 /// emitted (V7 secret-free event contract). Those coordinates let the frontend row's Retry
 /// re-issue a *premium* download via `start_download`; a free-user retry has no key and
-/// surfaces the §C.3 "link expired — re-open from NexusMods" Warning instead (correct: a
+/// surfaces the "link expired — re-open from NexusMods" Warning instead (correct: a
 /// single-use free link cannot be silently replayed).
 #[derive(Debug, Clone, Serialize)]
 struct NxmArrival {
@@ -256,7 +256,7 @@ fn route_download(app: &tauri::AppHandle, link: NxmLink) {
         )
         .await;
         // Success/failure/expired is already emitted on `download://progress` by the core;
-        // an expired free-user redemption surfaces the §C.3 Warning there.
+        // an expired free-user redemption surfaces the expired-link Warning there.
     });
 }
 

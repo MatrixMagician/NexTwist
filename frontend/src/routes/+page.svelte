@@ -96,11 +96,11 @@
   // Downloads list state. `downloads` is the per-item list, driven entirely
   // by async `download://progress` events so the UI never freezes (criterion #4).
   // `rateLimited` toggles the Warning notice above the list when the client backs off.
-  // `expiredLink` carries the §C.3 "link expired" Warning (not a Failed download row).
+  // `expiredLink` carries the "link expired" Warning (not a Failed download row).
   let downloads = $state<DownloadItem[]>([]);
   let rateLimited = $state(false);
   let expiredLink = $state<string | null>(null);
-  // `nxmToast` carries the §C.1 "Download started from NexusMods" Success toast, shown
+  // `nxmToast` carries the "Download started from NexusMods" Success toast, shown
   // (non-blocking, auto-dismissing) when an nxm:// deep-link arrival fires.
   let nxmToast = $state<string | null>(null);
   let nxmToastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -117,7 +117,7 @@
   let fomodChosen = $state<Set<string>>(new Set());
   let fomodPreview = $state<FomodResolvePreview | null>(null); // dry-run gate result
   let fomodApplying = $state(false);
-  // The malformed-FOMOD fallback offer (§A.8): the verbatim reason + plain-mod fallback.
+  // The malformed-FOMOD fallback offer: the verbatim reason + plain-mod fallback.
   let fomodFallback = $state<string | null>(null);
 
   // --- Collections state. The Premium gate, the
@@ -343,7 +343,7 @@
     row.downloaded = p.downloaded;
     row.total = p.total;
     if (p.state === "expired") {
-      // §C.3: an expired free-user link is a Warning notice, NOT a Failed row.
+      // an expired free-user link is a Warning notice, NOT a Failed row.
       expiredLink = p.reason ?? "This download link has expired.";
       downloads.splice(idx, 1);
       return;
@@ -446,7 +446,7 @@
           // this nxm-originated row can re-issue the download. `appid: 0` is a sentinel the
           // backend resolves from `gameDomain` (it owns the domain→appid map). `key`/
           // `expires` are deliberately absent — a single-use free link can't be replayed, so
-          // a free-user retry surfaces the §C.3 expired-link Warning instead of a silent
+          // a free-user retry surfaces the expired-link Warning instead of a silent
           // failure; a premium retry (no key needed) re-downloads cleanly.
           source: {
             appid: 0,
@@ -501,7 +501,7 @@
     }
     // Probe for a guided installer first. A successful parse opens the wizard;
     // a "no fomod/ModuleConfig.xml" archive (or any parse error) falls back to the plain
-    // install path — the UI never half-opens a broken wizard (§A.8).
+    // install path — the UI never half-opens a broken wizard.
     await tryOpenFomodWizard(selectedAppid!, archivePath);
   }
 
@@ -555,7 +555,7 @@
       fomodChosen = fomodLogic.preselected(proj);
       status = "FOMOD installer opened";
     } catch (e) {
-      // §A.8: a missing fomod/ModuleConfig.xml is the common "plain mod" case — install it
+      // a missing fomod/ModuleConfig.xml is the common "plain mod" case — install it
       // directly with no error. A genuinely malformed FOMOD surfaces the verbatim reason +
       // the plain-mod fallback offer.
       const reason = String(e);
@@ -702,7 +702,7 @@
   }
 
   // Reorder a plugin by swapping with its neighbor (▲▼ / keyboard). A move that would
-  // violate masters-first is refused with the §B.2 inline warning (controls are also
+  // violate masters-first is refused with an inline warning (controls are also
   // disabled for these, this is the defense-in-depth path).
   async function onPluginReorder(i: number, dir: -1 | 1) {
     // Protected masters are engine-locked; the UI is the courtesy layer, the engine
@@ -807,7 +807,7 @@
   }
 
   // Confirmed switch: run the safe-engine reconcile (purge old → deploy new → plugins.txt
-  // → mark active), then reload profiles + the per-profile mod/plugin lists (§D.3).
+  // → mark active), then reload profiles + the per-profile mod/plugin lists.
   async function onConfirmSwitch() {
     const target = switchTarget;
     if (selectedAppid === null || !target) return;
@@ -817,7 +817,7 @@
     );
     if (report) {
       switchReport = report;
-      // Per-profile preservation (§D.3): the deployed set changed — reload the lists so the
+      // Per-profile preservation: the deployed set changed — reload the lists so the
       // conflict/plugin views reflect the new profile's set/order, and reset the pending
       // signature (the on-disk set now matches the freshly-deployed profile).
       await loadProfiles();
@@ -865,7 +865,7 @@
   // --- Collections. Every action routes through api.ts; the resolve
   //     report and the destructive uninstall are the two consequence gates. ---
 
-  /** §B.3: resolve the pasted manifest into the report BEFORE any download/disk write. */
+  /** resolve the pasted manifest into the report BEFORE any download/disk write. */
   async function onResolveCollection() {
     if (selectedAppid === null) return;
     if (!collManifest.trim()) {
@@ -881,7 +881,7 @@
     if (report) collResolve = report;
   }
 
-  /** §B.4: accept the report and bulk-download the available set. The backend enforces the
+  /** accept the report and bulk-download the available set. The backend enforces the
    *  Premium gate FIRST; per-mod progress flows through the existing download stream. We
    *  pre-seed the per-mod rows so they appear immediately (the ids match the backend's). */
   async function onDownloadCollection() {
@@ -903,7 +903,7 @@
     }
   }
 
-  /** §C.3: deploy the installed Collection via the existing profile-switch path. */
+  /** deploy the installed Collection via the existing profile-switch path. */
   async function onDeployCollection() {
     if (selectedAppid === null || !collDownload) return;
     const report = await run("Deploy Collection", () =>
@@ -915,7 +915,7 @@
     }
   }
 
-  /** §C.4: open the destructive uninstall confirm. */
+  /** open the destructive uninstall confirm. */
   function onRequestUninstallCollection() {
     if (!collDownload) return;
     collUninstallTarget = {
@@ -924,7 +924,7 @@
     };
   }
 
-  /** §C.4: on confirm, purge-to-pristine + drop profile + remove staged mods (reversible). */
+  /** on confirm, purge-to-pristine + drop profile + remove staged mods (reversible). */
   async function onConfirmUninstallCollection() {
     const target = collUninstallTarget;
     if (selectedAppid === null || !target) return;
@@ -1086,7 +1086,7 @@
     <h2>Downloads</h2>
 
     {#if nxmToast}
-      <!-- §C.1: non-blocking arrival toast, Success styling, auto-dismisses. -->
+      <!-- non-blocking arrival toast, Success styling, auto-dismisses. -->
       <div class="nxm-toast" role="status">
         {nxmToast}
         <button class="link-btn" onclick={() => (nxmToast = null)}>Dismiss</button>
@@ -1188,7 +1188,7 @@
       {#if !loggedIn}
         <p class="muted">Log in above to browse and install Collections.</p>
       {:else if !isPremium}
-        <!-- §B.1 Premium gate: a single factual Warning notice, not a nag. -->
+        <!-- Premium gate: a single factual Warning notice, not a nag. -->
         <div class="warn coll-premium">
           <strong>Collections require a NexusMods Premium account</strong>
           <p class="muted">
@@ -1197,7 +1197,7 @@
           </p>
         </div>
       {:else}
-        <!-- §B.2 Browse/select: slug/URL + revision for the selected game's domain. -->
+        <!-- Browse/select: slug/URL + revision for the selected game's domain. -->
         <div class="conflict-toolbar coll-pick">
           <input bind:value={collSlug} placeholder="Collection slug or URL" />
           <input
@@ -1220,7 +1220,7 @@
         </button>
 
         {#if !collResolve && !collDownload}
-          <!-- §B.5 empty / no-selection state. -->
+          <!-- empty / no-selection state. -->
           <div class="empty">
             <strong>No Collection selected</strong>
             <p class="muted">
@@ -1231,7 +1231,7 @@
         {/if}
 
         {#if collResolve}
-          <!-- §B.3 Resolve report (HARD GATE): rendered BEFORE any download. -->
+          <!-- Resolve report (HARD GATE): rendered BEFORE any download. -->
           <div class="report coll-resolve">
             <h4>Resolve report</h4>
             <p class="muted coll-summary">
@@ -1253,7 +1253,7 @@
               Unavailable mods are skipped; manual-step mods are listed for you to install
               yourself.
             </p>
-            <!-- §B.4 Accept & download: the only accent CTA on this screen. -->
+            <!-- Accept & download: the only accent CTA on this screen. -->
             <button class="cta" onclick={onDownloadCollection} disabled={busy}>
               Download Collection
             </button>
@@ -1267,7 +1267,7 @@
         {/if}
 
         {#if collDownloadRows.length > 0}
-          <!-- §B.4 per-mod + overall bulk progress. -->
+          <!-- per-mod + overall bulk progress. -->
           <div class="coll-progress">
             <p class="muted">
               Downloading {collDownloadRows.filter((d) => d.state === "done").length} of
@@ -1356,7 +1356,7 @@
             {/if}
 
             {#if collDownload.manual_steps.length > 0 && !manualStepsDismissed}
-              <!-- §C.2 persistent manual-steps panel (dismissable per-Collection). -->
+              <!-- persistent manual-steps panel (dismissable per-Collection). -->
               <div class="warn coll-manual">
                 <strong>Manual steps remaining</strong>
                 <ul>
@@ -1377,9 +1377,9 @@
             {/if}
 
             <div class="coll-actions">
-              <!-- §C.3 Deploy: Accent, the existing profile-switch path. -->
+              <!-- Deploy: Accent, the existing profile-switch path. -->
               <button class="cta" onclick={onDeployCollection} disabled={busy}>Deploy</button>
-              <!-- §C.4 Uninstall: neutral affordance → Destructive-red confirm modal. -->
+              <!-- Uninstall: neutral affordance → Destructive-red confirm modal. -->
               <button class="danger-link" onclick={onRequestUninstallCollection} disabled={busy}>
                 Uninstall Collection
               </button>
@@ -1396,7 +1396,7 @@
         {/if}
 
         {#if collPurgeReport}
-          <!-- §C.4 post-uninstall: pristine result. -->
+          <!-- post-uninstall: pristine result. -->
           <div class="report">
             <h4>
               {collPurgeReport.orphans.length === 0
@@ -1536,7 +1536,7 @@
       <button onclick={onInstall} disabled={busy}>Install mod from archive</button>
 
       {#if fomodFallback}
-        <!-- §A.8: a malformed FOMOD never opens a half-broken wizard — show the verbatim
+        <!-- a malformed FOMOD never opens a half-broken wizard — show the verbatim
              reason + the plain-mod fallback (Copywriting Contract). -->
         <div class="warn fomod-fallback">
           <p>
@@ -1902,7 +1902,7 @@
           </p>
         </div>
       {:else}
-        <!-- Profile selector (§D.1): active = deployed, marked with the Accent indicator -->
+        <!-- Profile selector: active = deployed, marked with the Accent indicator -->
         <ul class="priority profiles">
           {#each profiles as p (p.id)}
             <li class:active={p.active}>
@@ -2236,7 +2236,7 @@
     margin: 0 0 0.75rem;
     font-size: 0.875rem;
   }
-  /* §C.1 arrival toast — Success styling (green), non-blocking, auto-dismissing. */
+  /* arrival toast — Success styling (green), non-blocking, auto-dismissing. */
   .nxm-toast {
     color: #1a7f37;
     background: #eaf6ed;
@@ -2405,7 +2405,7 @@
   /* --- Profiles --- */
   ul.priority.profiles { list-style: none; padding: 0; margin: 0.4rem 0; }
   ul.priority.profiles li.active { border-color: #0a66c2; background: #f5f9ff; }
-  /* Accent indicator marks the active (deployed) profile (§D.1). */
+  /* Accent indicator marks the active (deployed) profile. */
   .active-dot { color: #0a66c2; min-width: 1rem; }
   .active-dot.placeholder { color: #ccc; }
   .prof-name { font-weight: 600; flex: 1; }
@@ -2452,7 +2452,7 @@
   }
   button.destructive:hover:not(:disabled) { background: #a40e26; }
 
-  /* Confirmation modal (every disk-mutating profile action is gated — §D.2). */
+  /* Confirmation modal (every disk-mutating profile action is gated). */
   .overlay {
     position: fixed;
     inset: 0;
@@ -2498,7 +2498,7 @@
   .fomod-opt-label.selected { font-weight: 600; }
   .fomod-img { max-height: 96px; display: block; margin: 0.3rem 0 0 1.6rem; border-radius: 3px; }
   .fomod-desc { margin: 0.2rem 0 0 1.6rem; font-size: 0.95rem; }
-  /* Type-state tags (§A.4). Required = neutral; Recommended/CouldBeUsable = amber;
+  /* Type-state tags. Required = neutral; Recommended/CouldBeUsable = amber;
      NotUsable = muted. */
   .type-tag {
     font-size: 0.75rem;
