@@ -34,6 +34,12 @@ pub struct OpIntent {
     pub source_hash: Option<String>,
     /// Operation kind, e.g. `"deploy"` or `"purge"`.
     pub kind: String,
+    /// Root of the staged tree this file came from (deploy ops only).
+    ///
+    /// Recovery reconstructs the staged source as `staging_root/target_rel`, so the root
+    /// the caller actually used has to be durable — a mod staged in a per-mod subdir
+    /// (what production does) is not findable from the game's staging dir alone.
+    pub staging_root: Option<PathBuf>,
 }
 
 /// A persisted journal row read back from the DB.
@@ -53,6 +59,9 @@ pub struct JournalRow {
     pub kind: String,
     /// Current state (`"pending"` or `"done"`).
     pub state: String,
+    /// Recorded staging root, if the op carried one. `None` for purge/INI ops and for
+    /// deploy rows written before the column existed.
+    pub staging_root: Option<PathBuf>,
 }
 
 impl Store {
@@ -60,14 +69,19 @@ impl Store {
     pub fn begin_op(&self, intent: &OpIntent) -> Result<JournalId, StoreError> {
         self.conn
             .execute(
-                "INSERT INTO op_journal (appid, target_rel, method, source_hash, kind, state)
-                 VALUES (?1, ?2, ?3, ?4, ?5, 'pending')",
+                "INSERT INTO op_journal
+                     (appid, target_rel, method, source_hash, kind, state, staging_root)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6)",
                 params![
                     intent.appid,
                     intent.target_rel.to_string_lossy(),
                     intent.method.map(|m| m.as_str()),
                     intent.source_hash,
                     intent.kind,
+                    intent
+                        .staging_root
+                        .as_ref()
+                        .map(|p| p.to_string_lossy().into_owned()),
                 ],
             )
             .map_err(|e| StoreError::Db(e.to_string()))?;
@@ -91,7 +105,7 @@ impl Store {
         let mut stmt = self
             .conn
             .prepare(
-                "SELECT id, appid, target_rel, method, source_hash, kind, state
+                "SELECT id, appid, target_rel, method, source_hash, kind, state, staging_root
                  FROM op_journal WHERE state != 'done' ORDER BY id",
             )
             .map_err(|e| StoreError::Db(e.to_string()))?;
@@ -116,12 +130,14 @@ fn row_to_journal(row: &rusqlite::Row<'_>) -> rusqlite::Result<JournalRow> {
         source_hash: row.get(4)?,
         kind: row.get(5)?,
         state: row.get(6)?,
+        staging_root: row.get::<_, Option<String>>(7)?.map(PathBuf::from),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
     use tempfile::TempDir;
 
     fn intent() -> OpIntent {
@@ -131,6 +147,7 @@ mod tests {
             method: Some(DeployMethod::Reflink),
             source_hash: Some("deadbeef".into()),
             kind: "deploy".into(),
+            staging_root: Some(PathBuf::from("/app/staging/489830/SomeMod")),
         }
     }
 
@@ -149,6 +166,11 @@ mod tests {
         assert_eq!(row.method, Some(DeployMethod::Reflink));
         assert_eq!(row.source_hash.as_deref(), Some("deadbeef"));
         assert_eq!(row.kind, "deploy");
+        assert_eq!(
+            row.staging_root.as_deref(),
+            Some(Path::new("/app/staging/489830/SomeMod")),
+            "the staging root must round-trip, or recovery cannot locate the staged source"
+        );
 
         store.mark_done(id).unwrap();
         assert!(store.pending_ops().unwrap().is_empty());

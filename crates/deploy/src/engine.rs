@@ -217,6 +217,7 @@ fn deploy_inner(
             &data_dir,
             &src,
             rel,
+            &staged.staging_root,
             0,
             chosen,
             &casing,
@@ -293,6 +294,7 @@ pub fn deploy_winners(
             &data_dir,
             &src,
             &w.rel,
+            &w.staging_root,
             w.mod_id,
             chosen,
             &casing,
@@ -353,6 +355,10 @@ pub fn redeploy_winners(
 /// casing-normalize the relpath, guard containment, hash, journal `pending`,
 /// backup-before-overwrite, idempotent file op, then manifest row + `done` flip.
 ///
+/// `staging_root` is the root `src` was resolved against. It is recorded with the journal
+/// intent so crash recovery can find the staged source again: production stages each mod
+/// in a per-mod subdir, so the game's staging dir alone is not enough to locate it.
+///
 /// `source_mod` is the owning mod id recorded in the manifest (`0` for single-root
 /// single-root deploys; the winning mod id for the conflict winner set).
 ///
@@ -369,6 +375,7 @@ fn deploy_one_file(
     data_dir: &Path,
     src: &Path,
     rel: &Path,
+    staging_root: &Path,
     source_mod: i64,
     chosen: DeployMethod,
     casing: &steam::CasingMap,
@@ -387,7 +394,7 @@ fn deploy_one_file(
     let source_hash = backup::blake3_file(src)?;
 
     // 1. Durable intent BEFORE any syscall.
-    let jid = journal::begin_deploy(store, game.appid, rel, chosen, &source_hash)?;
+    let jid = journal::begin_deploy(store, game.appid, rel, chosen, &source_hash, staging_root)?;
 
     // 2. Backup-before-overwrite (idempotent, content-addressed).
     let backed = backup::backup_vanilla_if_absent(store, game, &target, rel)?;

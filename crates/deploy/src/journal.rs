@@ -43,6 +43,7 @@ pub fn begin_deploy(
     target_rel: &Path,
     method: DeployMethod,
     source_hash: &str,
+    staging_root: &Path,
 ) -> Result<JournalId, DeployError> {
     let intent = OpIntent {
         appid,
@@ -50,6 +51,7 @@ pub fn begin_deploy(
         method: Some(method),
         source_hash: Some(source_hash.to_string()),
         kind: KIND_DEPLOY.to_string(),
+        staging_root: Some(staging_root.to_path_buf()),
     };
     Ok(store.begin_op(&intent)?)
 }
@@ -65,6 +67,7 @@ pub fn begin_ini(store: &Store, appid: u32, sentinel_rel: &Path) -> Result<Journ
         method: None,
         source_hash: None,
         kind: KIND_INI.to_string(),
+        staging_root: None,
     };
     Ok(store.begin_op(&intent)?)
 }
@@ -77,6 +80,7 @@ pub fn begin_purge(store: &Store, appid: u32, target_rel: &Path) -> Result<Journ
         method: None,
         source_hash: None,
         kind: KIND_PURGE.to_string(),
+        staging_root: None,
     };
     Ok(store.begin_op(&intent)?)
 }
@@ -158,26 +162,73 @@ pub fn replay(store: &Store, game: &Game) -> Result<ReplayOutcome, DeployError> 
 }
 
 /// Roll a pending deploy row forward (finish it) or back (undo it) idempotently.
+///
+/// Rolling back is only safe when the target can be put back the way it was. If the row
+/// says a pre-existing file was about to be overwritten and no vanilla backup exists for
+/// it, the original is left ALONE: a crash between the durable intent and the backup is
+/// exactly that state, and deleting a file we cannot restore is the one thing this engine
+/// promises never to do.
 fn replay_deploy(store: &Store, game: &Game, row: &JournalRow) -> Result<(), DeployError> {
     let target = crate::resolve_target(&game.install_dir, &row.target_rel);
-    // Locate the staged source for this target by its recorded hash + relpath. The
-    // staged tree is `Data/`-rooted, so the staged path mirrors the target_rel.
-    let staged_src = game.staging_dir.join(&row.target_rel);
+    // Locate the staged source under the root the deploy was actually given. Production
+    // stages each mod in a per-mod subdir of the staging dir, so the root has to come
+    // from the row; `staging_dir` alone only works for a single mod staged at its root
+    // (which is what the older rows without the column assumed).
+    let staged_src = row
+        .staging_root
+        .clone()
+        .unwrap_or_else(|| game.staging_dir.clone())
+        .join(&row.target_rel);
 
     let method = row.method.unwrap_or(DeployMethod::Copy);
     let source_hash = row.source_hash.clone().unwrap_or_default();
 
     if staged_src.is_file() {
-        // Roll FORWARD: re-apply the idempotent op and finish the manifest row.
+        // Roll FORWARD. Back up first, exactly as `deploy` does: a crash between the
+        // durable intent and the original backup leaves the vanilla file sitting at the
+        // target un-backed-up, and overwriting it here would destroy it just as surely as
+        // deleting it.
+        //
+        // But the crash may equally have landed AFTER the file op, in which case what is
+        // at the target is our own placement, and backing that up would record the mod's
+        // bytes as the "vanilla original" — poisoning the very ledger purge restores from.
+        // The recorded `source_hash` tells the two apart exactly: it is the hash of the
+        // staged source, so a target matching it is our placement (every rung of the
+        // ladder — reflink, hardlink, symlink, copy — yields the source's content), and a
+        // target that differs is the user's file. `backup_vanilla_if_absent` is idempotent
+        // and content-addressed, so re-running it for an already-backed-up original is a
+        // no-op.
+        let target_is_our_placement = target_matches_hash(&target, &source_hash);
+        let backed = if target_is_our_placement {
+            false
+        } else {
+            backup::backup_vanilla_if_absent(store, game, &target, &row.target_rel)?
+        };
         let used = apply_idempotent(method, &staged_src, &target)?;
         let entry = FileEntry {
             target_rel: row.target_rel.clone(),
             source_mod: 0,
             method: used,
             hash: source_hash,
-            pre_existing: store.vanilla_for(game.appid, &row.target_rel)?.is_some(),
+            pre_existing: backed || store.vanilla_for(game.appid, &row.target_rel)?.is_some(),
         };
         finish_deploy(store, row.id, game.appid, &entry)?;
+    } else if !target_matches_hash(&target, &source_hash)
+        && store.vanilla_for(game.appid, &row.target_rel)?.is_none()
+        && !crate::backup::is_ours(store, game.appid, &row.target_rel)?
+        && target.exists()
+    {
+        // The staged source is gone AND there is nothing on disk we may safely remove:
+        // no backup to restore from, and the manifest does not claim this file as ours,
+        // so what is sitting there is the user's own (vanilla or hand-placed) file. Leave
+        // it untouched and mark the row done so recovery still converges — a row we can
+        // neither complete nor undo must not be retried forever.
+        tracing::warn!(
+            target_rel = %row.target_rel.display(),
+            "recovery left an un-backed-up file in place: the staged source is gone and \
+             no vanilla backup exists, so removing it would be unrecoverable"
+        );
+        store.mark_done(row.id)?;
     } else {
         // The staged source is gone — we cannot complete this deploy. Roll BACK to a
         // pristine state: remove any partial placement and restore vanilla if backed
@@ -188,6 +239,20 @@ fn replay_deploy(store: &Store, game: &Game, row: &JournalRow) -> Result<(), Dep
         store.mark_done(row.id)?;
     }
     Ok(())
+}
+
+/// Whether the file at `target` is byte-identical to the content `expected_hash` names.
+///
+/// Used to tell "our own placement" from "the user's file" during replay. Every rung of
+/// the method ladder (reflink, hardlink, symlink, copy) makes the target read back as the
+/// staged source's bytes, so a hash match means the interrupted op's file step had already
+/// happened. Any read failure, or an empty recorded hash (a row from a path that never
+/// recorded one), answers `false`: the safe default is to treat the file as the user's.
+fn target_matches_hash(target: &Path, expected_hash: &str) -> bool {
+    if expected_hash.is_empty() {
+        return false;
+    }
+    backup::blake3_file(target).is_ok_and(|actual| actual == expected_hash)
 }
 
 /// Roll a pending purge row forward idempotently: remove the target, restore vanilla,

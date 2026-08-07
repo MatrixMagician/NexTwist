@@ -1,0 +1,19 @@
+-- V6: record the staging root on each deploy journal row.
+--
+-- Crash recovery reconstructs the staged source for an interrupted deploy so it can
+-- roll the op FORWARD. It did that as `staging_dir/<target_rel>`, which assumes every
+-- mod is staged directly at the game's staging dir. Nothing in production stages that
+-- way: both real install paths (`commands/downloads.rs`, `commands/fomod.rs`) put each
+-- mod under a per-mod subdirectory of the staging dir. So the reconstructed path never
+-- existed, forward recovery could never fire, and every interrupted deploy silently
+-- took the roll-BACK branch instead — undoing work that had already succeeded on disk,
+-- and (with no backup yet taken) deleting the vanilla file it was about to overwrite.
+--
+-- The engine already receives the correct root as `StagedFiles.staging_root`; it just
+-- was not durable. Recording it with the intent makes forward recovery work on the
+-- layout users actually have.
+--
+-- Nullable on purpose. A row written by an older version has no staging root, and
+-- rewriting history would be a lie about what that op knew; `replay_deploy` falls back
+-- to the previous reconstruction for those rows. New rows always carry it.
+ALTER TABLE op_journal ADD COLUMN staging_root TEXT;

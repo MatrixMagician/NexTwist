@@ -112,7 +112,10 @@ pub fn restore_vanilla(
 }
 
 /// Whether `appid`/`target_rel` is recorded in the deploy manifest as one of ours.
-fn is_ours(store: &Store, appid: u32, target_rel: &Path) -> Result<bool, DeployError> {
+///
+/// The manifest is the only authority on this: a file we placed is safe to remove, a file
+/// we did not is the user's and must never be deleted on a guess.
+pub(crate) fn is_ours(store: &Store, appid: u32, target_rel: &Path) -> Result<bool, DeployError> {
     let files = store.list_deployed_files(appid)?;
     Ok(files.iter().any(|f| f.target_rel == target_rel))
 }
