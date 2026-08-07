@@ -172,31 +172,18 @@ pub(crate) mod editor {
     /// Split `body` into raw lines, EACH INCLUDING its trailing terminator (`\r\n`, `\n`,
     /// or none for a final unterminated line). Concatenating the result reproduces `body`
     /// byte-for-byte — the basis of the byte-fidelity guarantee.
+    ///
+    /// `split_inclusive` keeps the terminator on each element, yields an unterminated
+    /// final line as its own element, and yields NOTHING for an empty body — exactly the
+    /// three cases the guarantee rests on.
     pub(crate) fn raw_lines(body: &[u8]) -> Vec<&[u8]> {
-        let mut out = Vec::new();
-        let mut start = 0;
-        for (i, &b) in body.iter().enumerate() {
-            if b == b'\n' {
-                out.push(&body[start..=i]);
-                start = i + 1;
-            }
-        }
-        if start < body.len() {
-            out.push(&body[start..]);
-        }
-        out
+        body.split_inclusive(|&b| b == b'\n').collect()
     }
 
     /// The line's content with its trailing EOL removed (bytes only, no trim).
     fn strip_eol(line: &[u8]) -> &[u8] {
-        let mut e = line.len();
-        if e > 0 && line[e - 1] == b'\n' {
-            e -= 1;
-            if e > 0 && line[e - 1] == b'\r' {
-                e -= 1;
-            }
-        }
-        &line[..e]
+        let line = line.strip_suffix(b"\n").unwrap_or(line);
+        line.strip_suffix(b"\r").unwrap_or(line)
     }
 
     /// The line's exact trailing EOL bytes (`\r\n`, `\n`, or empty).
@@ -208,19 +195,6 @@ pub(crate) mod editor {
         } else {
             b""
         }
-    }
-
-    /// ASCII-whitespace-trim a byte slice.
-    fn trim(b: &[u8]) -> &[u8] {
-        let mut s = 0;
-        let mut e = b.len();
-        while s < e && b[s].is_ascii_whitespace() {
-            s += 1;
-        }
-        while e > s && b[e - 1].is_ascii_whitespace() {
-            e -= 1;
-        }
-        &b[s..e]
     }
 
     /// Is this trimmed content a `[Section]` header?
@@ -236,7 +210,7 @@ pub(crate) mod editor {
     /// Split a trimmed `key = value` line into (trimmed key, trimmed value).
     fn split_key(trimmed: &[u8]) -> Option<(&[u8], &[u8])> {
         let eq = trimmed.iter().position(|&c| c == b'=')?;
-        Some((trim(&trimmed[..eq]), trim(&trimmed[eq + 1..])))
+        Some((trimmed[..eq].trim_ascii(), trimmed[eq + 1..].trim_ascii()))
     }
 
     /// The dominant EOL of a body: CRLF if any `\r\n` is present, else LF.
@@ -256,7 +230,7 @@ pub(crate) mod editor {
         let raw = raw_lines(body);
         let h = raw.iter().position(|ln| is_archive_header(ln))?;
         for ln in raw.iter().skip(h + 1) {
-            let t = trim(strip_eol(ln));
+            let t = strip_eol(ln).trim_ascii();
             if is_section(t) {
                 break;
             }
@@ -285,7 +259,7 @@ pub(crate) mod editor {
     }
 
     fn is_archive_header(line: &[u8]) -> bool {
-        let t = trim(strip_eol(line));
+        let t = strip_eol(line).trim_ascii();
         is_section(t) && section_name(t).eq_ignore_ascii_case(INI_SECTION.as_bytes())
     }
 
@@ -364,7 +338,7 @@ pub(crate) mod editor {
             .iter()
             .enumerate()
             .skip(h + 1)
-            .find(|(_, ln)| is_section(trim(strip_eol(ln))))
+            .find(|(_, ln)| is_section(strip_eol(ln).trim_ascii()))
             .map(|(j, _)| j)
             .unwrap_or(raw.len());
 
@@ -372,7 +346,7 @@ pub(crate) mod editor {
         let mut inv_at = None;
         let mut res_at = None;
         for (j, ln) in raw.iter().enumerate().take(end).skip(h + 1) {
-            let t = trim(strip_eol(ln));
+            let t = strip_eol(ln).trim_ascii();
             let Some((k, v)) = split_key(t) else { continue };
             if inv_at.is_none() && k.eq_ignore_ascii_case(KEY_INVALIDATE.as_bytes()) {
                 inv_at = Some(j);
@@ -663,6 +637,29 @@ mod editor_tests {
             MergePlan::Conflict(v) => panic!("unexpected conflict: {v}"),
             MergePlan::Unsupported => panic!("unexpected unsupported encoding"),
         }
+    }
+
+    /// `raw_lines` is the basis of the byte-fidelity guarantee: it must split a body
+    /// into terminator-carrying lines that concatenate back to the exact input, for a
+    /// mixed CRLF/LF body, an unterminated final line, and an empty body.
+    #[test]
+    fn raw_lines_split_concatenates_back_byte_for_byte() {
+        for body in [
+            &b"[Archive]\r\na=1\nb=2\r\n"[..],
+            &b"no trailing newline"[..],
+            &b"a\r\nb"[..],
+            &b""[..],
+            &b"\n"[..],
+        ] {
+            let lines = raw_lines(body);
+            assert_eq!(lines.concat(), body, "round-trip for {body:?}");
+        }
+        assert!(raw_lines(b"").is_empty(), "an empty body yields no lines");
+        assert_eq!(
+            raw_lines(b"a\r\nb"),
+            vec![&b"a\r\n"[..], &b"b"[..]],
+            "an unterminated final line is its own element"
+        );
     }
 
     #[test]

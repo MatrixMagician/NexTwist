@@ -1,4 +1,4 @@
-//! The `DeploymentMethod` trait + per-target method ladder.
+//! The per-file deployment primitives + the per-target method ladder.
 //!
 //! A method places one staged file into the game tree and can remove it again. The
 //! ladder is reflink → hardlink → symlink → copy, chosen per-target from the
@@ -13,16 +13,6 @@
 //! safe. Every method deploys / removes a SINGLE FILE; we never symlink a directory
 //! (a Steam update could write *through* a directory symlink into staging).
 
-mod copy;
-mod hardlink;
-mod reflink;
-mod symlink;
-
-pub use copy::CopyMethod;
-pub use hardlink::HardlinkMethod;
-pub use reflink::ReflinkMethod;
-pub use symlink::SymlinkMethod;
-
 use std::io;
 use std::path::Path;
 
@@ -31,17 +21,49 @@ use nextwist_core::DeployMethod;
 use crate::error::DeployError;
 use crate::probe::FsCaps;
 
-/// A per-file deployment primitive: place a staged file, or remove a placed one.
-pub trait DeploymentMethod {
-    /// Place `src` (a staged regular file) at `dst`. The parent of `dst` is created
-    /// by the caller. Must NOT operate on directories.
-    fn deploy_file(&self, src: &Path, dst: &Path) -> io::Result<()>;
+/// Place `src` (a staged regular file) at `dst` using exactly `tag`.
+///
+/// The parent of `dst` is created by the caller, and `dst` must already be absent
+/// (the create-style primitives error with `AlreadyExists` otherwise) — see
+/// [`apply_idempotent`], which owns both. Operates on a SINGLE FILE only; never a
+/// directory.
+///
+/// Deliberately does NOT fall back: the caller drives the ladder, so the method it
+/// records in the manifest is always the one that actually placed the file.
+pub fn deploy_one(tag: DeployMethod, src: &Path, dst: &Path) -> io::Result<()> {
+    match tag {
+        // Reflink (copy-on-write) — the safest primitive: an independent inode that
+        // shares physical blocks copy-on-write, so editing the deployed file can never
+        // corrupt the read-only staging copy (unlike a hardlink, which shares the
+        // inode). Preferred wherever the filesystem supports it (btrfs/XFS/bcachefs).
+        // `reflink`, NEVER `reflink_or_copy`: a silent internal fallback would make the
+        // recorded method a lie. Per-file only — `reflink` rejects directories. A
+        // cross-device / non-CoW filesystem surfaces an error the ladder downgrades on.
+        DeployMethod::Reflink => reflink_copy::reflink(src, dst),
 
-    /// Remove `dst` if it is a file we placed. Idempotent: a missing `dst` is `Ok`.
-    fn remove_file(&self, dst: &Path) -> io::Result<()>;
+        // Hardlink — same-device, instant, space-efficient. Shares the inode with the
+        // staged file; the staged tree is marked read-only (by `extract`), preserving
+        // the invariant that the deployed file cannot be edited through to corrupt
+        // staging. Returns `EXDEV` across filesystems / btrfs subvolumes; the ladder
+        // catches that and downgrades.
+        DeployMethod::Hardlink => std::fs::hard_link(src, dst),
 
-    /// The [`DeployMethod`] tag this primitive records in the manifest.
-    fn name(&self) -> DeployMethod;
+        // Symlink — the cross-device fallback, used when staging and the game tree are
+        // on different filesystems. PER-FILE ONLY: we never symlink a directory into
+        // `Data/`, because a Steam update could write *through* a directory symlink
+        // into staging, and Wine path translation mishandles directory symlinks. The
+        // target is canonicalized to an absolute path so the link resolves regardless
+        // of where the game tree lives.
+        DeployMethod::Symlink => {
+            let target = std::fs::canonicalize(src)?;
+            std::os::unix::fs::symlink(&target, dst)
+        }
+
+        // Copy — the last-resort fallback, used when no link-based primitive applies.
+        // Doubles disk usage, so it is the bottom rung, but it always works and never
+        // returns `EXDEV`, which is what makes it the guaranteed ladder terminator.
+        DeployMethod::Copy => std::fs::copy(src, dst).map(|_| ()),
+    }
 }
 
 /// Return the strongest applicable method for a probed `(staging, game_data)` pair.
@@ -57,16 +79,6 @@ pub fn choose_method(caps: &FsCaps) -> DeployMethod {
     } else {
         // Cross-device (or hardlink-incapable): prefer symlink over a full copy.
         DeployMethod::Symlink
-    }
-}
-
-/// Construct the [`DeploymentMethod`] for a [`DeployMethod`] tag.
-pub fn method_for(tag: DeployMethod) -> Box<dyn DeploymentMethod> {
-    match tag {
-        DeployMethod::Reflink => Box::new(ReflinkMethod),
-        DeployMethod::Hardlink => Box::new(HardlinkMethod),
-        DeployMethod::Symlink => Box::new(SymlinkMethod),
-        DeployMethod::Copy => Box::new(CopyMethod),
     }
 }
 
@@ -92,8 +104,7 @@ pub fn apply_idempotent(
     for candidate in ladder_from(tag) {
         // Remove a prior placement (ours) so create-style ops don't hit AlreadyExists.
         remove_if_present(dst).map_err(|e| DeployError::io(dst, e))?;
-        let method = method_for(candidate);
-        match method.deploy_file(src, dst) {
+        match deploy_one(candidate, src, dst) {
             Ok(()) => return Ok(candidate),
             Err(e) if is_cross_device(&e) => {
                 tracing::warn!(
@@ -133,7 +144,9 @@ pub(crate) fn is_cross_device(e: &io::Error) -> bool {
 }
 
 /// Remove `path` if it exists (file or symlink), treating absence as success.
-pub(crate) fn remove_if_present(path: &Path) -> io::Result<()> {
+///
+/// The removal half of every method — placement differs per rung, removal does not.
+pub fn remove_if_present(path: &Path) -> io::Result<()> {
     match std::fs::symlink_metadata(path) {
         Ok(_) => match std::fs::remove_file(path) {
             Ok(()) => Ok(()),

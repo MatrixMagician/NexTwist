@@ -15,9 +15,9 @@
 //!   `ModuleConfig.xml` returns the verbatim [`fomod::FomodError`] string so the
 //!   frontend can offer the plain-mod fallback.
 //! * [`resolve_fomod`] — the PURE dry-run: given the user's selection, call
-//!   `fomod::resolve` and return a serializable file-install plan with a per-destination
-//!   conflict classification. Writes NOTHING (the locked dry-run-before-apply gate).
-//! * [`apply_fomod`] — on a confirmed (non-blocking) install, route the archive through
+//!   `fomod::resolve` and return a serializable file-install plan. Writes NOTHING (the
+//!   locked dry-run-before-apply gate); an unresolvable selection is an `Err`, not a plan.
+//! * [`apply_fomod`] — on a confirmed install, route the archive through
 //!   the validated `extract::install_archive` staging path (root-detection,
 //!   zip-slip/symlink/`..` defenses unchanged — the adapter adds no new write primitive),
 //!   then `store.add_mod` so the result is an ordinary `ManagedMod`.
@@ -75,28 +75,6 @@ impl SelectionDto {
 
 // ── Serializable dry-run plan + conflict preview (adapter → webview) ────────────────
 
-/// The conflict classification for the dry-run preview. This mirrors the
-/// FOMOD safety gate's three buckets: a clean plan, a priority-resolvable overwrite, or a
-/// BLOCKING conflict that disables Install.
-///
-/// The headless `fomod::resolve` only ever returns a conflict-FREE, deterministically
-/// deduped plan (or a `FomodError`), so the adapter constructs `None` for a resolved plan
-/// and surfaces the blocking case via the command's `Err` (the engine rejected the
-/// selection). `Resolvable`/`Blocking` are retained as part of the stable serialized
-/// contract the wizard's TypeScript mirror consumes (and the future cross-mod
-/// classification target); they are not constructed inline here, hence the allow.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ConflictClass {
-    /// No two installs target the same destination.
-    None,
-    /// Two installs target the same destination but priority picks a winner.
-    Resolvable,
-    /// Two installs target the same destination with EQUAL priority — no winner.
-    Blocking,
-}
-
 /// One row of the resolved dry-run plan (a single `dest_rel`).
 #[derive(Debug, Clone, Serialize)]
 pub struct PlanEntry {
@@ -109,14 +87,15 @@ pub struct PlanEntry {
 }
 
 /// The full dry-run result the wizard shows BEFORE any staging write.
+///
+/// The plan alone: a plan that exists is by construction safe to install, because
+/// `fomod::resolve` is the gate and returns either a deduplicated, conflict-free plan
+/// or a typed error. Cross-MOD contests are a different concern entirely and belong to
+/// the conflict-and-priority surface, which resolves them by mod rank after install.
 #[derive(Debug, Clone, Serialize)]
 pub struct ResolvePreview {
     /// The ordered, deduped file-install plan.
     pub plan: Vec<PlanEntry>,
-    /// The overall conflict classification (the worst of any per-destination contest).
-    pub classification: ConflictClass,
-    /// The destinations that two equal-priority sources contested (the blocking set).
-    pub blocking: Vec<String>,
 }
 
 // ── The three thin commands ────────────────────────────────────────────────────────
@@ -143,13 +122,12 @@ pub async fn parse_fomod(
     Ok(fomod::project(&module))
 }
 
-/// The PURE dry-run resolve: turn the user's selection into the file-install
-/// plan + conflict classification WITHOUT writing anything.
+/// The PURE dry-run resolve: turn the user's selection into the file-install plan
+/// WITHOUT writing anything.
 ///
 /// Re-extracts the archive to a temp tree (so source-path resolution and the live
 /// type-state evaluation see the real staged layout), parses, and calls the pure
-/// `fomod::resolve`. The conflict classification is computed over the resolved plan's
-/// destinations (a pure fold). No staging write occurs.
+/// `fomod::resolve`. No staging write occurs.
 #[tauri::command]
 pub async fn resolve_fomod(
     state: State<'_, Mutex<AppState>>,
@@ -170,14 +148,14 @@ pub async fn resolve_fomod(
 
     // PURE: fomod::resolve performs zero filesystem writes.
     let plan = resolve(&module, &sel).map_err(boundary_err)?;
-    Ok(classify_plan(&plan))
+    Ok(preview_plan(&plan))
 }
 
-/// Apply a confirmed (non-blocking) FOMOD install: stage the validated archive and record
-/// it as an ordinary `ManagedMod`.
+/// Apply a confirmed FOMOD install: stage the validated archive and record it as an
+/// ordinary `ManagedMod`.
 ///
 /// The selection is re-resolved (defence in depth: never apply a plan the engine now
-/// rejects — e.g. a blocking conflict) BEFORE any write. On success the archive is staged
+/// rejects) BEFORE any write. On success the archive is staged
 /// through the validated `extract::install_archive` path (root-detection,
 /// zip-slip/symlink/`..` defenses unchanged — the adapter adds no new write primitive),
 /// and the staged tree is persisted via `store.add_mod`. Returns the new mod's row id.
@@ -191,23 +169,17 @@ pub async fn apply_fomod(
 ) -> Result<ApplyResult, String> {
     let game = require_game(&state, appid).await?;
 
-    // 1. Re-resolve to reject a blocking selection before touching disk (the dry-run gate
-    //    is enforced server-side too, not only in the UI).
+    // 1. Re-resolve to reject an unresolvable selection before touching disk (the
+    //    dry-run gate is enforced server-side too, not only in the UI).
     let (temp, tree_root) = extract_to_temp(&archive).map_err(boundary_err)?;
     let module = parse_module_config(&tree_root).map_err(boundary_err)?;
     let sel = selection.into_selection();
     // Server-side cardinality validation: reject a selection that violates a group's
     // declared cardinality BEFORE any disk write, regardless of what the UI submitted.
     validate_selection(&module, &sel).map_err(boundary_err)?;
-    let plan = resolve(&module, &sel).map_err(boundary_err)?;
-    let preview = classify_plan(&plan);
-    if preview.classification == ConflictClass::Blocking {
-        return Err(
-            "This selection installs conflicting files with no clear winner. \
-                    Change a choice to continue."
-                .to_string(),
-        );
-    }
+    // `resolve` IS the gate: a selection with no clear winner is an Err above, never a
+    // plan. Reaching here means the plan is safe to stage.
+    resolve(&module, &sel).map_err(boundary_err)?;
     drop(temp); // release the dry-run temp tree before the real validated staging.
 
     // 2. Stage the validated archive into a per-mod staging subdir (the SAME defended
@@ -252,7 +224,7 @@ pub struct ApplyResult {
     pub files: usize,
 }
 
-// ── Pure helpers (projection + classification + temp extraction) ────────────────────
+// ── Pure helpers (projection + temp extraction) ─────────────────────────────────────
 
 /// Extract `archive` into a fresh temp dir via the validated extractor, returning the
 /// guard (kept alive by the caller) and the tree root the FOMOD engine reads.
@@ -293,21 +265,17 @@ fn fomod_staging_root(staging_dir: &Path, module_name: &str) -> PathBuf {
     staging_dir.join(extract::staging_dir_name(module_name, "fomod-mod"))
 }
 
-/// Project the resolved plan into the dry-run preview rows + a conflict classification
+/// Project the resolved plan into the dry-run preview rows.
 ///
-/// `fomod::resolve` IS the safety gate. It returns `Ok` only with a
-/// deterministically DEDUPED, conflict-free plan — one winner per `dest_rel`, the
-/// highest-priority `src` wins each destination — so a successfully-resolved plan has no
-/// remaining same-destination contest and is **safe to install** (`ConflictClass::None`).
-/// A genuinely no-winner / contradictory FOMOD construct (a missing `<typeDescriptor>`,
-/// an unsupported shape) is surfaced by the engine as a `FomodError` BEFORE this projection
-/// runs; the calling command maps that `Err` to the §A.6 blocking message verbatim and the
-/// wizard disables Install. The `ConflictClass::Resolvable`/`Blocking` variants therefore
-/// describe the FRONTEND's cross-source presentation contract (an authored same-destination
-/// overwrite vs an engine-rejected selection) — the headless engine never returns a plan
-/// that still contains an unresolved destination contest, which is exactly the safety
-/// invariant the dry-run gate depends on.
-fn classify_plan(plan: &[fomod::FileInstall]) -> ResolvePreview {
+/// `fomod::resolve` IS the safety gate. It returns `Ok` only with a deterministically
+/// DEDUPED, conflict-free plan — one winner per `dest_rel`, the highest-priority `src`
+/// wins each destination — so a successfully-resolved plan has no remaining
+/// same-destination contest and is safe to install. A genuinely no-winner /
+/// contradictory FOMOD construct (a missing `<typeDescriptor>`, an unsupported shape)
+/// is surfaced by the engine as a `FomodError` BEFORE this projection runs; the calling
+/// command maps that `Err` to the blocking message verbatim and the wizard shows it.
+/// There is therefore nothing left for this function to classify.
+fn preview_plan(plan: &[fomod::FileInstall]) -> ResolvePreview {
     let rows: Vec<PlanEntry> = plan
         .iter()
         .map(|fi| PlanEntry {
@@ -317,18 +285,14 @@ fn classify_plan(plan: &[fomod::FileInstall]) -> ResolvePreview {
         })
         .collect();
 
-    ResolvePreview {
-        plan: rows,
-        classification: ConflictClass::None,
-        blocking: Vec::new(),
-    }
+    ResolvePreview { plan: rows }
 }
 
 #[cfg(test)]
 mod tests {
     //! Headless adapter tests (no webview). They exercise the adapter's REAL logic — the
     //! validated temp extraction (`extract_to_temp`), the ordered AST projection (`fomod::project`),
-    //! the dry-run plan + classification (`classify_plan` over `fomod::resolve`), and the
+    //! the dry-run plan (`preview_plan` over `fomod::resolve`), and the
     //! malformed-FOMOD `Err` path — by zipping a fixture tree into a real archive
     //! and flowing it through the SAME functions the `#[tauri::command]`s call. The Tauri
     //! IPC shell (`require_game` + `State` lock) is the only part not covered, which is the
@@ -447,7 +411,7 @@ mod tests {
         sel.chosen
             .insert(("Main".into(), "Core".into(), "Standard Edition".into()));
         let plan = fomod::resolve(&module, &sel).expect("resolve");
-        let preview = super::classify_plan(&plan);
+        let preview = super::preview_plan(&plan);
 
         assert!(
             !preview.plan.is_empty(),
@@ -455,7 +419,6 @@ mod tests {
         );
         let row = &preview.plan[0];
         assert_eq!(row.dest, "standard.esp");
-        assert!(matches!(preview.classification, super::ConflictClass::None));
 
         // The dry-run resolve performed ZERO writes into the staging dir.
         let after = walkdir_files(&staging).len();

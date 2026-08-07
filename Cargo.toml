@@ -60,15 +60,14 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls", "h
 
 # NexusMods auth + API client (Phase 3, Plan 01 — crates/nexus). All registry-verified
 # + legitimacy-audited 2026-06-21 (RESEARCH Package Legitimacy Audit: all OK).
-#   * oauth2 5.0 — OAuth2 Authorization-Code + PKCE (S256). default-features = false +
-#     `reqwest` + `rustls-tls` ONLY (never native-tls) keeps the AppImage self-contained.
-#     NOTE: oauth2 5.0.0 binds its async executor to reqwest 0.12; the workspace is on
-#     reqwest 0.13, so the token POST is issued with the workspace's own hardened
-#     reqwest 0.13 client (the `form` feature added to the pin above provides the
-#     x-www-form-urlencoded body). oauth2 still owns S256 PKCE + CSRF state.
+#   * oauth2 5.0 — S256 PKCE challenge/verifier generation and CSRF state ONLY. No
+#     features: its HTTP executor is unused, so enabling `reqwest`/`rustls-tls` would
+#     pull a second, entirely unused HTTP stack (reqwest 0.12 + webpki-roots) into the
+#     build. The token POST is issued with the workspace's own hardened reqwest 0.13
+#     client (the `form` feature above provides the x-www-form-urlencoded body).
 #   * governor 0.10 — client-side token-bucket rate limiter (NEXUS-05; wired in Plan 02).
 #   * futures-util 0.3 — StreamExt for reqwest::Response::bytes_stream() (Plan 02 streaming).
-oauth2 = { version = "5.0", default-features = false, features = ["reqwest", "rustls-tls"] }
+oauth2 = { version = "5.0", default-features = false }
 governor = "0.10"
 futures-util = "0.3"
 

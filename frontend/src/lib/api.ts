@@ -311,9 +311,6 @@ export interface FomodSelection {
   flags: [string, string][];
 }
 
-/** The dry-run conflict classification (mirrors commands::fomod::ConflictClass). */
-export type ConflictClass = "none" | "resolvable" | "blocking";
-
 /** One row of the resolved dry-run plan (mirrors commands::fomod::PlanEntry). */
 export interface FomodPlanEntry {
   src: string;
@@ -321,12 +318,11 @@ export interface FomodPlanEntry {
   priority: number;
 }
 
-/** The dry-run preview shown BEFORE any staging write (mirrors commands::fomod::ResolvePreview). */
+/** The dry-run preview shown BEFORE any staging write (mirrors commands::fomod::ResolvePreview).
+ *  The plan alone: a plan that exists is safe to install, because the engine returns either a
+ *  deduplicated, conflict-free plan or an error. Cross-MOD contests belong to the conflict view. */
 export interface FomodResolvePreview {
   plan: FomodPlanEntry[];
-  classification: ConflictClass;
-  /** Destinations contested by equal-priority sources (the blocking set). */
-  blocking: string[];
 }
 
 /** The result of a confirmed apply (mirrors commands::fomod::ApplyResult). */
@@ -342,8 +338,8 @@ export interface FomodApplyResult {
 export const parseFomod = (appid: number, archive: string): Promise<FomodProjection> =>
   invoke("parse_fomod", { appid, archive });
 
-/** The PURE dry-run resolve: turn a selection into the file-install plan + conflict
- *  classification WITHOUT writing anything (the dry-run-before-apply gate). */
+/** The PURE dry-run resolve: turn a selection into the file-install plan WITHOUT
+ *  writing anything (the dry-run-before-apply gate). */
 export const resolveFomod = (
   appid: number,
   archive: string,
@@ -351,8 +347,8 @@ export const resolveFomod = (
 ): Promise<FomodResolvePreview> =>
   invoke("resolve_fomod", { appid, archive, selection });
 
-/** Apply a confirmed (non-blocking) FOMOD install: stage the validated archive and record
- *  it as an ordinary ManagedMod. Throws on a blocking selection (server-side gate). */
+/** Apply a confirmed FOMOD install: stage the validated archive and record it as an
+ *  ordinary ManagedMod. Throws on a selection the engine rejects (server-side gate). */
 export const applyFomod = (
   appid: number,
   archive: string,

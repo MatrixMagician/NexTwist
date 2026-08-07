@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`CLAUDE.md` is now a symlink to `AGENTS.md`** — the two were hand-maintained
+  near-duplicates with a standing instruction to keep them in sync. Drift is now
+  impossible by construction, and `.claude/CLAUDE.md` (stack rationale and the "what NOT
+  to use" rules) is untouched.
+- **The `DeploymentMethod` trait collapsed into the ladder** — four one-line implementors
+  in four files, four byte-identical `remove_file` bodies, and a `Box<dyn>` per deployed
+  file became a single `deploy_one` match on the `DeployMethod` tag. Ladder semantics are
+  unchanged: the reflink → hardlink → symlink → copy weakening order, the EXDEV
+  downgrade, remove-if-present-then-create idempotency, and per-file-only deployment all
+  hold, with each per-method safety note preserved on its match arm.
+- **The Starfield INI editor uses stdlib byte-slice helpers** — `trim_ascii`,
+  `strip_suffix`, and `split_inclusive` replace three hand-rolled index-arithmetic loops
+  in the module that carries the byte-fidelity guarantee on a user-owned config file.
+- **The FOMOD dry-run preview is just the plan** — the three-valued `ConflictClass` had
+  one reachable variant, because `fomod::resolve` is itself the gate and returns either a
+  deduplicated, conflict-free plan or a typed error. The enum, its TypeScript mirror, its
+  dead-code allow, and the two wizard branches that could never render are gone. Cross-mod
+  contests remain the conflict-and-priority surface's job.
+- **The shell keyring's single-implementor `KeyringBackend` trait is gone** — the trait
+  plus two test fakes existed only to inject one failure mode. All the branching lives in
+  three pure error mappers, which are now tested directly: a raw `keyring::Error` is
+  constructible in a test, so simulating a machine with no Secret Service needs no DBus
+  session. The no-plaintext-fallback invariant is unchanged and still structural (the
+  module reaches for no file API at all), and coverage went from four cases to six.
 - **Frontend logic moved behind a testable seam** — the FOMOD wizard selection rules, the
   masters-first / protected-master reorder rules, and the display formatters now live in
   pure `frontend/src/lib/{fomod,plugins,format}.ts` modules instead of inline in
@@ -32,6 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **Stale `#[allow(dead_code)]` attributes and unreachable helpers** — four allows whose
+  "wired up later" plan references had all since come true, plus `CasingMap::len`, which
+  had zero callers anywhere.
+- **The unused `oauth2` `reqwest`/`rustls-tls` features** — oauth2 is used for S256 PKCE
+  and CSRF state only, so the features dragged a second, entirely unused HTTP stack
+  (reqwest 0.12 + webpki-roots) into the build.
 - **GSD tooling, its planning documents, and every reference to them.** The repo no longer
   carries a parallel planning system: `.planning/` is gone and `AGENTS.md`/`CLAUDE.md`
   document jcode plus the engineering skills as the way work happens. The research and
