@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deduplicated, conflict-free plan or a typed error. The enum, its TypeScript mirror, its
   dead-code allow, and the two wizard branches that could never render are gone. Cross-mod
   contests remain the conflict-and-priority surface's job.
+- **The shell keyring's single-implementor `KeyringBackend` trait is gone** — the trait
+  plus two test fakes existed only to inject one failure mode. All the branching lives in
+  three pure error mappers, which are now tested directly: a raw `keyring::Error` is
+  constructible in a test, so simulating a machine with no Secret Service needs no DBus
+  session. The no-plaintext-fallback invariant is unchanged and still structural (the
+  module reaches for no file API at all), and coverage went from four cases to six.
 - **Frontend logic moved behind a testable seam** — the FOMOD wizard selection rules, the
   masters-first / protected-master reorder rules, and the display formatters now live in
   pure `frontend/src/lib/{fomod,plugins,format}.ts` modules instead of inline in

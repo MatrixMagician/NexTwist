@@ -3,13 +3,15 @@
 //!
 //! HARD INVARIANT: when no Secret Service / keyring backend exists, every
 //! store/load/clear operation returns [`KeyringError::NoKeyringBackend`] and NEVER
-//! writes the credential to a file. There is deliberately no plaintext fallback path in
-//! this module — the only write path is the backend's `set_password`. The shell maps
-//! `NoKeyringBackend` to the UI's destructive "Can't store your login securely" banner
-//! and disables login.
+//! writes the credential to a file. That guarantee is STRUCTURAL: this module reaches
+//! for no file API at all, and the only write path is the backend's `set_password`.
+//! There is deliberately no plaintext fallback. The shell maps `NoKeyringBackend` to the
+//! UI's destructive "Can't store your login securely" banner and disables login.
 //!
-//! The backend is abstracted behind a small [`KeyringBackend`] trait so a simulated
-//! `NoStorageAccess` can be exercised in CI without a real DBus session.
+//! All the branching lives in the three pure mappers below ([`map_err`], [`map_load`],
+//! [`map_clear`]), which are tested directly — a raw `keyring::Error` is constructible in
+//! a test, so simulating a machine with no Secret Service needs no DBus session and no
+//! injected backend.
 
 use keyring::Entry;
 use keyring::error::Error as KrError;
@@ -40,164 +42,108 @@ fn map_err(e: KrError) -> KeyringError {
     }
 }
 
-/// The keyring operations this module needs, abstracted so tests can inject a backend
-/// that simulates a missing Secret Service without a real DBus session. Each method
-/// returns the raw `keyring::Error` so the no-backend mapping lives in one place.
-trait KeyringBackend {
-    fn set(&self, secret: &str) -> Result<(), KrError>;
-    fn get(&self) -> Result<String, KrError>;
-    fn delete(&self) -> Result<(), KrError>;
-}
-
-/// The real backend: the OS Secret Service via `keyring` 3.6.
-struct SecretService;
-
-impl KeyringBackend for SecretService {
-    fn set(&self, secret: &str) -> Result<(), KrError> {
-        Entry::new(SERVICE, USER)?.set_password(secret)
-    }
-    fn get(&self) -> Result<String, KrError> {
-        Entry::new(SERVICE, USER)?.get_password()
-    }
-    fn delete(&self) -> Result<(), KrError> {
-        Entry::new(SERVICE, USER)?.delete_credential()
-    }
-}
-
-/// Store the long-lived credential. On no-backend this returns
-/// `NoKeyringBackend` and writes nothing — the only write path is `set_password`.
-pub fn store_refresh_token(token: &str) -> Result<(), KeyringError> {
-    store_with(&SecretService, token)
-}
-
-/// Load the stored credential, or `None` if no entry exists. A missing backend is a
-/// hard error (the caller cannot proceed securely).
-pub fn load_refresh_token() -> Result<Option<String>, KeyringError> {
-    load_with(&SecretService)
-}
-
-/// Clear the stored credential. Idempotent: clearing a missing entry succeeds (logout
-/// is idempotent). A missing backend is a hard error.
-pub fn clear_refresh_token() -> Result<(), KeyringError> {
-    clear_with(&SecretService)
-}
-
-// --- testable cores (generic over the backend) ---
-
-fn store_with(backend: &impl KeyringBackend, token: &str) -> Result<(), KeyringError> {
-    backend.set(token).map_err(map_err)
-}
-
-fn load_with(backend: &impl KeyringBackend) -> Result<Option<String>, KeyringError> {
-    match backend.get() {
+/// Map a raw `get_password` result: an absent entry reads as `None`, not an error.
+fn map_load(r: Result<String, KrError>) -> Result<Option<String>, KeyringError> {
+    match r {
         Ok(secret) => Ok(Some(secret)),
         Err(KrError::NoEntry) => Ok(None),
         Err(e) => Err(map_err(e)),
     }
 }
 
-fn clear_with(backend: &impl KeyringBackend) -> Result<(), KeyringError> {
-    match backend.delete() {
-        Ok(()) | Err(KrError::NoEntry) => Ok(()), // logout is idempotent
+/// Map a raw `delete_credential` result: clearing an absent entry succeeds, so logout
+/// is idempotent.
+fn map_clear(r: Result<(), KrError>) -> Result<(), KeyringError> {
+    match r {
+        Ok(()) | Err(KrError::NoEntry) => Ok(()),
         Err(e) => Err(map_err(e)),
     }
+}
+
+/// The OS Secret Service entry this module stores the credential under.
+fn entry() -> Result<Entry, KrError> {
+    Entry::new(SERVICE, USER)
+}
+
+/// Store the long-lived credential. On no-backend this returns
+/// `NoKeyringBackend` and writes nothing — the only write path is `set_password`.
+pub fn store_refresh_token(token: &str) -> Result<(), KeyringError> {
+    entry().and_then(|e| e.set_password(token)).map_err(map_err)
+}
+
+/// Load the stored credential, or `None` if no entry exists. A missing backend is a
+/// hard error (the caller cannot proceed securely).
+pub fn load_refresh_token() -> Result<Option<String>, KeyringError> {
+    map_load(entry().and_then(|e| e.get_password()))
+}
+
+/// Clear the stored credential. Idempotent: clearing a missing entry succeeds (logout
+/// is idempotent). A missing backend is a hard error.
+pub fn clear_refresh_token() -> Result<(), KeyringError> {
+    map_clear(entry().and_then(|e| e.delete_credential()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::Cell;
 
-    /// A backend that simulates a machine with NO Secret Service: every op returns
-    /// `NoStorageAccess`. Tracks whether any operation was attempted so we can assert
-    /// no file was ever written (there is no file path in this module at all — the
-    /// invariant is structural — but the flag documents the no-write expectation).
-    struct NoBackend {
-        attempted: Cell<bool>,
-    }
-    impl NoBackend {
-        fn new() -> Self {
-            Self {
-                attempted: Cell::new(false),
-            }
-        }
-        fn fail(&self) -> KrError {
-            self.attempted.set(true);
-            KrError::NoStorageAccess(Box::new(std::io::Error::other("no secret service")))
-        }
-    }
-    impl KeyringBackend for NoBackend {
-        fn set(&self, _secret: &str) -> Result<(), KrError> {
-            Err(self.fail())
-        }
-        fn get(&self) -> Result<String, KrError> {
-            Err(self.fail())
-        }
-        fn delete(&self) -> Result<(), KrError> {
-            Err(self.fail())
-        }
+    /// The error a machine with no Secret Service produces.
+    fn no_storage_access() -> KrError {
+        KrError::NoStorageAccess(Box::new(std::io::Error::other("no secret service")))
     }
 
-    /// A backend that simulates a missing entry on delete (entry never stored).
-    struct EmptyBackend;
-    impl KeyringBackend for EmptyBackend {
-        fn set(&self, _secret: &str) -> Result<(), KrError> {
-            Ok(())
-        }
-        fn get(&self) -> Result<String, KrError> {
-            Err(KrError::NoEntry)
-        }
-        fn delete(&self) -> Result<(), KrError> {
-            Err(KrError::NoEntry)
-        }
-    }
-
+    /// The hard invariant: with no keyring backend, storing hard-fails. Nothing can be
+    /// written to disk because this module reaches for no file API — the guarantee is
+    /// structural, so the error mapping is the whole of what there is to test.
     #[test]
-    fn auth_keyring_no_backend_store_hard_fails_and_writes_nothing() {
-        let backend = NoBackend::new();
-        // Use a temp dir as the cwd-adjacent sentinel: assert no stray file appears.
-        let tmp = tempfile::tempdir().unwrap();
-        let before: Vec<_> = std::fs::read_dir(tmp.path()).unwrap().collect();
+    fn auth_keyring_no_backend_hard_fails_never_plaintext() {
+        for e in [
+            no_storage_access(),
+            KrError::PlatformFailure(Box::new(std::io::Error::other("dbus down"))),
+        ] {
+            let mapped = map_err(e);
+            assert!(
+                matches!(mapped, KeyringError::NoKeyringBackend),
+                "no backend must hard-fail with NoKeyringBackend, got {mapped:?}"
+            );
+        }
+    }
 
-        let err = store_with(&backend, "super-secret-refresh").unwrap_err();
-
-        assert!(
-            matches!(err, KeyringError::NoKeyringBackend),
-            "no backend must hard-fail with NoKeyringBackend, got {err:?}"
-        );
-        assert!(
-            backend.attempted.get(),
-            "the backend op should have been attempted"
-        );
-        // Nothing was written anywhere (this module has no file path at all).
-        let after: Vec<_> = std::fs::read_dir(tmp.path()).unwrap().collect();
-        assert_eq!(
-            before.len(),
-            after.len(),
-            "no credential file may be created"
-        );
+    /// A real backend that merely failed an operation must NOT be reported as a missing
+    /// backend — that would trigger the UI's destructive "can't store your login" banner.
+    #[test]
+    fn auth_keyring_other_failure_is_not_a_missing_backend() {
+        let mapped = map_err(KrError::Invalid("attribute".into(), "bad".into()));
+        assert!(matches!(mapped, KeyringError::Keyring(_)));
     }
 
     #[test]
     fn auth_keyring_no_backend_load_hard_fails() {
-        let backend = NoBackend::new();
-        let err = load_with(&backend).unwrap_err();
+        let err = map_load(Err(no_storage_access())).unwrap_err();
         assert!(matches!(err, KeyringError::NoKeyringBackend));
     }
 
     #[test]
-    fn auth_keyring_clear_is_idempotent_on_missing_entry() {
-        // Both the no-backend... no: a MISSING ENTRY (NoEntry) must be treated as success.
-        let backend = EmptyBackend;
-        assert!(
-            clear_with(&backend).is_ok(),
-            "clearing a missing entry is Ok (idempotent logout)"
+    fn auth_keyring_load_missing_entry_is_none() {
+        assert_eq!(map_load(Err(KrError::NoEntry)).unwrap(), None);
+        assert_eq!(
+            map_load(Ok("secret".to_string())).unwrap(),
+            Some("secret".to_string())
         );
     }
 
     #[test]
-    fn auth_keyring_load_missing_entry_is_none() {
-        let backend = EmptyBackend;
-        assert_eq!(load_with(&backend).unwrap(), None);
+    fn auth_keyring_clear_is_idempotent_on_missing_entry() {
+        assert!(
+            map_clear(Err(KrError::NoEntry)).is_ok(),
+            "clearing a missing entry is Ok (idempotent logout)"
+        );
+        assert!(map_clear(Ok(())).is_ok());
+    }
+
+    #[test]
+    fn auth_keyring_no_backend_clear_hard_fails() {
+        let err = map_clear(Err(no_storage_access())).unwrap_err();
+        assert!(matches!(err, KeyringError::NoKeyringBackend));
     }
 }
