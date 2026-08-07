@@ -52,7 +52,18 @@ pub struct VerifyReport {
     /// ride the `missing`/`changed`/orphan walk — it is a distinct, `is_starfield`-gated
     /// check resolved entirely inside `gameconfig` (never `resolve_target`/`guard_within_root`).
     pub ini_drift: Option<crate::gameconfig::IniDrift>,
-    /// True when no drift of any kind was found (INI drift included).
+    /// True when OUR deployment matches the manifest: nothing `missing`, nothing
+    /// `changed`, and no INI drift.
+    ///
+    /// Deliberately NOT a function of `orphans`/`orphan_dirs`. Those hold whatever the
+    /// manifest does not claim, which by definition includes the untouched vanilla game
+    /// tree: a freshly added game has thousands of vanilla files, and a vanilla empty
+    /// directory (Bethesda titles ship them, e.g. `Data/Video`) lands in `orphan_dirs`.
+    /// Folding either set in made `pristine` false for every unmodded game, so the UI cried
+    /// "drift detected" about the user's own untouched install — training people to ignore
+    /// the one signal that matters when a Steam re-verify or a crash really has broken
+    /// something. Both sets remain fully reported above, for the user to inspect, and purge
+    /// still refuses to delete anything it cannot explain.
     pub pristine: bool,
 }
 
@@ -122,11 +133,9 @@ pub fn verify(store: &Store, game: &Game) -> Result<VerifyReport, DeployError> {
         report.ini_drift = crate::gameconfig::ini_drift(store, game)?;
     }
 
-    report.pristine = report.missing.is_empty()
-        && report.changed.is_empty()
-        && report.orphans.is_empty()
-        && report.orphan_dirs.is_empty()
-        && report.ini_drift.is_none();
+    // Orphans are intentionally excluded — see `VerifyReport::pristine`.
+    report.pristine =
+        report.missing.is_empty() && report.changed.is_empty() && report.ini_drift.is_none();
     Ok(report)
 }
 

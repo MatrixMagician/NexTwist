@@ -1592,16 +1592,25 @@
         <div class="report">
           <h4>Verify report</h4>
           {#if verifyReport.pristine}
-            <p class="ok">Pristine — no drift detected.</p>
+            <p class="ok">Pristine — the deployed files all match what NexTwist recorded.</p>
           {:else}
             <div class="warn">
-              <strong>Drift detected:</strong>
+              <strong>Drift detected in deployed files:</strong>
               <ul>
                 <li>missing: {verifyReport.missing.length}</li>
                 <li>changed: {verifyReport.changed.length}</li>
-                <li>orphans: {verifyReport.orphans.length}</li>
               </ul>
             </div>
+          {/if}
+          <!-- Unmanaged files are NOT drift: the set includes the whole vanilla game tree,
+               so reporting them as a problem would cry wolf on every untouched install.
+               They are listed because purge refuses to delete what it cannot explain. -->
+          {#if verifyReport.orphans.length > 0}
+            <p class="muted">
+              {verifyReport.orphans.length} file{verifyReport.orphans.length === 1 ? "" : "s"}
+              in the game folder are not managed by NexTwist (the vanilla game and anything
+              you added yourself). These are never touched by deploy or purge.
+            </p>
           {/if}
         </div>
       {/if}

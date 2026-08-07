@@ -97,6 +97,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Every unmodded game reported "Drift detected".** `pristine` folded in the orphan walk,
+  which by definition contains the untouched vanilla game tree, so a freshly added game
+  with nothing deployed came back non-pristine with a five-figure orphan count — the first
+  thing the app said about a user's game, and pure noise. `pristine` now answers only "is
+  our deployment consistent with the manifest" (missing / changed / INI drift). Both orphan
+  sets are excluded, including `orphan_dirs`: a vanilla game shipping an empty directory
+  (Bethesda titles do, e.g. `Data/Video`) was flagged too. Orphans stay fully reported, and
+  purge still refuses to delete anything it cannot explain. The byte-for-byte pristine
+  guarantee is a separate blake3 whole-tree comparison and is untouched.
+
 - **The built app refused to start.** A docs sweep rewrote comments inside the shipped
   `V1`/`V2`/`V3`/`V5` migrations. refinery checksums the whole file, comments included, so
   every existing install panicked on launch with `applied migration V1__init is different
