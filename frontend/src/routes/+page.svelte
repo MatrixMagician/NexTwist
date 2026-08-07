@@ -2178,6 +2178,10 @@
   h2 { font-size: 1.15rem; margin-top: 0; }
   label { display: block; margin: 0.4rem 0; }
   input, select { padding: 0.3rem; min-width: 22rem; }
+  /* The 22rem floor above is for TEXT fields. Radios and checkboxes are glyphs, and
+     stretching them to 22rem shoves their own label to the far side of the row — the
+     managed-game selector rendered as a lone dot with the game name 20rem away. */
+  input[type="radio"], input[type="checkbox"] { min-width: 0; padding: 0; }
   select { min-width: 14rem; }
   button { padding: 0.35rem 0.8rem; margin: 0.2rem 0.3rem 0.2rem 0; cursor: pointer; }
   button:disabled { cursor: not-allowed; opacity: 0.6; }
