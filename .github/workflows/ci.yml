@@ -68,6 +68,16 @@ jobs:
       - name: cargo clippy --workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # Rustdoc gate. The doc comments are how a reader learns each subsystem, and a dead
+      # intra-doc link silently misnames the thing it points at (the `deploy` journal header
+      # documented the intent-before-act protocol as `[begin]`/`[finish]`, neither of which
+      # exists). Nothing enforced this, so ~22 warnings had accumulated; without the gate
+      # they come straight back.
+      - name: cargo doc (deny rustdoc warnings)
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
       - name: Install cargo-deny
         uses: taiki-e/install-action@v2
         with:

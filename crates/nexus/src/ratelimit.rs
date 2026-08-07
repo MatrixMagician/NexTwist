@@ -75,10 +75,10 @@ impl RateLimiter {
     /// Proactive gate: await both the token bucket AND any reactive backoff deadline.
     ///
     /// Returns once a request may be issued. When a backoff deadline is in the future
-    /// (set by [`note_headers`]), this sleeps until it first, then waits for the bucket.
+    /// (set by [`RateLimiter::note_headers`]), this sleeps until it first, then waits for the bucket.
     ///
     /// With one shared limiter fronting parallel requests, the deadline may be
-    /// re-armed (extended) by a concurrent [`note_headers`] while we sleep. So we loop:
+    /// re-armed (extended) by a concurrent [`RateLimiter::note_headers`] while we sleep. So we loop:
     /// after each sleep we re-read the deadline and only proceed once it has elapsed,
     /// and we clear it only if no later deadline was armed meanwhile — never blowing away
     /// a freshly-recorded future backoff.
@@ -127,8 +127,8 @@ impl RateLimiter {
     /// Reactively record a backoff from a response's `X-RL-*` headers.
     ///
     /// If `status_429` is true, OR the hourly/daily remaining is at/below
-    /// [`LOW_REMAINING_THRESHOLD`], schedule a backoff until the matching `-Reset`
-    /// (in seconds-from-now), falling back to [`DEFAULT_BACKOFF`].
+    /// `LOW_REMAINING_THRESHOLD`, schedule a backoff until the matching `-Reset`
+    /// (in seconds-from-now), falling back to `DEFAULT_BACKOFF`.
     ///
     /// A healthy response only clears an *already-elapsed* backoff deadline — it
     /// must NEVER clear a deadline that is still in the future. Because one shared limiter
@@ -174,7 +174,7 @@ impl RateLimiter {
     }
 
     /// Derive the retry-after seconds for a 429 from the `X-RL-*-Reset` headers (for
-    /// `NexusError::RateLimited`). Falls back to [`DEFAULT_BACKOFF`]'s seconds.
+    /// `NexusError::RateLimited`). Falls back to `DEFAULT_BACKOFF`'s seconds.
     pub fn retry_after_secs(headers: &HeaderMap) -> u64 {
         parse_u64(headers, H_HOURLY_RESET)
             .or_else(|| parse_u64(headers, H_DAILY_RESET))

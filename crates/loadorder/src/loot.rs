@@ -12,7 +12,7 @@
 //!
 //! * `Game::with_local_path(GameType, game_path: &Path, game_local_path: &Path)
 //!   -> Result<Game, GameHandleCreationError>` — `game_path` MUST be an existing
-//!   directory; `game_local_path` is the AppData/Local/<GameName> folder itself
+//!   directory; `game_local_path` is the `AppData/Local/<GameName>` folder itself
 //!   (libloot does NOT append the game-folder name again when given a local path).
 //! * `Game::load_current_load_order_state(&mut self) -> Result<(), LoadOrderStateError>`
 //!   — reads the existing Plugins.txt / load-order state (tolerates an absent file).
@@ -341,7 +341,7 @@ fn asterisk_plugins_txt(plugins: &[Plugin]) -> String {
 ///   3. `load_canonical_order` (`load_current_load_order_state` + read libloot's resolved
 ///      order — early-loaders / implicitly-active plugins are placed at their REQUIRED
 ///      fixed positions: game master, then the game's hardcoded DLC list, then CCC),
-///   4. [`reconcile_order`]: keep that fixed early-loader prefix verbatim and splice the
+///   4. `reconcile_order`: keep that fixed early-loader prefix verbatim and splice the
 ///      user's desired order in for the plugins the user actually controls,
 ///   5. `set_order_and_save` (libloot also enforces masters-first internally, and
 ///      persists — there is NO separate `Game::save`).

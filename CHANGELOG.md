@@ -84,6 +84,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `svelte-check` and the frontend unit tests are now gated in CI; the definition of done
   listed them but no workflow step ran them.
+- **Rustdoc warnings are now a CI failure, and the 22 existing ones are gone.**
+  `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` runs alongside clippy. A dead
+  intra-doc link is not cosmetic: it silently misnames the item it points at, and the worst
+  offenders sat in module headers, which are the first thing a reader of a subsystem sees
+  (the `deploy` journal header documented the intent-before-act protocol as
+  `[begin]`/`[finish]`, neither of which exists). The fixes disambiguate `fomod::resolve`
+  the module from `resolve()` the function, point unresolved links at real names
+  (`TOKEN_BASE`, `NexusClient::mod_file_metadata`, `RateLimiter::note_headers`), de-link
+  private items rather than leak them into public docs, and backtick `<GameName>` so
+  rustdoc stops parsing it as an HTML tag.
 - **The reflink rung of the deploy ladder is now genuinely tested, and its CI blind spot
   is documented.** CI runners are ext4 and `TempDir` defaults to `/tmp`, so `caps.reflink`
   is false there and every reflink assertion in the suite was vacuous — copy-on-write

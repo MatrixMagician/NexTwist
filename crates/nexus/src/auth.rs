@@ -95,7 +95,7 @@ struct TokenJson {
 /// `csrf_returned` is the `state` from the callback; it MUST equal `csrf_expected`
 /// (the value stored from [`build_authorize_url`]) — a mismatch is rejected as
 /// `NexusError::Auth` BEFORE any network call (CSRF defence, V2). `token_base` is the
-/// token-endpoint origin; pass [`TOKEN_URL`]'s host in production or a mockito URL in tests.
+/// token-endpoint origin; pass [`TOKEN_BASE`] in production or a mockito URL in tests.
 pub async fn exchange_code(
     client_id: &str,
     redirect: &str,

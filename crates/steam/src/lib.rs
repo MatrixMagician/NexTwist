@@ -10,7 +10,7 @@
 //! mixed-case mod paths under Wine.
 //!
 //! It depends only on `core` types and `store`; it returns resolved
-//! [`core::Game`] structs. Persisting them via `store::add_managed_game` is the
+//! [`nextwist_core::Game`] structs. Persisting them via `store::add_managed_game` is the
 //! caller's (Tauri command, Plan 06) job — this crate does pure resolution.
 
 pub mod casing;
