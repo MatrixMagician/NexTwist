@@ -1,9 +1,10 @@
 # AGENTS.md
 
 Canonical instructions for coding agents (jcode, Claude Code, Codex, etc.) working in
-this repository. `CLAUDE.md` covers the same ground for Claude Code; keep the two in
-sync when architecture changes. Stack rationale and "what NOT to use" rules live in
-`.claude/CLAUDE.md`.
+this repository. `CLAUDE.md` is a symlink to this file, so Claude Code loads exactly this
+document as project memory and the two can never drift — edit this file, never a copy.
+Stack rationale and "what NOT to use" rules live in `.claude/CLAUDE.md`, which is
+genuinely distinct content.
 
 ## The one rule that outranks everything
 
