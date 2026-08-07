@@ -198,9 +198,11 @@ something you introduced, not pre-existing noise. Some caveats worth knowing:
   mixed-case filenames and multi-megabyte plugins are never exercised. Three tests close
   that gap by running over a COPY of a real install — `real_game_roundtrip.rs` (deploy →
   verify → repair → purge, asserting the tree returns byte-for-byte),
-  `real_plugin_scan.rs` (discovery + classification), and `real_archive_workflow.rs`
-  (archive → extract → stage → deploy → purge, the full user workflow). They skip cleanly
-  without the sandbox, so CI never runs them:
+  `real_plugin_scan.rs` (discovery + classification), `real_libloot_seam.rs` (the libloot
+  Linux seam: protected-master probe, asterisk `plugins.txt` round-trip, user-order splice),
+  `real_profile_switch.rs` (A→B→A with no cross-profile leakage), and
+  `real_archive_workflow.rs` (archive → extract → stage → deploy → purge, the full user
+  workflow). They skip cleanly without the sandbox, so CI never runs them:
 
   ```bash
   scripts/realtest-setup.sh "$HOME/SteamLibrary/steamapps/common/Skyrim Special Edition"

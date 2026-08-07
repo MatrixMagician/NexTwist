@@ -160,8 +160,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the code's assumption instead of the user's reality. Three tests now run over a COPY of a
   real Skyrim SE install: the deploy → verify → repair → purge round trip over 80 real
   plugins (overwriting a genuine vanilla master and asserting byte-for-byte return), plugin
-  discovery and classification, and the full archive → extract → stage → deploy → purge
-  user workflow. They skip cleanly without the sandbox, so CI is unaffected; populate it
+  discovery and classification, the libloot Linux seam (protected-master probe, asterisk
+  `plugins.txt` round-trip, and the user-order splice), profile switching (A→B→A with no
+  cross-profile leakage), and the full archive → extract → stage → deploy → purge user
+  workflow. They skip cleanly without the sandbox, so CI is unaffected; populate it
   with `scripts/realtest-setup.sh`, which only ever reads the game. Each test copies the
   sandbox into its own temp dir first, so a mid-run failure cannot leave a damaged tree
   that a later run would mistake for a pristine baseline.
