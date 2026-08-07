@@ -75,7 +75,7 @@ pub struct StarfieldStatus {
 /// Resolve the `Documents/My Games/Starfield` path inside a Proton `prefix`.
 ///
 /// Redirection-aware (`user.reg` `"Personal"`, default fallback) and case-folded: each
-/// EXISTING path component is matched through [`entry_ci`] to recover the real on-disk
+/// EXISTING path component is matched through `entry_ci` to recover the real on-disk
 /// casing; missing components are appended in canonical casing (yielding the expected
 /// first-launch path). Never follows a symlink out of the prefix (`entry_ci` reads dir
 /// entries only) and never escapes `<prefix>/drive_c`.

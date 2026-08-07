@@ -17,7 +17,7 @@
 //! * [`condition`] — the recursive composite-dependency evaluator (`And`/`Or`, nested,
 //!   `fileDependency`/`flagDependency`/`gameDependency`) over an accumulated flag set,
 //!   plus the live plugin type-state resolver (walk `dependencyType.patterns` in order).
-//! * [`resolve`] — the **PURE dry-run** entry point: given a [`resolve::Selection`] it
+//! * [`mod@resolve`] — the **PURE dry-run** entry point: given a [`resolve::Selection`] it
 //!   returns an ordered `Vec<`[`resolve::FileInstall`]`>` (the file-install plan)
 //!   WITHOUT writing anything to disk. This is the locked "dry-run-resolve-then-apply"
 //!   safety gate — the plan is surfaced (and conflict-previewed) before the validated

@@ -10,7 +10,7 @@
 //! attributes as optional).
 //!
 //! This module is pure data — no logic. [`crate::condition`] evaluates the dependency
-//! tree and [`crate::resolve`] folds the file lists into an install plan.
+//! tree and [`mod@crate::resolve`] folds the file lists into an install plan.
 
 use serde::Deserialize;
 

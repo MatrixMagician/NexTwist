@@ -150,12 +150,15 @@ Before claiming a change is complete:
 2. `cargo test --workspace --locked` passes (or the affected `-p` crates when the host
    lacks WebKitGTK, and say so).
 3. `cargo clippy --workspace --all-targets -- -D warnings` is clean.
-4. `cargo deny check advisories bans licenses sources` passes if dependencies changed.
-5. `npm --prefix frontend run check` and `npm --prefix frontend test` pass if frontend
+4. `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` is clean (CI gates on this).
+   A broken intra-doc link is not cosmetic: it silently misnames the item it points at, and
+   module headers are the first thing a reader of a subsystem sees.
+5. `cargo deny check advisories bans licenses sources` passes if dependencies changed.
+6. `npm --prefix frontend run check` and `npm --prefix frontend test` pass if frontend
    files changed (both are CI-gated).
-6. Anything touching `deploy`/`store` has a test proving the reversibility or
+7. Anything touching `deploy`/`store` has a test proving the reversibility or
    crash-recovery property still holds.
-7. If you touched the deploy **method ladder**, re-run `crates/deploy` with `TMPDIR` on a
+8. If you touched the deploy **method ladder**, re-run `crates/deploy` with `TMPDIR` on a
    CoW filesystem (see the reflink blind spot below).
 
 All gates were run green on `main` as of 2026-08-02, so a failure you see is

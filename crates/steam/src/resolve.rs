@@ -61,7 +61,7 @@ pub struct ResolvedGame {
 }
 
 impl ResolvedGame {
-    /// Convert into a [`core::Game`]. `staging_dir` is chosen by the caller (Plan 06
+    /// Convert into a [`nextwist_core::Game`]. `staging_dir` is chosen by the caller (Plan 06
     /// suggests a same-filesystem path); here we default it to a `.nextwist-staging`
     /// sibling of the install dir so the struct is complete and on the same FS.
     pub fn into_game(self) -> Game {

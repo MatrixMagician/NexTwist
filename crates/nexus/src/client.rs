@@ -218,7 +218,7 @@ impl NexusClient {
     /// returns a single file object whose `version` and `name` fields are exactly the
     /// two values the provenance record + downloads-list label need. This is the proven,
     /// load-bearing path that the same base + auth header already use for
-    /// [`download_link`]. (A previously-guessed GraphQL v2 `modFile(gameDomain,modId,fileId)`
+    /// [`NexusClient::download_link`]. (A previously-guessed GraphQL v2 `modFile(gameDomain,modId,fileId)`
     /// top-level field does NOT exist in the live v2 schema, so it always returned a null
     /// `modFile` and aborted the download — v2 coverage here was never confirmed.)
     ///
@@ -276,7 +276,7 @@ impl NexusClient {
 
     /// Resolve a pinned `(mod_id, file_id)`'s availability over REST v1 (the resolve gate).
     ///
-    /// Reuses the same proven v1 file-info endpoint as [`mod_file_metadata`] — gated through
+    /// Reuses the same proven v1 file-info endpoint as [`NexusClient::mod_file_metadata`] — gated through
     /// `limiter.until_ready()` FIRST — but classifies the result for the Collection resolve
     /// report WITHOUT downloading anything:
     /// * a 200 whose file `category_name` (case-insensitively) is `ARCHIVED` ⇒

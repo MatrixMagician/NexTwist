@@ -2,7 +2,7 @@
 //! step/group/option tree a UI renders.
 //!
 //! This is the FOMOD spec's presentation half, and it belongs in the engine for the same
-//! reason [`crate::resolve`] does: the `order` attribute on `<installSteps>`,
+//! reason [`mod@crate::resolve`] does: the `order` attribute on `<installSteps>`,
 //! `<optionalFileGroups>` and `<plugins>` is a *spec rule*, not a UI preference. A shell
 //! that re-implemented the sort could disagree with the engine about what "the second step"
 //! means, which is exactly the class of drift the headless-engine boundary exists to stop.
@@ -28,7 +28,7 @@ pub struct WizardStep {
     /// Step name.
     pub name: String,
     /// Whether the step carries a `<visible>` condition. Its live truth is decided by
-    /// [`crate::resolve`] against the current flags; a wizard uses this only to know the
+    /// [`crate::resolve()`] against the current flags; a wizard uses this only to know the
     /// step *may* disappear.
     pub conditional: bool,
     /// The option groups in this step, ordered.

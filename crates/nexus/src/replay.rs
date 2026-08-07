@@ -5,7 +5,7 @@
 //! [`replay_choices`] converts that manifest into the SAME [`fomod::Selection`] the
 //! interactive wizard would build, by NAME-matching every step → group → option against
 //! the parsed [`FomodModule`]. The caller then feeds the `Selection`
-//! to the **same** [`fomod::resolve`] — there is no separate Collection install engine and
+//! to the **same** [`fomod::resolve()`] — there is no separate Collection install engine and
 //! no per-mod wizard pops during a Collection install.
 //!
 //! HARD SAFETY RULE: if a manifest step/group/option name no
@@ -29,7 +29,7 @@ use crate::collection::{
 use crate::error::NexusError;
 
 /// Replay a Collection mod's pinned FOMOD [`Choices`] against the parsed [`FomodModule`],
-/// producing the [`fomod::Selection`] the SAME [`fomod::resolve`] drives.
+/// producing the [`fomod::Selection`] the SAME [`fomod::resolve()`] drives.
 ///
 /// For each manifest step → group → option, the name is matched (case-sensitively, exactly
 /// as authored) against the module's `installSteps`. A matched option is added to the

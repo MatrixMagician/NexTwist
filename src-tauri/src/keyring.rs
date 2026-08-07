@@ -8,8 +8,8 @@
 //! There is deliberately no plaintext fallback. The shell maps `NoKeyringBackend` to the
 //! UI's destructive "Can't store your login securely" banner and disables login.
 //!
-//! All the branching lives in the three pure mappers below ([`map_err`], [`map_load`],
-//! [`map_clear`]), which are tested directly — a raw `keyring::Error` is constructible in
+//! All the branching lives in the three pure mappers below (`map_err`, `map_load`,
+//! `map_clear`), which are tested directly — a raw `keyring::Error` is constructible in
 //! a test, so simulating a machine with no Secret Service needs no DBus session and no
 //! injected backend.
 
