@@ -576,8 +576,8 @@
     if (fomodStepIdx > 0) fomodStepIdx -= 1;
   }
 
-  /** The dry-run conflict-preview HARD GATE: resolve the plan BEFORE any
-   *  staging write and show it. Install is only enabled when classification !== "blocking". */
+  /** The dry-run preview HARD GATE: resolve the plan BEFORE any staging write and show
+   *  it. An unresolvable selection throws, so a preview shown is a plan safe to install. */
   async function fomodShowPreview() {
     if (selectedAppid === null || !fomodArchive) return;
     const preview = await run("Resolve FOMOD", () =>
@@ -586,10 +586,9 @@
     if (preview) fomodPreview = preview;
   }
 
-  /** Apply the confirmed (non-blocking) install: stage the validated archive + record it. */
+  /** Apply the confirmed install: stage the validated archive + record it. */
   async function fomodApply() {
     if (selectedAppid === null || !fomodArchive || !fomodProj) return;
-    if (fomodPreview?.classification === "blocking") return; // gate (also enforced server-side)
     fomodApplying = true;
     const name = fomodProj.module_name || "FOMOD mod";
     const result = await run("Install FOMOD mod", () =>
@@ -2104,23 +2103,12 @@
             <button onclick={closeFomodWizard} disabled={busy}>Cancel</button>
           </div>
         {:else}
-          <!-- Dry-run conflict-preview HARD GATE: the resolved file plan
-               BEFORE any staging write. Install is disabled on a blocking conflict. -->
+          <!-- Dry-run preview HARD GATE: the resolved file plan BEFORE any staging
+               write. An unresolvable selection errors out of resolve, so a preview
+               shown here is always a plan that is safe to install. -->
           <div class="report fomod-preview">
-            <h4>Conflict preview</h4>
-            {#if fomodPreview.classification === "none"}
-              <p class="ok">No conflicts — safe to install.</p>
-            {:else if fomodPreview.classification === "resolvable"}
-              <p class="warn-text">
-                These files overwrite each other; the higher-priority mod wins. Safe to
-                install.
-              </p>
-            {:else}
-              <p class="err">
-                This selection installs conflicting files with no clear winner. Change a
-                choice to continue.
-              </p>
-            {/if}
+            <h4>Install preview</h4>
+            <p class="ok">No conflicts — safe to install.</p>
             <ul class="fomod-plan">
               {#each fomodPreview.plan as row (row.dest)}
                 <li>
@@ -2140,7 +2128,7 @@
             <button
               class="cta"
               onclick={fomodApply}
-              disabled={fomodPreview.classification === "blocking" || fomodApplying || busy}
+              disabled={fomodApplying || busy}
             >
               Install
             </button>
@@ -2510,7 +2498,6 @@
   .type-tag.tag-notusable { background: #f3f3f3; border-color: #ccc; color: #999; }
   .fomod-nav { margin-top: 0.75rem; }
   .fomod-preview { margin: 0.5rem 0; }
-  .fomod-preview .warn-text { color: #9a6700; }
   ul.fomod-plan {
     list-style: none;
     padding: 0;
