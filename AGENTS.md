@@ -146,10 +146,27 @@ Before claiming a change is complete:
    files changed (both are CI-gated).
 6. Anything touching `deploy`/`store` has a test proving the reversibility or
    crash-recovery property still holds.
+7. If you touched the deploy **method ladder**, re-run `crates/deploy` with `TMPDIR` on a
+   CoW filesystem (see the reflink blind spot below).
 
 All gates were run green on `main` as of 2026-08-02, so a failure you see is
-something you introduced, not pre-existing noise. Two caveats worth knowing:
+something you introduced, not pre-existing noise. Three caveats worth knowing:
 
+- **CI never exercises the reflink rung.** GitHub runners are ext4 and `TempDir` defaults
+  to `/tmp`, so `caps.reflink` is false there and every reflink assertion in the suite is
+  vacuous — you can break copy-on-write deployment and still see a green tick. The
+  strongest rung of the ladder is therefore only truly tested on a developer machine
+  whose `TMPDIR` is on btrfs/XFS/bcachefs:
+
+  ```bash
+  mkdir -p target/reflink-tmp   # inside the repo, which is on the dev btrfs volume
+  TMPDIR="$PWD/target/reflink-tmp" cargo test -p nextwist-deploy
+  ```
+
+  `tests/reflink_rung.rs` is the one that matters: it asserts a reflink is an independent
+  inode and that writing through a deployed file cannot corrupt read-only staging. It
+  skips cleanly (printing why) when the filesystem has no CoW support, so a silent skip
+  in CI is expected and a silent skip locally means you proved nothing.
 - `cargo deny` carries two documented `ignore`d advisories (RUSTSEC-2026-0194/0195) for
   the vulnerable `quick-xml <0.41` that Tauri pulls in transitively via `plist` at build
   time. A `[[bans.deny]]` rule with `wrappers = ["plist"]` keeps that exception pinned to
