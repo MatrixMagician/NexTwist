@@ -40,12 +40,21 @@ npm --prefix frontend test          # vitest over the pure $lib modules
 
 # Full desktop app (needs WebKitGTK 4.1 dev libs — see .github/workflows/ci.yml)
 cargo tauri dev
-cargo tauri build --bundles appimage
+NO_STRIP=true cargo tauri build --bundles appimage
 ```
 
 `src-tauri` is a workspace member, so `cargo test --workspace` compiles it and needs the
 WebKitGTK dev libs on the host. The `crates/*` engine needs none of them — when you lack
 those libs, iterate with `cargo test -p nextwist-<crate>`. Toolchain is pinned to stable
+
+**`NO_STRIP=true` is required for the AppImage on a modern distro**, not optional. Tauri
+bundles via `linuxdeploy`, which carries its own ancient `binutils`; that `strip` cannot
+parse the `.relr.dyn` relocation section modern glibc emits, so it fails on system
+libraries (`libzstd`, `libxml2`, `libxkbcommon`, ...) and the bundle step dies with a bare
+`failed to run linuxdeploy`. Setting `NO_STRIP=true` skips that pass and the bundle
+succeeds; the binary is already stripped anyway by `strip = true` in `[profile.release]`,
+so nothing is lost. Verified on this repo: the plain command fails identically on a
+pristine `main` checkout, so it is the environment rather than anything in the tree.
 ≥ 1.89 (MSRV set by `libloot`); see `rust-toolchain.toml`.
 
 ## Architecture
