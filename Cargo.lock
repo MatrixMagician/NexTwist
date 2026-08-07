@@ -2818,6 +2818,7 @@ dependencies = [
  "nextwist-nexus",
  "nextwist-steam",
  "nextwist-store",
+ "nextwist-testkit",
  "serde",
  "serde_json",
  "tauri",

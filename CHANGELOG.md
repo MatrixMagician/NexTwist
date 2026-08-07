@@ -153,6 +153,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI
 
+- **The engine is now validated against a real game install, not just fixtures.** Every
+  other test builds its `Data/` tree from hand-written bytes, leaving genuine TES4 header
+  flags, Creation Club content, Bethesda's mixed-case filenames and multi-megabyte masters
+  unexercised — and both data-loss bugs fixed in this release came from fixtures encoding
+  the code's assumption instead of the user's reality. Three tests now run over a COPY of a
+  real Skyrim SE install: the deploy → verify → repair → purge round trip over 80 real
+  plugins (overwriting a genuine vanilla master and asserting byte-for-byte return), plugin
+  discovery and classification, and the full archive → extract → stage → deploy → purge
+  user workflow. They skip cleanly without the sandbox, so CI is unaffected; populate it
+  with `scripts/realtest-setup.sh`, which only ever reads the game. Each test copies the
+  sandbox into its own temp dir first, so a mid-run failure cannot leave a damaged tree
+  that a later run would mistake for a pristine baseline.
+
 - `svelte-check` and the frontend unit tests are now gated in CI; the definition of done
   listed them but no workflow step ran them.
 - **Rustdoc warnings are now a CI failure, and the 22 existing ones are gone.**

@@ -166,7 +166,7 @@ Before claiming a change is complete:
    failure is invisible to it (see the migration-checksum blind spot below).
 
 All gates were run green on `main` as of 2026-08-02, so a failure you see is
-something you introduced, not pre-existing noise. Three caveats worth knowing:
+something you introduced, not pre-existing noise. Some caveats worth knowing:
 
 - **CI never exercises the reflink rung.** GitHub runners are ext4 and `TempDir` defaults
   to `/tmp`, so `caps.reflink` is false there and every reflink assertion in the suite is
@@ -193,6 +193,24 @@ something you introduced, not pre-existing noise. Three caveats worth knowing:
   the built app died on launch. `shipped_migration_checksums_are_frozen` in
   `crates/store/src/db.rs` now pins every shipped checksum, but the durable habit is to
   launch the thing.
+- **The whole suite runs on synthetic game trees.** Every fixture builds its `Data/` dir
+  from hand-written bytes, so genuine header flags, Creation Club content, Bethesda's
+  mixed-case filenames and multi-megabyte plugins are never exercised. Three tests close
+  that gap by running over a COPY of a real install — `real_game_roundtrip.rs` (deploy →
+  verify → repair → purge, asserting the tree returns byte-for-byte),
+  `real_plugin_scan.rs` (discovery + classification), and `real_archive_workflow.rs`
+  (archive → extract → stage → deploy → purge, the full user workflow). They skip cleanly
+  without the sandbox, so CI never runs them:
+
+  ```bash
+  scripts/realtest-setup.sh "$HOME/SteamLibrary/steamapps/common/Skyrim Special Edition"
+  cargo test --workspace
+  ```
+
+  The real install is only ever read, and each test copies the sandbox into its own temp
+  dir before deploying — so a mid-run failure cannot leave a damaged tree that the next run
+  would mistake for a pristine baseline. That protection was added after an experiment
+  proved the hazard was real.
 - `cargo deny` carries two documented `ignore`d advisories (RUSTSEC-2026-0194/0195) for
   the vulnerable `quick-xml <0.41` that Tauri pulls in transitively via `plist` at build
   time. A `[[bans.deny]]` rule with `wrappers = ["plist"]` keeps that exception pinned to
